@@ -129,6 +129,13 @@ class GeminiService:
             limited_customers = qbo_customers[:max_customers] if len(qbo_customers) > max_customers else qbo_customers
             print(f"Using {len(limited_customers)} customers for matching (limited for context size)")
             
+            # Print a sample of customer names to help with debugging matching issues
+            print("Sample customer DisplayNames for matching:")
+            for i, customer in enumerate(limited_customers[:20]):  # Show first 20 customers
+                display_name = customer.get('DisplayName', 'Unknown')
+                print(f"  {i+1}. '{display_name}'")
+            print("  ...")
+            
             # Format the customers list and donation data for the prompt
             customers_json = json.dumps(limited_customers)
             donation_json = json.dumps(donation)
