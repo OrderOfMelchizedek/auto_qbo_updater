@@ -178,6 +178,11 @@ function renderDonationTable() {
             }
         }
         
+        // Delete button for all donations
+        actionsHtml += `<button class="btn btn-sm btn-outline-danger delete-donation-btn" data-id="${donation.internalId}" title="Delete donation">
+            <i class="fas fa-trash"></i>
+        </button>`;
+        
         actionsCell.innerHTML = actionsHtml;
         tr.appendChild(actionsCell);
         
@@ -221,6 +226,16 @@ function attachActionButtonListeners() {
         button.addEventListener('click', function() {
             const donationId = this.dataset.id;
             sendToQBO(donationId);
+        });
+    });
+    
+    // Delete donation button
+    document.querySelectorAll('.delete-donation-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const donationId = this.dataset.id;
+            if (confirm('Are you sure you want to delete this donation?')) {
+                deleteDonation(donationId);
+            }
         });
     });
 }
@@ -451,6 +466,24 @@ function sendAllToQBO() {
             console.error('Error creating batch sales receipts:', error);
             showToast('Error creating batch sales receipts in QBO', 'danger');
         });
+}
+
+function deleteDonation(donationId) {
+    // Find the donation index
+    const index = donations.findIndex(d => d.internalId === donationId);
+    if (index !== -1) {
+        // Remove the donation from the array
+        donations.splice(index, 1);
+        
+        // Re-render the table
+        renderDonationTable();
+        
+        // Show success message
+        showToast('Donation deleted successfully');
+        
+        // Save changes to the server
+        saveChanges();
+    }
 }
 
 function saveChanges() {
