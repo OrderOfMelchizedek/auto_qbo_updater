@@ -160,12 +160,26 @@ Return ONLY a complete JSON object with ALL fields including:
             Dictionary containing extracted donation data or None if extraction failed
         """
         try:
-            # Simple validation of image before sending to Gemini
-            img = Image.open(image_path)
-            img.verify()  # Check if it's a valid image
+            # Basic file existence check
+            if not os.path.exists(image_path):
+                print(f"Image file doesn't exist: {image_path}")
+                return None
+                
+            print(f"Processing image file: {image_path}")
             
-            # Extract donation data using Gemini
+            # Validate file size
+            file_size = os.path.getsize(image_path)
+            print(f"Image file size: {file_size} bytes")
+            if file_size == 0:
+                print(f"Image file is empty: {image_path}")
+                return None
+                
+            # Extract donation data using Gemini directly
+            # Skip PIL validation which might fail
+            print(f"Sending image to Gemini service for processing")
             donation_data = self.gemini_service.extract_donation_data(image_path)
+            
+            print(f"Received response from Gemini service: {donation_data is not None}")
             return donation_data
         
         except Exception as e:

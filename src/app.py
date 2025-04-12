@@ -15,7 +15,7 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # For session management
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB upload limit
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB upload limit
 
 # Create necessary directories
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -39,65 +39,111 @@ def index():
 @app.route('/upload', methods=['POST'])
 def upload_files():
     """Handle file uploads (images, PDFs, CSV)."""
-    if 'files' not in request.files:
-        flash('No files selected', 'error')
-        return redirect(url_for('index'))
-    
-    files = request.files.getlist('files')
-    
-    # Placeholder for extracted donation data
-    donations = []
-    
-    for file in files:
-        if file.filename == '':
-            continue
+    try:
+        # Check if request has the files part
+        if 'files' not in request.files:
+            print("No files part in the request")
+            return jsonify({
+                'success': False,
+                'message': 'No files were selected'
+            }), 400
         
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
-        
-        # Process different file types
-        file_ext = os.path.splitext(filename)[1].lower()
-        
-        if file_ext in ['.jpg', '.jpeg', '.png', '.pdf', '.csv']:
-            # Process all files using Gemini
-            extracted_data = file_processor.process(file_path, file_ext)
+        files = request.files.getlist('files')
+        if not files or len(files) == 0 or all(file.filename == '' for file in files):
+            print("No files selected")
+            return jsonify({
+                'success': False,
+                'message': 'No files were selected'
+            }), 400
             
-            # Set the data source based on file type
-            data_source = 'CSV' if file_ext == '.csv' else 'LLM'
-            source_prefix = 'csv' if file_ext == '.csv' else 'llm'
+        # Log the number of files and their sizes
+        print(f"Received {len(files)} files:")
+        for file in files:
+            if file.filename != '':
+                file.seek(0, os.SEEK_END)
+                file_size = file.tell()
+                file.seek(0)  # Reset file pointer
+                print(f"- {file.filename}: {file_size / 1024 / 1024:.2f} MB")
+        
+        # Placeholder for extracted donation data
+        donations = []
+        errors = []
+        
+        for file in files:
+            if file.filename == '':
+                continue
             
-            if extracted_data:
-                # Check if we have a list of donations or a single donation
-                if isinstance(extracted_data, list):
-                    print(f"Processing multiple donations from {file_ext}: {len(extracted_data)}")
-                    for idx, donation in enumerate(extracted_data):
-                        donation['dataSource'] = data_source
-                        donation['internalId'] = f"{source_prefix}_{len(donations) + idx}"
-                        donation['qbSyncStatus'] = 'Pending'
-                        donation['qbCustomerStatus'] = 'Unknown'
-                        donations.append(donation)
+            try:
+                filename = secure_filename(file.filename)
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(file_path)
+                
+                # Process different file types
+                file_ext = os.path.splitext(filename)[1].lower()
+                
+                if file_ext in ['.jpg', '.jpeg', '.png', '.pdf', '.csv']:
+                    # Process all files using Gemini
+                    print(f"Processing {file_ext} file: {filename}")
+                    
+                    extracted_data = file_processor.process(file_path, file_ext)
+                    
+                    # Set the data source based on file type
+                    data_source = 'CSV' if file_ext == '.csv' else 'LLM'
+                    source_prefix = 'csv' if file_ext == '.csv' else 'llm'
+                    
+                    if extracted_data:
+                        # Check if we have a list of donations or a single donation
+                        if isinstance(extracted_data, list):
+                            print(f"Processing multiple donations from {file_ext}: {len(extracted_data)}")
+                            for idx, donation in enumerate(extracted_data):
+                                donation['dataSource'] = data_source
+                                donation['internalId'] = f"{source_prefix}_{len(donations) + idx}"
+                                donation['qbSyncStatus'] = 'Pending'
+                                donation['qbCustomerStatus'] = 'Unknown'
+                                donations.append(donation)
+                        else:
+                            # Single donation (typically from image)
+                            extracted_data['dataSource'] = data_source
+                            extracted_data['internalId'] = f"{source_prefix}_{len(donations)}"
+                            extracted_data['qbSyncStatus'] = 'Pending'
+                            extracted_data['qbCustomerStatus'] = 'Unknown'
+                            donations.append(extracted_data)
+                    else:
+                        print(f"No donation data extracted from {filename}")
+                        errors.append(f"No donation data could be extracted from {filename}")
                 else:
-                    # Single donation (typically from image)
-                    extracted_data['dataSource'] = data_source
-                    extracted_data['internalId'] = f"{source_prefix}_{len(donations)}"
-                    extracted_data['qbSyncStatus'] = 'Pending'
-                    extracted_data['qbCustomerStatus'] = 'Unknown'
-                    donations.append(extracted_data)
+                    print(f"Unsupported file type: {file_ext}")
+                    errors.append(f"Unsupported file type: {file_ext}")
+            
+            except Exception as e:
+                print(f"Error processing {file.filename}: {str(e)}")
+                errors.append(f"Error processing {file.filename}: {str(e)}")
         
-        # Store file temporarily
-        # In a production environment, consider more robust file storage
+        # Store donations in session for later use
+        if 'donations' not in session:
+            session['donations'] = []
+        
+        session['donations'].extend(donations)
+        
+        # Return appropriate response based on success/errors
+        if donations:
+            return jsonify({
+                'success': True,
+                'donations': donations,
+                'warnings': errors if errors else None
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No donation data could be extracted. ' + (', '.join(errors) if errors else '')
+            }), 400
     
-    # Store donations in session for later use
-    if 'donations' not in session:
-        session['donations'] = []
-    
-    session['donations'].extend(donations)
-    
-    return jsonify({
-        'success': True,
-        'donations': donations
-    })
+    except Exception as e:
+        print(f"Unexpected error in upload processing: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'An unexpected error occurred: {str(e)}'
+        }), 500
 
 @app.route('/donations', methods=['GET'])
 def get_donations():

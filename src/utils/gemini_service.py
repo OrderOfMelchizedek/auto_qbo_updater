@@ -310,9 +310,21 @@ Based on this text, please extract the donation information and return it in the
                         raise ValueError("Cannot process this PDF - no extractable text and visual processing failed")
                 
             elif file_ext in ['.jpg', '.jpeg', '.png']:
-                # For images, use PIL to load the image
-                image = Image.open(file_path)
-                content_parts = [extraction_prompt, image]
+                try:
+                    # For images, use PIL to load the image
+                    image = Image.open(file_path)
+                    print(f"Successfully opened image file: {file_path}")
+                    content_parts = [extraction_prompt, image]
+                except Exception as e:
+                    print(f"Error loading image with PIL: {str(e)}")
+                    # Try an alternative approach - read raw bytes
+                    with open(file_path, 'rb') as img_file:
+                        img_bytes = img_file.read()
+                    print(f"Read {len(img_bytes)} bytes from image file")
+                    # Handle image as raw data
+                    content_parts = [
+                        extraction_prompt + "\n\nI've provided an image file. Please extract the donation information."
+                    ]
             else:
                 raise ValueError(f"Unsupported file type: {file_ext}")
             

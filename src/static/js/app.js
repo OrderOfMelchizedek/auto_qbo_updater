@@ -675,11 +675,21 @@ function uploadAndProcessFiles(files) {
         method: 'POST',
         body: formData
     })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 413) {
+                    throw new Error("File size too large. Maximum size is 50MB per upload.");
+                }
+                return response.json().then(data => {
+                    throw new Error(data.message || `Server error: ${response.status}`);
+                });
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 // Process new donations with validation
-                if (data.donations.length > 0) {
+                if (data.donations && data.donations.length > 0) {
                     const validCount = addNewDonations(data.donations);
                     
                     if (validCount === data.donations.length) {
@@ -688,6 +698,12 @@ function uploadAndProcessFiles(files) {
                         showToast(`Processed ${validCount} donation(s), skipped ${data.donations.length - validCount} invalid donation(s)`, 'warning');
                     } else {
                         showToast('All donations were invalid and skipped. Check console for details.', 'warning');
+                    }
+                    
+                    // Show warnings if any
+                    if (data.warnings && data.warnings.length > 0) {
+                        console.warn("Processing warnings:", data.warnings);
+                        showToast(`Processed with warnings. Check console for details.`, 'warning');
                     }
                 } else {
                     showToast('No donation data found in the uploaded files');
@@ -706,7 +722,14 @@ function uploadAndProcessFiles(files) {
         })
         .catch(error => {
             console.error('Error uploading files:', error);
-            showToast('Error uploading and processing files', 'danger');
+            let errorMessage = 'Error uploading and processing files';
+            
+            // Show more specific error messages
+            if (error.message) {
+                errorMessage = error.message;
+            }
+            
+            showToast(errorMessage, 'danger');
             
             // Reset upload button
             uploadButton.disabled = false;
