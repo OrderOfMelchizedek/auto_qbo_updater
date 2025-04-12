@@ -43,9 +43,14 @@ def index():
 def qbo_auth_status():
     """Check QBO authentication status."""
     authenticated = qbo_service.access_token is not None and qbo_service.realm_id is not None
+    
+    # Check if we just connected to QBO and need to resume file processing
+    just_connected = session.pop('qbo_just_connected', False)
+    
     return jsonify({
         'authenticated': authenticated,
-        'tokenExpiry': qbo_service.token_expires_at if authenticated else None
+        'tokenExpiry': qbo_service.token_expires_at if authenticated else None,
+        'justConnected': just_connected
     })
 
 @app.route('/upload', methods=['POST'])
@@ -271,7 +276,32 @@ def qbo_callback():
     # Add a script to update the UI
     session['qbo_connected'] = True
     
-    return redirect(url_for('index'))
+    # Return a simple success page that will work with the popup window
+    success_html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>QuickBooks Connected</title>
+        <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding-top: 50px; }
+            .success { color: #28a745; font-size: 24px; margin-bottom: 20px; }
+            .message { margin-bottom: 30px; }
+        </style>
+    </head>
+    <body>
+        <div class="success">✓ Successfully Connected to QuickBooks!</div>
+        <div class="message">You may close this window and return to the application.</div>
+        <script>
+            // Close this window after 3 seconds
+            setTimeout(function() {
+                window.close();
+            }, 3000);
+        </script>
+    </body>
+    </html>
+    """
+    
+    return success_html
 
 @app.route('/qbo/customer/<donation_id>', methods=['GET'])
 def find_customer(donation_id):

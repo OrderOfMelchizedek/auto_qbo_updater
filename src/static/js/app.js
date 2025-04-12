@@ -848,6 +848,27 @@ function uploadAndProcessFiles(files) {
         });
 }
 
+// Helper function to check auth and process files if authenticated
+function checkAuthAndProcessFiles() {
+    fetch('/qbo/auth-status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.authenticated) {
+                // Hide the modal
+                qboConnectionModal.hide();
+                
+                // Process the files
+                showToast("Connected to QuickBooks successfully! Processing your files now.", "success");
+                if (window.pendingFiles && window.pendingFiles.length > 0) {
+                    uploadAndProcessFiles(window.pendingFiles);
+                }
+            }
+        })
+        .catch(error => {
+            console.error("Error checking QBO auth status:", error);
+        });
+}
+
 // Check QBO authentication status and update UI
 function checkQBOAuthStatus() {
     fetch('/qbo/auth-status')
@@ -863,6 +884,14 @@ function checkQBOAuthStatus() {
                     qboBtn.innerHTML = '<i class="fas fa-check me-1"></i>Connected to QBO';
                 }
                 console.log("QBO authentication is active");
+                
+                // Check if we just connected and need to process pending files
+                if (data.justConnected && window.pendingFiles && window.pendingFiles.length > 0) {
+                    console.log("Just connected to QBO and have pending files - processing them now");
+                    showToast("Connected to QuickBooks successfully! Processing your files now.", "success");
+                    uploadAndProcessFiles(window.pendingFiles);
+                    window.pendingFiles = null; // Clear pending files
+                }
             } else {
                 // QBO is not connected
                 if (qboBtn) {
@@ -885,9 +914,48 @@ document.addEventListener('DOMContentLoaded', function() {
     customerModal = new bootstrap.Modal(document.getElementById('customerModal'));
     qboConnectionModal = new bootstrap.Modal(document.getElementById('qboConnectionModal'));
     
+    // No longer needed with the popup window approach
+    
     // Set up QBO connection modal buttons
     document.getElementById('proceedToQboAuthBtn').addEventListener('click', function() {
-        window.location.href = '/qbo/authorize';
+        // Open QBO authorization in a new window/tab instead of redirecting
+        const authWindow = window.open('/qbo/authorize', 'qboAuthWindow', 'width=800,height=600');
+        
+        // Handle popup blocker case
+        if (!authWindow || authWindow.closed || typeof authWindow.closed === 'undefined') {
+            showToast("Popup blocked! Please allow popups for this site and try again.", "danger");
+            return;
+        }
+        
+        showToast("Waiting for QuickBooks authentication...", "info");
+        
+        // Start polling to check when QBO auth is complete
+        const pollInterval = setInterval(function() {
+            // Check if auth window was closed manually
+            if (authWindow.closed) {
+                clearInterval(pollInterval);
+                // Check if we've authenticated after window close
+                checkAuthAndProcessFiles();
+                return;
+            }
+            
+            // Check QBO auth status
+            fetch('/qbo/auth-status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.authenticated) {
+                        // Authentication successful, close the popup
+                        authWindow.close();
+                        clearInterval(pollInterval);
+                        
+                        // Use the helper to process files
+                        checkAuthAndProcessFiles();
+                    }
+                })
+                .catch(error => {
+                    console.error("Error checking QBO auth status:", error);
+                });
+        }, 1000); // Check every second
     });
     
     document.getElementById('skipQboConnectionBtn').addEventListener('click', function() {
@@ -978,14 +1046,14 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const files = fileInput.files;
         if (files.length > 0) {
+            // Always store files in the global variable for potential future use
+            window.pendingFiles = files;
+            
             // First check if QBO is connected
             fetch('/qbo/auth-status')
                 .then(response => response.json())
                 .then(data => {
                     if (!data.authenticated) {
-                        // Store the files in a global variable for later processing
-                        window.pendingFiles = files;
-                        
                         // Show QBO connection modal
                         qboConnectionModal.show();
                         return;
