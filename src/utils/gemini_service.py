@@ -5,6 +5,7 @@ import base64
 from PIL import Image
 import google.generativeai as genai
 from typing import Dict, Any, Optional, List, Union
+from .prompt_manager import PromptManager
 
 class GeminiService:
     """Service for interacting with Google's Gemini 2.5 Pro Preview API."""
@@ -13,6 +14,7 @@ class GeminiService:
         """Initialize the Gemini service with API key."""
         self.api_key = api_key
         genai.configure(api_key=api_key)
+        self.prompt_manager = PromptManager(prompt_dir='prompts')
         
     def _extract_json_from_text(self, text: str) -> Any:
         """Extract JSON from text, handling various response formats.
@@ -114,53 +116,8 @@ class GeminiService:
             if custom_prompt:
                 extraction_prompt = custom_prompt
             else:
-                # Read the prompt template
-                with open('FOM Deposit Assistant Prompt 2025-04-12.md', 'r') as f:
-                    prompt_template = f.read()
-                
-                # Create extraction prompt that asks for structured output
-                extraction_prompt = f"""
-{prompt_template}
-
-Please extract the donation information from the document and return it in STRICT JSON format.
-VERY IMPORTANT: Your response MUST include ONLY valid JSON with NO additional text.
-
-The JSON must include ALL of these fields, even if the value is null:
-{{
-  "customerLookup": "string or null",
-  "Salutation": "string or null",
-  "Donor Name": "string (REQUIRED)",
-  "Check No.": "string or null",
-  "Gift Amount": "string (REQUIRED)",
-  "Check Date": "string or null",
-  "Gift Date": "string (REQUIRED)",
-  "Deposit Date": "string or null",
-  "Deposit Method": "string or null",
-  "Memo": "string or null",
-  "First Name": "string (REQUIRED)",
-  "Last Name": "string (REQUIRED)",
-  "Full Name": "string or null",
-  "Organization Name": "string or null",
-  "Address - Line 1": "string (REQUIRED)",
-  "City": "string (REQUIRED)",
-  "State": "string (REQUIRED)",
-  "ZIP": "string (REQUIRED)"
-}}
-
-These fields are REQUIRED and MUST have a value (not null):
-- Donor Name
-- Gift Amount
-- Gift Date
-- First Name
-- Last Name
-- Address - Line 1
-- City
-- State
-- ZIP
-
-Please examine the document thoroughly to find all required information.
-IMPORTANT: Return ONLY the JSON object, with no additional text before or after.
-"""
+                # Use prompt manager to combine main prompt and extraction prompt
+                extraction_prompt = self.prompt_manager.combine_prompts(['main_prompt', 'extraction_prompt'])
             
             # Set up model
             model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
@@ -195,13 +152,9 @@ IMPORTANT: Return ONLY the JSON object, with no additional text before or after.
                     # If text was successfully extracted, enhance the prompt with it
                     if pdf_text.strip():
                         print("PDF contains extractable text - adding as context")
-                        enhanced_extraction_prompt += f"""
-                        
-Additional context - extracted text from the PDF:
-
-{pdf_text}
-
-"""
+                        # Use prompt manager to get PDF text context prompt with placeholder replaced
+                        pdf_context = self.prompt_manager.get_prompt('pdf_text_context_prompt', {'pdf_text': pdf_text})
+                        enhanced_extraction_prompt += f"\n\n{pdf_context}"
                     else:
                         print("PDF does not contain extractable text")
                     
@@ -224,9 +177,16 @@ Additional context - extracted text from the PDF:
                         
                         print(f"Processing batch {batch_num + 1} of {num_batches} (pages {batch_start + 1}-{batch_end})")
                         
+                        # Use prompt manager to get batch processing prompt with placeholders replaced
+                        batch_prompt = self.prompt_manager.get_prompt('batch_processing_prompt', {
+                            'start_page': str(batch_start + 1),
+                            'end_page': str(batch_end),
+                            'total_pages': str(len(pdf_doc))
+                        })
+                        
                         # Create content parts starting with the prompt
                         content_parts = [
-                            enhanced_extraction_prompt + f"\n\nAnalyzing pages {batch_start + 1} through {batch_end} of {len(pdf_doc)}."
+                            enhanced_extraction_prompt + f"\n\n{batch_prompt}"
                         ]
                         
                         # Convert all pages in this batch to images and add to content
@@ -294,16 +254,9 @@ Additional context - extracted text from the PDF:
                     if pdf_text.strip():
                         print("Falling back to text-only processing")
                         
-                        # Create a prompt with the extracted text
-                        text_fallback_prompt = f"""
-{extraction_prompt}
-
-Here is the extracted text from the PDF document:
-
-{pdf_text}
-
-Based on this text, please extract the donation information and return it in the requested JSON format.
-"""
+                        # Use prompt manager to get PDF text fallback prompt with placeholder replaced
+                        fallback_content = self.prompt_manager.get_prompt('pdf_text_fallback_prompt', {'pdf_text': pdf_text})
+                        text_fallback_prompt = f"{extraction_prompt}\n\n{fallback_content}"
                         content_parts = [text_fallback_prompt]
                     else:
                         # If we have no text and the visual approach failed, we can't process this PDF
@@ -322,8 +275,10 @@ Based on this text, please extract the donation information and return it in the
                         img_bytes = img_file.read()
                     print(f"Read {len(img_bytes)} bytes from image file")
                     # Handle image as raw data
+                    # Use prompt manager to get image extraction prompt
+                    image_prompt = self.prompt_manager.get_prompt('image_extraction_prompt')
                     content_parts = [
-                        extraction_prompt + "\n\nI've provided an image file. Please extract the donation information."
+                        extraction_prompt + f"\n\n{image_prompt}"
                     ]
             else:
                 raise ValueError(f"Unsupported file type: {file_ext}")
@@ -334,7 +289,9 @@ Based on this text, please extract the donation information and return it in the
             # For Gemini API 0.5.4, we need to explicitly request JSON in the prompt
             # Update the prompt to strongly emphasize structured JSON output
             if isinstance(content_parts[0], str):
-                content_parts[0] += "\n\nVery important: Your response must be VALID JSON only. No explanation text or Markdown formatting."
+                # Use prompt manager to get JSON format reminder
+                json_reminder = self.prompt_manager.get_prompt('json_format_reminder')
+                content_parts[0] += f"\n\n{json_reminder}"
                 
             response = model.generate_content(
                 contents=content_parts,

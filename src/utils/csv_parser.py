@@ -18,18 +18,61 @@ class CSVParser:
         donations = []
         
         try:
-            with open(csv_path, 'r', newline='', encoding='utf-8-sig') as csvfile:
-                # Try to detect the dialect
-                dialect = csv.Sniffer().sniff(csvfile.read(1024))
-                csvfile.seek(0)
+            # List of encodings to try
+            encodings = ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']
+            sample = None
+            
+            # Try different encodings until one works
+            for encoding in encodings:
+                try:
+                    with open(csv_path, 'r', newline='', encoding=encoding) as csvfile:
+                        sample = csvfile.read(4096)  # Read a larger sample
+                    print(f"Successfully read file with encoding: {encoding}")
+                    break
+                except UnicodeDecodeError:
+                    print(f"Failed to read with encoding: {encoding}")
+                    continue
+            
+            if sample is None:
+                raise ValueError(f"Could not read file with any of the attempted encodings: {encodings}")
+            
+            # Try to detect common delimiters in order of likelihood
+            possible_delimiters = [',', ';', '\t', '|']
+            delimiter = None
+            
+            # Print the first few characters of sample for diagnosis
+            print(f"CSV sample (first 100 chars): '{sample[:100].replace('\n', '\\n').replace('\r', '\\r')}'")
+            
+            # Check if CSV sniffer can detect the delimiter
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=possible_delimiters)
+                delimiter = dialect.delimiter
+                print(f"Detected delimiter: '{delimiter}'")
+            except Exception as sniff_err:
+                print(f"CSV Sniffer error: {str(sniff_err)}")
+                # If sniffer fails, try to determine the delimiter by counting occurrences
+                counts = {d: sample.count(d) for d in possible_delimiters}
+                print(f"Delimiter counts: {counts}")
+                if any(counts.values()):
+                    delimiter = max(counts.items(), key=lambda x: x[1])[0]
+                    print(f"Estimated delimiter: '{delimiter}'")
+                else:
+                    # Fallback to comma if no delimiters found
+                    delimiter = ','
+                    print(f"No delimiters found, defaulting to comma")
+            
+            # Store the successful encoding to use later
+            successful_encoding = encoding
+            
+            # Open the file again for actual parsing
+            with open(csv_path, 'r', newline='', encoding=successful_encoding) as csvfile:
+                # Create a dictionary reader with the detected or fallback delimiter
+                reader = csv.DictReader(csvfile, delimiter=delimiter)
                 
-                # Read the header row
-                reader = csv.reader(csvfile, dialect)
-                headers = next(reader)
-                
-                # Create a dictionary reader to handle headers
-                csvfile.seek(0)
-                reader = csv.DictReader(csvfile, dialect=dialect)
+                # Check if we have column headers
+                fieldnames = reader.fieldnames
+                if not fieldnames:
+                    raise ValueError("No column headers found in CSV file")
                 
                 # Standard expected header mappings
                 header_mappings = {

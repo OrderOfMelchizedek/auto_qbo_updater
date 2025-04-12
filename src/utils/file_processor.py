@@ -6,6 +6,7 @@ from PIL import Image
 import io
 
 from utils.gemini_service import GeminiService
+from utils.prompt_manager import PromptManager
 
 class FileProcessor:
     """Service for processing different file types (images, PDFs) for donation extraction."""
@@ -13,6 +14,7 @@ class FileProcessor:
     def __init__(self, gemini_service: GeminiService):
         """Initialize the file processor with a Gemini service."""
         self.gemini_service = gemini_service
+        self.prompt_manager = PromptManager(prompt_dir='prompts')
     
     def process(self, file_path: str, file_ext: str) -> Any:
         """Process a file to extract donation information.
@@ -89,28 +91,11 @@ class FileProcessor:
                 donation = item['donation']
                 missing_fields = item['missing_fields']
                 
-                # Create a detailed prompt specifying exactly what's missing
-                reprocess_prompt = f"""
-I need to extract complete donation information from this document.
-
-I previously extracted this partial information:
-{json.dumps(donation, indent=2)}
-
-However, the following fields are missing or incomplete:
-{', '.join(missing_fields)}
-
-Please carefully examine the document again and provide the COMPLETE donation information with special attention to the missing fields.
-Return ONLY a complete JSON object with ALL fields including:
-- Donor Name
-- Gift Amount
-- Gift Date
-- Address - Line 1
-- City
-- State
-- ZIP
-- Last Name
-- Check No. (if this is a check payment)
-"""
+                # Use prompt manager to get reprocessing prompt with placeholders replaced
+                reprocess_prompt = self.prompt_manager.get_prompt('reprocess_prompt', {
+                    'partial_data': json.dumps(donation, indent=2),
+                    'missing_fields': ', '.join(missing_fields)
+                })
                 
                 print(f"Reprocessing donation to find missing fields: {missing_fields}")
                 
@@ -237,57 +222,10 @@ Return ONLY a complete JSON object with ALL fields including:
                 
             print(f"CSV content sample: {csv_content[:500]}")
             
-            # Create a special text prompt for CSV processing
-            csv_prompt = f"""
-You are analyzing a CSV file containing donation information. This CSV data represents online donations.
-Here is the raw CSV content:
-
-{csv_content}
-
-Please extract all donation records from this CSV file. 
-VERY IMPORTANT: Return ONLY a valid JSON array containing objects with these fields, with NO additional text before or after:
-
-[
-  {{
-    "customerLookup": "string or null",
-    "Salutation": "string or null",
-    "Donor Name": "string (REQUIRED)",
-    "Check No.": "N/A",
-    "Gift Amount": "string (REQUIRED)",
-    "Check Date": "string or null",
-    "Gift Date": "string (REQUIRED)",
-    "Deposit Date": "today's date",
-    "Deposit Method": "Online Donation", 
-    "Memo": "string or null",
-    "First Name": "string (REQUIRED)",
-    "Last Name": "string (REQUIRED)",
-    "Full Name": "string or null",
-    "Organization Name": "string or null",
-    "Address - Line 1": "string (REQUIRED)",
-    "City": "string (REQUIRED)",
-    "State": "string (REQUIRED)",
-    "ZIP": "string (REQUIRED)"
-  }}
-]
-
-For Online Donations:
-- Check No. should always be "N/A"
-- Deposit Method should always be "Online Donation"
-- Deposit Date should be today's date
-
-These fields are REQUIRED and MUST have a value (not null):
-- Donor Name
-- Gift Amount
-- Gift Date
-- First Name
-- Last Name
-- Address - Line 1
-- City
-- State
-- ZIP
-
-Return ONLY the JSON array with no additional text. Ensure it is valid JSON that can be parsed directly.
-"""
+            # Use prompt manager to get CSV extraction prompt with placeholder replaced
+            csv_prompt = self.prompt_manager.get_prompt('csv_extraction_prompt', {
+                'csv_content': csv_content
+            })
             
             # Send CSV text to Gemini for processing
             donation_data = self.gemini_service.extract_text_data(csv_prompt)

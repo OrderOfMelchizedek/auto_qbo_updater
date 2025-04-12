@@ -1,0 +1,1 @@
+I've provided an image file. Please extract the donation information.
