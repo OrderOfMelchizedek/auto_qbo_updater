@@ -85,25 +85,30 @@ class GeminiService:
             print(f"Error calling Gemini API: {str(e)}")
             return None
     
-    def extract_donation_data(self, file_path: str) -> Optional[Dict[str, Any]]:
+    def extract_donation_data(self, file_path: str, custom_prompt: str = None) -> Optional[Dict[str, Any]]:
         """Extract donation data from an image or PDF using Gemini.
         
         Args:
             file_path: Path to the image or PDF file
+            custom_prompt: Optional custom prompt to use instead of the default
             
         Returns:
             Dictionary containing extracted donation data or None if extraction failed
         """
         try:
-            # Read the prompt template
-            with open('FOM Deposit Assistant Prompt 2025-04-12.md', 'r') as f:
-                prompt_template = f.read()
-            
             # Determine file type by extension
             file_ext = os.path.splitext(file_path)[1].lower()
             
-            # Create extraction prompt that asks for structured output
-            extraction_prompt = f"""
+            # Use custom prompt if provided, otherwise use the default prompt
+            if custom_prompt:
+                extraction_prompt = custom_prompt
+            else:
+                # Read the prompt template
+                with open('FOM Deposit Assistant Prompt 2025-04-12.md', 'r') as f:
+                    prompt_template = f.read()
+                
+                # Create extraction prompt that asks for structured output
+                extraction_prompt = f"""
 {prompt_template}
 
 Please extract the donation information from the document and return it in JSON format with the following fields:
