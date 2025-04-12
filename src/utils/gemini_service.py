@@ -14,6 +14,77 @@ class GeminiService:
         self.api_key = api_key
         genai.configure(api_key=api_key)
     
+    def extract_text_data(self, prompt_text: str) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
+        """Extract structured data from text using Gemini.
+        
+        Args:
+            prompt_text: The prompt text to send to Gemini
+            
+        Returns:
+            Dictionary or list of dictionaries containing extracted data or None if extraction failed
+        """
+        try:
+            # Set up model
+            model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
+            
+            # Call Gemini API with prompt text
+            print(f"Processing text with Gemini")
+            response = model.generate_content(
+                contents=[prompt_text],
+                generation_config=genai.GenerationConfig(
+                    temperature=0.2
+                )
+            )
+            
+            # Extract response text
+            text_response = response.text
+            
+            # Check for JSON in the response
+            if text_response:
+                print(f"Response text: {text_response}")
+                
+                # First try to directly parse the text as JSON
+                try:
+                    parsed_json = json.loads(text_response)
+                    print("Successfully parsed complete JSON response")
+                    
+                    # Return the full array of data (or single object)
+                    if isinstance(parsed_json, list):
+                        print(f"Found array of {len(parsed_json)} items, returning all items")
+                    return parsed_json
+                    
+                except json.JSONDecodeError:
+                    # If that fails, try to extract JSON from the text
+                    try:
+                        # Check for array format
+                        if '[' in text_response and ']' in text_response:
+                            json_start = text_response.find('[')
+                            json_end = text_response.rfind(']') + 1
+                        # Check for object format
+                        elif '{' in text_response and '}' in text_response:
+                            json_start = text_response.find('{')
+                            json_end = text_response.rfind('}') + 1
+                        else:
+                            raise ValueError("No JSON markers found in response")
+                            
+                        json_str = text_response[json_start:json_end]
+                        parsed_json = json.loads(json_str)
+                        
+                        # Return the full array of data (or single object)
+                        if isinstance(parsed_json, list):
+                            print(f"Found array of {len(parsed_json)} items, returning all items")
+                        return parsed_json
+                        
+                    except (json.JSONDecodeError, ValueError) as e:
+                        print(f"Error extracting JSON from response: {str(e)}")
+            
+            print("Failed to extract data from Gemini response")
+            return None
+        
+        except Exception as e:
+            print(f"Error calling Gemini API: {str(e)}")
+            return None
+    
     def extract_donation_data(self, file_path: str) -> Optional[Dict[str, Any]]:
         """Extract donation data from an image or PDF using Gemini.
         

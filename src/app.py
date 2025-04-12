@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 
 from utils.gemini_service import GeminiService
 from utils.qbo_service import QBOService
-from utils.csv_parser import CSVParser
 from utils.file_processor import FileProcessor
 
 # Load environment variables
@@ -29,7 +28,6 @@ qbo_service = QBOService(
     redirect_uri=os.getenv('QBO_REDIRECT_URI'),
     environment=os.getenv('QBO_ENVIRONMENT')
 )
-csv_parser = CSVParser()
 file_processor = FileProcessor(gemini_service)
 
 # Routes
@@ -61,32 +59,28 @@ def upload_files():
         # Process different file types
         file_ext = os.path.splitext(filename)[1].lower()
         
-        if file_ext in ['.csv']:
-            csv_donations = csv_parser.parse(file_path)
-            for donation in csv_donations:
-                donation['dataSource'] = 'CSV'
-                donation['internalId'] = f"csv_{len(donations)}"
-                donation['qbSyncStatus'] = 'Pending'
-                donation['qbCustomerStatus'] = 'Unknown'
-                donations.append(donation)
-        elif file_ext in ['.jpg', '.jpeg', '.png', '.pdf']:
-            # Process images and PDFs using Gemini
+        if file_ext in ['.jpg', '.jpeg', '.png', '.pdf', '.csv']:
+            # Process all files using Gemini
             extracted_data = file_processor.process(file_path, file_ext)
             
+            # Set the data source based on file type
+            data_source = 'CSV' if file_ext == '.csv' else 'LLM'
+            source_prefix = 'csv' if file_ext == '.csv' else 'llm'
+            
             if extracted_data:
-                # Check if we have a list of donations (PDF) or a single donation (image)
+                # Check if we have a list of donations or a single donation
                 if isinstance(extracted_data, list):
-                    print(f"Processing multiple donations from PDF: {len(extracted_data)}")
+                    print(f"Processing multiple donations from {file_ext}: {len(extracted_data)}")
                     for idx, donation in enumerate(extracted_data):
-                        donation['dataSource'] = 'LLM'
-                        donation['internalId'] = f"llm_{len(donations) + idx}"
+                        donation['dataSource'] = data_source
+                        donation['internalId'] = f"{source_prefix}_{len(donations) + idx}"
                         donation['qbSyncStatus'] = 'Pending'
                         donation['qbCustomerStatus'] = 'Unknown'
                         donations.append(donation)
                 else:
                     # Single donation (typically from image)
-                    extracted_data['dataSource'] = 'LLM'
-                    extracted_data['internalId'] = f"llm_{len(donations)}"
+                    extracted_data['dataSource'] = data_source
+                    extracted_data['internalId'] = f"{source_prefix}_{len(donations)}"
                     extracted_data['qbSyncStatus'] = 'Pending'
                     extracted_data['qbCustomerStatus'] = 'Unknown'
                     donations.append(extracted_data)
