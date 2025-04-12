@@ -134,17 +134,65 @@ Format your response as valid JSON only.
             
             # Process based on file type
             if file_ext == '.pdf':
-                # For PDFs, we'll use PyPDF2 to extract text for processing
+                # For PDFs, we'll try two approaches:
+                # 1. First, attempt to use the image data directly as a multimodal input
+                # 2. If that fails, fall back to extracting text and sending a text-only request
                 import PyPDF2
+                import fitz  # PyMuPDF
                 
-                with open(file_path, 'rb') as f:
-                    pdf_reader = PyPDF2.PdfReader(f)
-                    pdf_text = ""
+                # Try to extract text from PDF as a fallback
+                pdf_text = ""
+                try:
+                    pdf_reader = PyPDF2.PdfReader(file_path)
                     for page in pdf_reader.pages:
-                        pdf_text += page.extract_text() + "\n\n"
+                        extracted_text = page.extract_text()
+                        if extracted_text:
+                            pdf_text += extracted_text + "\n\n"
+                except Exception as e:
+                    print(f"Error extracting text with PyPDF2: {str(e)}")
                 
-                # Create a special prompt that includes the PDF text
-                pdf_prompt = f"""
+                # Approach 1: Try to render PDF pages as images
+                try:
+                    print("Processing PDF visually by converting to images")
+                    pdf_doc = fitz.open(file_path)
+                    
+                    # Enhanced prompt
+                    enhanced_extraction_prompt = extraction_prompt
+                    
+                    # If text was successfully extracted, enhance the prompt with it
+                    if pdf_text.strip():
+                        print("PDF contains extractable text - adding as context")
+                        enhanced_extraction_prompt += f"""
+                        
+Additional context - extracted text from the PDF:
+
+{pdf_text}
+
+"""
+                    else:
+                        print("PDF does not contain extractable text")
+                    
+                    # If it's a multi-page PDF, process the first page only for now
+                    # (you can extend this to handle multiple pages if needed)
+                    page = pdf_doc[0]
+                    pix = page.get_pixmap()
+                    img_data = pix.tobytes("png")
+                    
+                    # Load image data
+                    image = Image.open(io.BytesIO(img_data))
+                    
+                    # Use multimodal processing with the rendered image
+                    content_parts = [enhanced_extraction_prompt, image]
+                    
+                except Exception as e:
+                    print(f"Error processing PDF visually: {str(e)}")
+                    
+                    # Approach 2: Fall back to text-only if we have extracted text
+                    if pdf_text.strip():
+                        print("Falling back to text-only processing")
+                        
+                        # Create a prompt with the extracted text
+                        text_fallback_prompt = f"""
 {extraction_prompt}
 
 Here is the extracted text from the PDF document:
@@ -153,9 +201,10 @@ Here is the extracted text from the PDF document:
 
 Based on this text, please extract the donation information and return it in the requested JSON format.
 """
-                
-                # Use text-based processing for PDFs
-                content_parts = [pdf_prompt]
+                        content_parts = [text_fallback_prompt]
+                    else:
+                        # If we have no text and the visual approach failed, we can't process this PDF
+                        raise ValueError("Cannot process this PDF - no extractable text and visual processing failed")
                 
             elif file_ext in ['.jpg', '.jpeg', '.png']:
                 # For images, use PIL to load the image

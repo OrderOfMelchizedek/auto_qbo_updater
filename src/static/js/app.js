@@ -608,6 +608,53 @@ function downloadReportCSV() {
         });
 }
 
+// Add new donations with strict validation
+function addNewDonations(newDonations) {
+    // Filter donations based on strict validation rules
+    const validDonations = newDonations.filter(donation => {
+        // Rule 1: Every donation MUST have a Gift Amount
+        if (!donation['Gift Amount']) {
+            console.log(`Skipping donation from ${donation['Donor Name'] || 'Unknown'}: Missing Gift Amount`);
+            return false;
+        }
+        
+        // Convert Gift Amount to a number for validation
+        let giftAmount;
+        if (typeof donation['Gift Amount'] === 'string') {
+            giftAmount = parseFloat(donation['Gift Amount'].replace(/[$,]/g, ''));
+        } else {
+            giftAmount = parseFloat(donation['Gift Amount'] || 0);
+        }
+        
+        // Ensure Gift Amount is a valid number greater than zero
+        if (isNaN(giftAmount) || giftAmount <= 0) {
+            console.log(`Skipping donation from ${donation['Donor Name'] || 'Unknown'}: Invalid Gift Amount`);
+            return false;
+        }
+        
+        // Rule 2: Non-online donations MUST have a Check No.
+        const isOnlineDonation = donation['Deposit Method'] === 'Online Donation';
+        if (!isOnlineDonation && !donation['Check No.']) {
+            console.log(`Skipping non-online donation from ${donation['Donor Name'] || 'Unknown'}: Missing Check No.`);
+            return false;
+        }
+        
+        // All validation rules passed
+        return true;
+    });
+    
+    // Log how many donations were filtered out
+    if (validDonations.length < newDonations.length) {
+        console.log(`Filtered out ${newDonations.length - validDonations.length} invalid donations`);
+    }
+    
+    // Add only valid donations
+    donations = donations.concat(validDonations);
+    renderDonationTable();
+    
+    return validDonations.length;
+}
+
 // Upload files and process them
 function uploadAndProcessFiles(files) {
     // Create FormData object
@@ -631,14 +678,20 @@ function uploadAndProcessFiles(files) {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Add new donations to the donations array
-                donations = donations.concat(data.donations);
-                
-                // Render the donation table
-                renderDonationTable();
-                
-                // Show success message
-                showToast(`Successfully processed ${data.donations.length} donation(s)`);
+                // Process new donations with validation
+                if (data.donations.length > 0) {
+                    const validCount = addNewDonations(data.donations);
+                    
+                    if (validCount === data.donations.length) {
+                        showToast(`Successfully processed ${validCount} donation(s)`);
+                    } else if (validCount > 0) {
+                        showToast(`Processed ${validCount} donation(s), skipped ${data.donations.length - validCount} invalid donation(s)`, 'warning');
+                    } else {
+                        showToast('All donations were invalid and skipped. Check console for details.', 'warning');
+                    }
+                } else {
+                    showToast('No donation data found in the uploaded files');
+                }
                 
                 // Clear the file list
                 document.getElementById('fileList').innerHTML = '';
