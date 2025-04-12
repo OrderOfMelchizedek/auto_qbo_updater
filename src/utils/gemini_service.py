@@ -1,5 +1,8 @@
 import os
 import json
+import io
+import base64
+from PIL import Image
 import google.generativeai as genai
 from typing import Dict, Any, Optional
 
@@ -10,7 +13,6 @@ class GeminiService:
         """Initialize the Gemini service with API key."""
         self.api_key = api_key
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.5-pro-preview')
     
     def extract_donation_data(self, image_path: str) -> Optional[Dict[str, Any]]:
         """Extract donation data from an image using Gemini.
@@ -27,51 +29,53 @@ class GeminiService:
                 prompt_template = f.read()
             
             # Load image
-            with open(image_path, 'rb') as f:
-                image_data = f.read()
+            image = Image.open(image_path)
             
-            # Create structured output schema based on headers
-            schema = {
-                "type": "object",
-                "properties": {
-                    "customerLookup": {"type": "string"},
-                    "Salutation": {"type": "string"},
-                    "Donor Name": {"type": "string"},
-                    "Check No.": {"type": "string"},
-                    "Gift Amount": {"type": "string"},
-                    "Check Date": {"type": "string"},
-                    "Gift Date": {"type": "string"},
-                    "Deposit Date": {"type": "string"},
-                    "Deposit Method": {"type": "string"},
-                    "Memo": {"type": "string"},
-                    "First Name": {"type": "string"},
-                    "Last Name": {"type": "string"},
-                    "Full Name": {"type": "string"},
-                    "Organization Name": {"type": "string"},
-                    "Address - Line 1": {"type": "string"},
-                    "City": {"type": "string"},
-                    "State": {"type": "string"},
-                    "ZIP": {"type": "string"}
-                },
-                "required": ["customerLookup", "Donor Name", "Gift Amount"]
-            }
+            # Convert image to base64 for API
+            image_buffer = io.BytesIO()
+            image.save(image_buffer, format=image.format or 'JPEG')
+            image_bytes = image_buffer.getvalue()
+            
+            # Create simplified implementation without function calling
+            # Create a direct prompt that asks for structured output
+            extraction_prompt = f"""
+{prompt_template}
+
+Please extract the donation information from the image and return it in JSON format with the following fields:
+- customerLookup
+- Salutation
+- Donor Name 
+- Check No.
+- Gift Amount
+- Check Date
+- Gift Date
+- Deposit Date
+- Deposit Method
+- Memo
+- First Name
+- Last Name
+- Full Name
+- Organization Name
+- Address - Line 1
+- City
+- State
+- ZIP
+
+Format your response as valid JSON only.
+"""
+            
+            # Set up model
+            model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
             
             # Call Gemini API with image
-            response = self.model.generate_content(
-                [prompt_template, image_data],
-                generation_config={"response_mime_type": "application/json"},
-                tools=[{"function_declarations": [{"name": "extract_donation", "schema": schema}]}]
+            response = model.generate_content(
+                contents=[extraction_prompt, image],
+                generation_config=genai.GenerationConfig(
+                    temperature=0.2
+                )
             )
             
-            if hasattr(response, 'candidates') and len(response.candidates) > 0:
-                # Parse JSON response
-                if hasattr(response.candidates[0], 'content') and hasattr(response.candidates[0].content, 'parts'):
-                    parts = response.candidates[0].content.parts
-                    for part in parts:
-                        if hasattr(part, 'function_call') and part.function_call.name == 'extract_donation':
-                            return json.loads(part.function_call.args)
-            
-            # Handle non-function-call response format
+            # Extract response text
             text_response = response.text
             if text_response and '{' in text_response and '}' in text_response:
                 # Try to extract JSON from text
@@ -84,6 +88,7 @@ class GeminiService:
                     print("Error parsing JSON from Gemini response")
             
             print("Failed to extract donation data from Gemini response")
+            print(f"Response text: {text_response}")
             return None
         
         except Exception as e:
