@@ -567,24 +567,39 @@ function downloadReportCSV() {
                 
                 // Create CSV content
                 let csvContent = 'data:text/csv;charset=utf-8,';
-                csvContent += 'Index,Donor Name,Address,Amount,Date,Check No.,Memo\n';
+                
+                // Include all columns in the CSV header
+                csvContent += 'Index,Donor Name,First Name,Last Name,Full Name,Organization Name,';
+                csvContent += 'Address Line 1,City,State,ZIP,Address,Amount,Date,Check No.,Memo,';
+                csvContent += 'Deposit Date,Deposit Method,Customer Lookup\n';
                 
                 report.entries.forEach(entry => {
                     const amount = entry.amount.toString().replace('$', '');
                     const row = [
                         entry.index,
-                        `"${entry.donor_name}"`,
-                        `"${entry.address}"`,
+                        `"${entry.donor_name || ''}"`,
+                        `"${entry.first_name || ''}"`,
+                        `"${entry.last_name || ''}"`,
+                        `"${entry.full_name || ''}"`,
+                        `"${entry.organization || ''}"`,
+                        `"${entry.address_line_1 || ''}"`,
+                        `"${entry.city || ''}"`,
+                        `"${entry.state || ''}"`,
+                        `"${entry.zip || ''}"`,
+                        `"${entry.address || ''}"`,
                         amount,
-                        entry.date,
-                        entry.check_no,
-                        `"${entry.memo}"`
+                        `"${entry.date || ''}"`,
+                        `"${entry.check_no || ''}"`,
+                        `"${entry.memo || ''}"`,
+                        `"${entry.deposit_date || ''}"`,
+                        `"${entry.deposit_method || ''}"`,
+                        `"${entry.customer_lookup || ''}"`
                     ];
                     csvContent += row.join(',') + '\n';
                 });
                 
                 // Add total row
-                csvContent += `"","","Total",${report.total.toString().replace('$', '')},"","",""\n`;
+                csvContent += `"","","","","","","","","","","Total",${report.total.toString().replace('$', '')},"","","","","",""\n`;
                 
                 // Create download link
                 const encodedUri = encodeURI(csvContent);
@@ -608,14 +623,56 @@ function downloadReportCSV() {
         });
 }
 
+// Download report as text file
+function downloadReportTXT() {
+    fetch('/report/generate')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const report = data.report;
+                
+                // Use the formatted text report from the server
+                const textContent = report.text_report;
+                
+                // Create a blob with the text content
+                const blob = new Blob([textContent], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                
+                // Create download link
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `fom_deposit_report_${new Date().toISOString().split('T')[0]}.txt`;
+                document.body.appendChild(link);
+                
+                // Trigger download
+                link.click();
+                
+                // Clean up
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            } else {
+                showToast(data.message || 'Error downloading report', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error downloading report:', error);
+            showToast('Error downloading report', 'danger');
+        });
+}
+
 // Add new donations with strict validation
 function addNewDonations(newDonations) {
-    // Filter donations based on strict validation rules
-    const validDonations = newDonations.filter(donation => {
+    // Track both valid and invalid donations
+    const validDonations = [];
+    const invalidDonations = [];
+    
+    // Apply strict validation rules
+    newDonations.forEach(donation => {
         // Rule 1: Every donation MUST have a Gift Amount
         if (!donation['Gift Amount']) {
-            console.log(`Skipping donation from ${donation['Donor Name'] || 'Unknown'}: Missing Gift Amount`);
-            return false;
+            console.log(`Invalid donation from ${donation['Donor Name'] || 'Unknown'}: Missing Gift Amount`);
+            invalidDonations.push(donation);
+            return;
         }
         
         // Convert Gift Amount to a number for validation
@@ -628,31 +685,72 @@ function addNewDonations(newDonations) {
         
         // Ensure Gift Amount is a valid number greater than zero
         if (isNaN(giftAmount) || giftAmount <= 0) {
-            console.log(`Skipping donation from ${donation['Donor Name'] || 'Unknown'}: Invalid Gift Amount`);
-            return false;
+            console.log(`Invalid donation from ${donation['Donor Name'] || 'Unknown'}: Invalid Gift Amount`);
+            invalidDonations.push(donation);
+            return;
         }
         
         // Rule 2: Non-online donations MUST have a Check No.
         const isOnlineDonation = donation['Deposit Method'] === 'Online Donation';
         if (!isOnlineDonation && !donation['Check No.']) {
-            console.log(`Skipping non-online donation from ${donation['Donor Name'] || 'Unknown'}: Missing Check No.`);
-            return false;
+            console.log(`Invalid non-online donation from ${donation['Donor Name'] || 'Unknown'}: Missing Check No.`);
+            invalidDonations.push(donation);
+            return;
         }
         
         // All validation rules passed
-        return true;
+        validDonations.push(donation);
     });
     
     // Log how many donations were filtered out
-    if (validDonations.length < newDonations.length) {
-        console.log(`Filtered out ${newDonations.length - validDonations.length} invalid donations`);
+    if (invalidDonations.length > 0) {
+        console.log(`Found ${invalidDonations.length} invalid donations that will be removed`);
     }
     
-    // Add only valid donations
+    // Add only valid donations to the UI
     donations = donations.concat(validDonations);
     renderDonationTable();
     
+    // If there are invalid donations, remove them from the server session
+    if (invalidDonations.length > 0) {
+        removeInvalidDonationsFromSession(invalidDonations);
+    }
+    
     return validDonations.length;
+}
+
+// Remove invalid donations from the server session
+function removeInvalidDonationsFromSession(invalidDonations) {
+    // Only proceed if there are invalid donations to remove
+    if (!invalidDonations || invalidDonations.length === 0) return;
+    
+    const invalidIds = invalidDonations
+        .filter(donation => donation.internalId) // Only those with IDs
+        .map(donation => donation.internalId);
+        
+    if (invalidIds.length === 0) return;
+    
+    console.log(`Removing ${invalidIds.length} invalid donations from server session:`, invalidIds);
+    
+    // Call server to remove these donations
+    fetch('/donations/remove-invalid', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ invalidIds })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log(`Successfully removed ${data.removedCount} invalid donations from session`);
+        } else {
+            console.error('Error removing invalid donations:', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error calling remove-invalid endpoint:', error);
+    });
 }
 
 // Upload files and process them
@@ -845,9 +943,14 @@ document.addEventListener('DOMContentLoaded', function() {
         generateReport();
     });
     
-    // Download report button
-    document.getElementById('downloadReportBtn').addEventListener('click', function() {
+    // Download report as CSV button
+    document.getElementById('downloadReportCSVBtn').addEventListener('click', function() {
         downloadReportCSV();
+    });
+    
+    // Download report as TXT button
+    document.getElementById('downloadReportTXTBtn').addEventListener('click', function() {
+        downloadReportTXT();
     });
     
     // Load existing donations from server on page load

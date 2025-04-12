@@ -165,6 +165,43 @@ def update_donation(donation_id):
     
     return jsonify({'success': False, 'message': 'Donation not found'}), 404
 
+@app.route('/donations/remove-invalid', methods=['POST'])
+def remove_invalid_donations():
+    """Remove invalid donations from the session."""
+    donations = session.get('donations', [])
+    
+    if not request.json or 'invalidIds' not in request.json:
+        return jsonify({
+            'success': False,
+            'message': 'No invalid IDs provided'
+        }), 400
+    
+    invalid_ids = request.json['invalidIds']
+    if not invalid_ids or not isinstance(invalid_ids, list):
+        return jsonify({
+            'success': False,
+            'message': 'Invalid IDs must be a non-empty list'
+        }), 400
+    
+    # Count the number of donations before filtering
+    initial_count = len(donations)
+    
+    # Filter out invalid donations
+    valid_donations = [d for d in donations if d.get('internalId') not in invalid_ids]
+    
+    # Count how many were removed
+    removed_count = initial_count - len(valid_donations)
+    
+    # Update the session
+    session['donations'] = valid_donations
+    
+    print(f"Removed {removed_count} invalid donations from session")
+    
+    return jsonify({
+        'success': True,
+        'removedCount': removed_count
+    })
+
 @app.route('/qbo/authorize')
 def authorize_qbo():
     """Start QBO OAuth flow."""
@@ -473,13 +510,19 @@ def generate_report():
     if not donations:
         return jsonify({'success': False, 'message': 'No donations to report'}), 400
     
-    # Convert donations to DataFrame for easier manipulation
-    df = pd.DataFrame(donations)
-    
     # Format report similar to the provided examples
     report_data = []
+    valid_entry_index = 1
     
-    for i, donation in enumerate(donations):
+    # Current date for the report
+    current_date = pd.Timestamp.now().strftime('%m/%d/%Y')
+    
+    for donation in donations:
+        # Skip entries with missing or invalid gift amounts
+        if 'Gift Amount' not in donation or not donation['Gift Amount']:
+            print(f"Skipping donation with missing Gift Amount: {donation.get('Donor Name', 'Unknown')}")
+            continue
+            
         donor_name = donation.get('Donor Name', 'Unknown Donor')
         address = donation.get('Address - Line 1', '')
         city = donation.get('City', '')
@@ -487,12 +530,20 @@ def generate_report():
         zipcode = donation.get('ZIP', '')
         address_line = f"{address}, {city}, {state} {zipcode}" if all([address, city, state, zipcode]) else ''
         
-        amount = donation.get('Gift Amount', '0')
-        if isinstance(amount, str):
-            try:
-                amount = float(amount.replace('$', '').replace(',', ''))
-            except ValueError:
-                amount = 0
+        # Create a multi-line address for text report format
+        address_line_1 = address
+        address_line_2 = f"{city}, {state} {zipcode}" if all([city, state, zipcode]) else ''
+        
+        # Safely convert gift amount to float
+        try:
+            amount_str = donation.get('Gift Amount', '0')
+            if isinstance(amount_str, str):
+                amount = float(amount_str.replace('$', '').replace(',', ''))
+            else:
+                amount = float(amount_str) if amount_str is not None else 0.0
+        except (ValueError, TypeError):
+            print(f"Skipping donation with invalid Gift Amount: {donor_name}")
+            continue
         
         gift_date = donation.get('Gift Date', donation.get('Check Date', ''))
         check_no = donation.get('Check No.', '')
@@ -501,24 +552,69 @@ def generate_report():
         
         memo = donation.get('Memo', '')
         
+        # Create full donation record with all fields for CSV export
         report_entry = {
-            'index': i + 1,
+            'index': valid_entry_index,
             'donor_name': donor_name,
-            'address': address_line,
+            'address_line_1': address_line_1,
+            'address_line_2': address_line_2,
+            'address': address_line,  # Single line address for display
             'amount': amount,
             'date': gift_date,
             'check_no': check_no,
-            'memo': memo
+            'memo': memo,
+            # Include all original fields for CSV export
+            'first_name': donation.get('First Name', ''),
+            'last_name': donation.get('Last Name', ''),
+            'full_name': donation.get('Full Name', ''),
+            'organization': donation.get('Organization Name', ''),
+            'city': city,
+            'state': state,
+            'zip': zipcode,
+            'deposit_date': donation.get('Deposit Date', current_date),
+            'deposit_method': donation.get('Deposit Method', 'Check'),
+            'customer_lookup': donation.get('customerLookup', '')
         }
         
         report_data.append(report_entry)
+        valid_entry_index += 1
     
-    # Calculate total
+    # Calculate total (only for valid entries that made it to report_data)
     total = sum(entry['amount'] for entry in report_data)
+    
+    # Generate text report format (like in FOM deposit reports.md)
+    text_report_lines = [
+        f"**Deposit Report: {current_date}**",
+        f"Below is a list of deposits totaling ${total:.2f}:",
+        ""  # Blank line
+    ]
+    
+    for entry in report_data:
+        # Format each donation in the text format from the example
+        text_report_lines.extend([
+            f"{entry['index']}. {entry['donor_name']}",
+            f"   {entry['address_line_1']}" if entry['address_line_1'] else "",
+            f"   {entry['address_line_2']}" if entry['address_line_2'] else "",
+            f"   ${entry['amount']:.2f} on {entry['date']}",
+            f"   Check No. {entry['check_no']}",
+            f"   Memo: {entry['memo']}" if entry['memo'] else "",
+            ""  # Blank line between entries
+        ])
+    
+    # Add total to the text report
+    text_report_lines.append(f"Total Deposits: ${total:.2f}")
+    
+    # Remove any empty lines (like if address_line_1 was empty)
+    text_report_lines = [line for line in text_report_lines if line]
+    
+    # Join the text report lines
+    text_report = "\n".join(text_report_lines)
     
     report = {
         'entries': report_data,
-        'total': total
+        'total': total,
+        'text_report': text_report,
+        'report_date': current_date
     }
     
     return jsonify({
