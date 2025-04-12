@@ -205,62 +205,82 @@ Additional context - extracted text from the PDF:
                     else:
                         print("PDF does not contain extractable text")
                     
-                    # Process all pages of the PDF
-                    print(f"PDF has {len(pdf_doc)} pages - processing all pages")
+                    # Process PDF in batches of pages
+                    print(f"PDF has {len(pdf_doc)} pages - processing in batches")
                     
-                    # Store results from all pages
+                    # Maximum number of pages per batch
+                    BATCH_SIZE = 15
+                    
+                    # Store results from all batches
                     all_results = []
                     
-                    # Process each page of the PDF
-                    for page_num in range(len(pdf_doc)):
-                        page = pdf_doc[page_num]
-                        print(f"Processing page {page_num + 1} of {len(pdf_doc)}")
-                        
-                        # Convert page to image
-                        pix = page.get_pixmap()
-                        img_data = pix.tobytes("png")
-                        
-                        # Load image data
-                        image = Image.open(io.BytesIO(img_data))
-                        
-                        # Update prompt to specify which page is being processed
-                        page_specific_prompt = enhanced_extraction_prompt + f"\n\nThis is page {page_num + 1} of {len(pdf_doc)}."
-                        
-                        # Use multimodal processing with the rendered image
-                        content_parts = [page_specific_prompt, image]
-                        
-                        # Call Gemini API for this page
-                        page_response = model.generate_content(
-                            contents=content_parts,
-                            generation_config=genai.GenerationConfig(
-                                temperature=0.2
-                            )
-                        )
-                        
-                        # Extract response for this page
-                        if page_response.text:
-                            print(f"Extracted data from page {page_num + 1}")
-                            try:
-                                # Try to parse the JSON response
-                                page_json = self._extract_json_from_text(page_response.text)
-                                if page_json:
-                                    # Add to results (could be a single object or array)
-                                    if isinstance(page_json, list):
-                                        all_results.extend(page_json)
-                                    else:
-                                        all_results.append(page_json)
-                            except Exception as e:
-                                print(f"Error processing data from page {page_num + 1}: {str(e)}")
+                    # Calculate number of batches
+                    num_batches = (len(pdf_doc) + BATCH_SIZE - 1) // BATCH_SIZE
                     
-                    # Return combined results from all pages
+                    # Process each batch
+                    for batch_num in range(num_batches):
+                        batch_start = batch_num * BATCH_SIZE
+                        batch_end = min(batch_start + BATCH_SIZE, len(pdf_doc))
+                        
+                        print(f"Processing batch {batch_num + 1} of {num_batches} (pages {batch_start + 1}-{batch_end})")
+                        
+                        # Create content parts starting with the prompt
+                        content_parts = [
+                            enhanced_extraction_prompt + f"\n\nAnalyzing pages {batch_start + 1} through {batch_end} of {len(pdf_doc)}."
+                        ]
+                        
+                        # Convert all pages in this batch to images and add to content
+                        for page_num in range(batch_start, batch_end):
+                            page = pdf_doc[page_num]
+                            
+                            # Convert page to image with good resolution
+                            pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))  # 1.5x zoom for better resolution
+                            img_data = pix.tobytes("png")
+                            
+                            # Load image data
+                            image = Image.open(io.BytesIO(img_data))
+                            
+                            # Add this image to the content parts
+                            content_parts.append(image)
+                        
+                        # Call Gemini API for this batch of pages
+                        try:
+                            print(f"Sending batch of {len(content_parts) - 1} pages to Gemini")
+                            batch_response = model.generate_content(
+                                contents=content_parts,
+                                generation_config=genai.GenerationConfig(
+                                    temperature=0.2
+                                )
+                            )
+                            
+                            # Extract response for this batch
+                            if batch_response.text:
+                                print(f"Received response for batch {batch_num + 1}")
+                                try:
+                                    # Try to parse the JSON response
+                                    batch_json = self._extract_json_from_text(batch_response.text)
+                                    
+                                    if batch_json:
+                                        # Add to results (could be a single object or array)
+                                        if isinstance(batch_json, list):
+                                            all_results.extend(batch_json)
+                                            print(f"Added {len(batch_json)} donations from batch {batch_num + 1}")
+                                        else:
+                                            all_results.append(batch_json)
+                                            print(f"Added 1 donation from batch {batch_num + 1}")
+                                except Exception as e:
+                                    print(f"Error processing data from batch {batch_num + 1}: {str(e)}")
+                        except Exception as e:
+                            print(f"Error processing batch {batch_num + 1}: {str(e)}")
+                    
+                    # Return combined results from all batches
                     if all_results:
                         print(f"Successfully extracted data from {len(all_results)} donation records across {len(pdf_doc)} pages")
                         return all_results
                     
-                    # If we didn't get any results, try processing the first page again
-                    # as a fallback (in case the multi-page approach had issues)
+                    # If we didn't get any results, try processing the first page as a fallback
                     if not all_results:
-                        print("No results from multi-page processing, falling back to single page")
+                        print("No results from batch processing, falling back to single page")
                         page = pdf_doc[0]
                         pix = page.get_pixmap()
                         img_data = pix.tobytes("png")
