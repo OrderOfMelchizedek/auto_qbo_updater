@@ -1,0 +1,103 @@
+/* Main styles */
+body {
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Upload area styles */
+.upload-area {
+    border: 2px dashed #ccc;
+    border-radius: 10px;
+    padding: 3rem;
+    text-align: center;
+    cursor: pointer;
+    background-color: #f9f9f9;
+    transition: all 0.3s ease;
+}
+
+.upload-area:hover, .upload-area.dragover {
+    border-color: #4CAF50;
+    background-color: #f0f9f0;
+}
+
+/* Table cell styles */
+.editable-cell {
+    cursor: pointer;
+    position: relative;
+}
+
+.editable-cell:hover::after {
+    content: "✏️";
+    position: absolute;
+    right: 5px;
+    font-size: 12px;
+    opacity: 0.5;
+}
+
+/* Status indicators */
+.status-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+.status-pending {
+    background-color: #ffc107;
+}
+
+.status-sent {
+    background-color: #28a745;
+}
+
+.status-error {
+    background-color: #dc3545;
+}
+
+.status-new {
+    background-color: #17a2b8;
+}
+
+.status-matched {
+    background-color: #28a745;
+}
+
+.status-mismatch {
+    background-color: #ffc107;
+}
+
+/* Source indicators */
+.source-llm {
+    color: #6f42c1;
+}
+
+.source-csv {
+    color: #fd7e14;
+}
+
+/* Report styles */
+.report-header {
+    margin-bottom: 1.5rem;
+}
+
+.report-item {
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #eee;
+}
+
+.report-total {
+    font-weight: bold;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 2px solid #333;
+}
+
+/* Toast notification */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050;
+}
