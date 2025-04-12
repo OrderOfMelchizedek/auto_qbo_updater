@@ -798,6 +798,19 @@ function uploadAndProcessFiles(files) {
                         showToast('All donations were invalid and skipped. Check console for details.', 'warning');
                     }
                     
+                    // Check QuickBooks authentication status
+                    if (data.qboAuthenticated === false) {
+                        console.warn("QuickBooks authentication warning: Not connected to QBO");
+                        showToast('QuickBooks is not connected. Connect to QuickBooks for automatic customer matching.', 'warning');
+                        
+                        // Highlight the Connect to QBO button
+                        const qboBtn = document.getElementById('connectQBOBtn');
+                        if (qboBtn) {
+                            qboBtn.classList.add('btn-warning');
+                            qboBtn.classList.remove('btn-primary');
+                        }
+                    }
+                    
                     // Show warnings if any
                     if (data.warnings && data.warnings.length > 0) {
                         console.warn("Processing warnings:", data.warnings);
@@ -835,11 +848,44 @@ function uploadAndProcessFiles(files) {
         });
 }
 
+// Check QBO authentication status and update UI
+function checkQBOAuthStatus() {
+    fetch('/qbo/auth-status')
+        .then(response => response.json())
+        .then(data => {
+            const qboBtn = document.getElementById('connectQBOBtn');
+            
+            if (data.authenticated) {
+                // QBO is connected
+                if (qboBtn) {
+                    qboBtn.classList.remove('btn-warning');
+                    qboBtn.classList.add('btn-primary');
+                    qboBtn.innerHTML = '<i class="fas fa-check me-1"></i>Connected to QBO';
+                }
+                console.log("QBO authentication is active");
+            } else {
+                // QBO is not connected
+                if (qboBtn) {
+                    qboBtn.classList.remove('btn-primary');
+                    qboBtn.classList.add('btn-warning');
+                    qboBtn.innerHTML = '<i class="fas fa-link me-1"></i>Connect to QBO';
+                }
+                console.warn("Not authenticated with QBO");
+            }
+        })
+        .catch(error => {
+            console.error('Error checking QBO auth status:', error);
+        });
+}
+
 // Document ready
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize Bootstrap modals
     reportModal = new bootstrap.Modal(document.getElementById('reportModal'));
     customerModal = new bootstrap.Modal(document.getElementById('customerModal'));
+    
+    // Check QBO authentication status
+    checkQBOAuthStatus();
     
     // Set up file upload area
     const uploadArea = document.getElementById('uploadArea');

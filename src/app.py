@@ -1,9 +1,11 @@
 import os
 import json
+import requests
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from werkzeug.utils import secure_filename
 import pandas as pd
 from dotenv import load_dotenv
+from urllib.parse import quote
 
 from utils.gemini_service import GeminiService
 from utils.qbo_service import QBOService
@@ -28,18 +30,33 @@ qbo_service = QBOService(
     redirect_uri=os.getenv('QBO_REDIRECT_URI'),
     environment=os.getenv('QBO_ENVIRONMENT')
 )
-file_processor = FileProcessor(gemini_service)
+# Pass both services to the file processor for integrated customer matching
+file_processor = FileProcessor(gemini_service, qbo_service)
 
 # Routes
 @app.route('/')
 def index():
     """Render the main application page."""
     return render_template('index.html')
+    
+@app.route('/qbo/auth-status')
+def qbo_auth_status():
+    """Check QBO authentication status."""
+    authenticated = qbo_service.access_token is not None and qbo_service.realm_id is not None
+    return jsonify({
+        'authenticated': authenticated,
+        'tokenExpiry': qbo_service.token_expires_at if authenticated else None
+    })
 
 @app.route('/upload', methods=['POST'])
 def upload_files():
     """Handle file uploads (images, PDFs, CSV)."""
     try:
+        # Check if QBO is authenticated for customer matching
+        qbo_authenticated = qbo_service.access_token is not None and qbo_service.realm_id is not None
+        if not qbo_authenticated:
+            print("Warning: QBO is not authenticated - customer matching will be skipped")
+            
         # Check if request has the files part
         if 'files' not in request.files:
             print("No files part in the request")
@@ -68,6 +85,11 @@ def upload_files():
         # Placeholder for extracted donation data
         donations = []
         errors = []
+        warnings = []
+        
+        # If QBO is not authenticated, add a warning
+        if not qbo_authenticated:
+            warnings.append("QuickBooks is not connected. Customer matching will be skipped. Please connect to QuickBooks to enable automatic customer matching.")
         
         for file in files:
             if file.filename == '':
@@ -130,12 +152,18 @@ def upload_files():
             return jsonify({
                 'success': True,
                 'donations': donations,
-                'warnings': errors if errors else None
+                'warnings': (errors + warnings) if (errors or warnings) else None,
+                'qboAuthenticated': qbo_authenticated
             })
         else:
+            message = 'No donation data could be extracted. ' + (', '.join(errors) if errors else '')
+            if warnings:
+                message += ' ' + (', '.join(warnings))
+                
             return jsonify({
                 'success': False,
-                'message': 'No donation data could be extracted. ' + (', '.join(errors) if errors else '')
+                'message': message,
+                'qboAuthenticated': qbo_authenticated
             }), 400
     
     except Exception as e:
@@ -202,6 +230,15 @@ def remove_invalid_donations():
         'removedCount': removed_count
     })
 
+@app.route('/qbo/status')
+def qbo_status():
+    """Check if QBO is authenticated."""
+    return jsonify({
+        'authenticated': qbo_service.access_token is not None and qbo_service.realm_id is not None,
+        'realmId': qbo_service.realm_id,
+        'tokenExpiry': qbo_service.token_expires_at if hasattr(qbo_service, 'token_expires_at') else None
+    })
+
 @app.route('/qbo/authorize')
 def authorize_qbo():
     """Start QBO OAuth flow."""
@@ -216,9 +253,23 @@ def qbo_callback():
     
     if code and realmId:
         qbo_service.get_tokens(code, realmId)
-        flash('Successfully connected to QuickBooks Online', 'success')
+        
+        # Pre-fetch customers for future matching to populate cache
+        try:
+            customers = qbo_service.get_all_customers()
+            customer_count = len(customers)
+            print(f"Pre-fetched {customer_count} customers for future matching")
+            
+            # Store success message including customer count
+            flash(f'Successfully connected to QuickBooks Online. Retrieved {customer_count} customers.', 'success')
+        except Exception as e:
+            print(f"Error pre-fetching customers: {str(e)}")
+            flash('Connected to QuickBooks Online, but had trouble retrieving customers.', 'warning')
     else:
-        flash('Failed to connect to QuickBooks Online', 'error')
+        flash('Failed to connect to QuickBooks Online. Please try again.', 'error')
+    
+    # Add a script to update the UI
+    session['qbo_connected'] = True
     
     return redirect(url_for('index'))
 
@@ -634,6 +685,106 @@ def save_changes():
         return jsonify({'success': True})
     
     return jsonify({'success': False, 'message': 'No donation data provided'}), 400
+
+@app.route('/test/qbo/customers', methods=['GET'])
+def test_qbo_customers():
+    """Test route to verify QuickBooks customer retrieval."""
+    try:
+        print("Starting QBO customer retrieval test...")
+        # First check if we're authenticated
+        if not qbo_service.access_token or not qbo_service.realm_id:
+            print("Not authenticated with QBO")
+            return jsonify({
+                'success': False,
+                'message': 'Not authenticated with QuickBooks. Please connect to QBO first.',
+                'authenticated': False
+            })
+        
+        # Try to get a customer count first (lightweight operation)
+        query = "SELECT COUNT(*) FROM Customer"
+        encoded_query = quote(query)
+        url = f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
+        response = requests.get(url, headers=qbo_service._get_auth_headers())
+        
+        customer_count = 0
+        if response.status_code == 200:
+            data = response.json()
+            if 'QueryResponse' in data and 'totalCount' in data['QueryResponse']:
+                customer_count = data['QueryResponse']['totalCount']
+                print(f"Found {customer_count} customers in QuickBooks")
+        
+        # Try to get at most 10 customers for the test
+        customers = []
+        query = "SELECT * FROM Customer MAXRESULTS 10"
+        encoded_query = quote(query)
+        url = f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
+        response = requests.get(url, headers=qbo_service._get_auth_headers())
+        
+        if response.status_code == 200:
+            data = response.json()
+            customers = data['QueryResponse'].get('Customer', [])
+            print(f"Retrieved {len(customers)} sample customers")
+        
+        # Now test the get_all_customers method
+        print("Testing get_all_customers method...")
+        all_customers = qbo_service.get_all_customers()
+        
+        return jsonify({
+            'success': True,
+            'authenticated': True,
+            'customerCount': customer_count,
+            'sampleCustomersCount': len(customers),
+            'sampleCustomers': [c.get('DisplayName') for c in customers[:10]],
+            'allCustomersCount': len(all_customers),
+            'message': f"Successfully retrieved {len(all_customers)} customers out of {customer_count} total"
+        })
+        
+    except Exception as e:
+        print(f"Error in test_qbo_customers: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f"Error testing QBO customers: {str(e)}",
+            'error': str(e)
+        }), 500
+
+@app.route('/test/match', methods=['POST'])
+def test_customer_matching():
+    """Test route to check customer matching for a sample donation."""
+    try:
+        if not request.json:
+            return jsonify({'success': False, 'message': 'No donation data provided'}), 400
+            
+        donation_data = request.json
+        
+        # Get all customers
+        customers = qbo_service.get_all_customers()
+        if not customers:
+            return jsonify({
+                'success': False,
+                'message': 'No QuickBooks customers available'
+            }), 400
+            
+        # Perform the matching using Gemini
+        match_result = gemini_service.match_donation_with_customers(donation_data, customers)
+        
+        # Return the matching result
+        return jsonify({
+            'success': True,
+            'matchResult': match_result,
+            'message': 'Matching completed'
+        })
+        
+    except Exception as e:
+        print(f"Error in test_customer_matching: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f"Error testing customer matching: {str(e)}",
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
