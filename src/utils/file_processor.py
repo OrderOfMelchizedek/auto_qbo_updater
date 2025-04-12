@@ -230,26 +230,49 @@ Here is the raw CSV content:
 
 {csv_content}
 
-Please extract all donation records from this CSV file. Each donation should include the following fields:
-- customerLookup (from name or organization)
-- Salutation (Mr./Mrs./Ms./Members of/etc. based on context)
-- Donor Name (full name of the donor)
-- Check No. (always "N/A" for online donations)
-- Gift Amount (donation amount)
-- Gift Date (date of donation)
-- Deposit Date (Today's date)
-- Deposit Method (always "Online Donation")
-- Memo (additional notes, or "Online Donation" if no other info)
-- First Name (first name or names of donor)
-- Last Name (last name of donor)
-- Full Name (combination of first and last name)
-- Organization Name (if donation is from an organization)
-- Address - Line 1 (street address)
-- City (city name)
-- State (state or province)
-- ZIP (ZIP or postal code)
+Please extract all donation records from this CSV file. 
+VERY IMPORTANT: Return ONLY a valid JSON array containing objects with these fields, with NO additional text before or after:
 
-Return the extracted data in structured JSON format, with each donation as an item in an array.
+[
+  {{
+    "customerLookup": "string or null",
+    "Salutation": "string or null",
+    "Donor Name": "string (REQUIRED)",
+    "Check No.": "N/A",
+    "Gift Amount": "string (REQUIRED)",
+    "Check Date": "string or null",
+    "Gift Date": "string (REQUIRED)",
+    "Deposit Date": "today's date",
+    "Deposit Method": "Online Donation", 
+    "Memo": "string or null",
+    "First Name": "string (REQUIRED)",
+    "Last Name": "string (REQUIRED)",
+    "Full Name": "string or null",
+    "Organization Name": "string or null",
+    "Address - Line 1": "string (REQUIRED)",
+    "City": "string (REQUIRED)",
+    "State": "string (REQUIRED)",
+    "ZIP": "string (REQUIRED)"
+  }}
+]
+
+For Online Donations:
+- Check No. should always be "N/A"
+- Deposit Method should always be "Online Donation"
+- Deposit Date should be today's date
+
+These fields are REQUIRED and MUST have a value (not null):
+- Donor Name
+- Gift Amount
+- Gift Date
+- First Name
+- Last Name
+- Address - Line 1
+- City
+- State
+- ZIP
+
+Return ONLY the JSON array with no additional text. Ensure it is valid JSON that can be parsed directly.
 """
             
             # Send CSV text to Gemini for processing

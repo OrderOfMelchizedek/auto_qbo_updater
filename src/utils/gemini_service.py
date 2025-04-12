@@ -13,9 +13,46 @@ class GeminiService:
         """Initialize the Gemini service with API key."""
         self.api_key = api_key
         genai.configure(api_key=api_key)
+        
+    def _extract_json_from_text(self, text: str) -> Any:
+        """Extract JSON from text, handling various response formats.
+        
+        Args:
+            text: Text that may contain JSON
+            
+        Returns:
+            Parsed JSON data (object or array) or None if extraction failed
+        """
+        # First try to directly parse the text as JSON
+        try:
+            parsed_json = json.loads(text)
+            print("Successfully parsed complete JSON response")
+            return parsed_json
+        except json.JSONDecodeError:
+            # If that fails, try to extract JSON from the text
+            try:
+                # Check for array format
+                if '[' in text and ']' in text:
+                    json_start = text.find('[')
+                    json_end = text.rfind(']') + 1
+                # Check for object format
+                elif '{' in text and '}' in text:
+                    json_start = text.find('{')
+                    json_end = text.rfind('}') + 1
+                else:
+                    raise ValueError("No JSON markers found in response")
+                    
+                json_str = text[json_start:json_end]
+                parsed_json = json.loads(json_str)
+                print(f"Extracted JSON from text (length: {len(json_str)})")
+                return parsed_json
+                
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"Error extracting JSON from text: {str(e)}")
+                return None
     
     def extract_text_data(self, prompt_text: str) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
-        """Extract structured data from text using Gemini.
+        """Extract structured data from text using Gemini with schema.
         
         Args:
             prompt_text: The prompt text to send to Gemini
@@ -39,44 +76,18 @@ class GeminiService:
             # Extract response text
             text_response = response.text
             
-            # Check for JSON in the response
             if text_response:
                 print(f"Response text: {text_response}")
                 
-                # First try to directly parse the text as JSON
-                try:
-                    parsed_json = json.loads(text_response)
-                    print("Successfully parsed complete JSON response")
-                    
-                    # Return the full array of data (or single object)
+                # Use the helper method to extract JSON
+                parsed_json = self._extract_json_from_text(text_response)
+                if parsed_json:
+                    # Return the data (array or single object)
                     if isinstance(parsed_json, list):
                         print(f"Found array of {len(parsed_json)} items, returning all items")
-                    return parsed_json
-                    
-                except json.JSONDecodeError:
-                    # If that fails, try to extract JSON from the text
-                    try:
-                        # Check for array format
-                        if '[' in text_response and ']' in text_response:
-                            json_start = text_response.find('[')
-                            json_end = text_response.rfind(']') + 1
-                        # Check for object format
-                        elif '{' in text_response and '}' in text_response:
-                            json_start = text_response.find('{')
-                            json_end = text_response.rfind('}') + 1
-                        else:
-                            raise ValueError("No JSON markers found in response")
-                            
-                        json_str = text_response[json_start:json_end]
-                        parsed_json = json.loads(json_str)
-                        
-                        # Return the full array of data (or single object)
-                        if isinstance(parsed_json, list):
-                            print(f"Found array of {len(parsed_json)} items, returning all items")
                         return parsed_json
-                        
-                    except (json.JSONDecodeError, ValueError) as e:
-                        print(f"Error extracting JSON from response: {str(e)}")
+                    else:
+                        return [parsed_json]  # Wrap single object in list for consistency
             
             print("Failed to extract data from Gemini response")
             return None
@@ -111,27 +122,44 @@ class GeminiService:
                 extraction_prompt = f"""
 {prompt_template}
 
-Please extract the donation information from the document and return it in JSON format with the following fields:
-- customerLookup
-- Salutation
-- Donor Name 
-- Check No.
+Please extract the donation information from the document and return it in STRICT JSON format.
+VERY IMPORTANT: Your response MUST include ONLY valid JSON with NO additional text.
+
+The JSON must include ALL of these fields, even if the value is null:
+{{
+  "customerLookup": "string or null",
+  "Salutation": "string or null",
+  "Donor Name": "string (REQUIRED)",
+  "Check No.": "string or null",
+  "Gift Amount": "string (REQUIRED)",
+  "Check Date": "string or null",
+  "Gift Date": "string (REQUIRED)",
+  "Deposit Date": "string or null",
+  "Deposit Method": "string or null",
+  "Memo": "string or null",
+  "First Name": "string (REQUIRED)",
+  "Last Name": "string (REQUIRED)",
+  "Full Name": "string or null",
+  "Organization Name": "string or null",
+  "Address - Line 1": "string (REQUIRED)",
+  "City": "string (REQUIRED)",
+  "State": "string (REQUIRED)",
+  "ZIP": "string (REQUIRED)"
+}}
+
+These fields are REQUIRED and MUST have a value (not null):
+- Donor Name
 - Gift Amount
-- Check Date
 - Gift Date
-- Deposit Date
-- Deposit Method
-- Memo
 - First Name
 - Last Name
-- Full Name
-- Organization Name
 - Address - Line 1
 - City
 - State
 - ZIP
 
-Format your response as valid JSON only.
+Please examine the document thoroughly to find all required information.
+IMPORTANT: Return ONLY the JSON object, with no additional text before or after.
 """
             
             # Set up model
@@ -177,17 +205,67 @@ Additional context - extracted text from the PDF:
                     else:
                         print("PDF does not contain extractable text")
                     
-                    # If it's a multi-page PDF, process the first page only for now
-                    # (you can extend this to handle multiple pages if needed)
-                    page = pdf_doc[0]
-                    pix = page.get_pixmap()
-                    img_data = pix.tobytes("png")
+                    # Process all pages of the PDF
+                    print(f"PDF has {len(pdf_doc)} pages - processing all pages")
                     
-                    # Load image data
-                    image = Image.open(io.BytesIO(img_data))
+                    # Store results from all pages
+                    all_results = []
                     
-                    # Use multimodal processing with the rendered image
-                    content_parts = [enhanced_extraction_prompt, image]
+                    # Process each page of the PDF
+                    for page_num in range(len(pdf_doc)):
+                        page = pdf_doc[page_num]
+                        print(f"Processing page {page_num + 1} of {len(pdf_doc)}")
+                        
+                        # Convert page to image
+                        pix = page.get_pixmap()
+                        img_data = pix.tobytes("png")
+                        
+                        # Load image data
+                        image = Image.open(io.BytesIO(img_data))
+                        
+                        # Update prompt to specify which page is being processed
+                        page_specific_prompt = enhanced_extraction_prompt + f"\n\nThis is page {page_num + 1} of {len(pdf_doc)}."
+                        
+                        # Use multimodal processing with the rendered image
+                        content_parts = [page_specific_prompt, image]
+                        
+                        # Call Gemini API for this page
+                        page_response = model.generate_content(
+                            contents=content_parts,
+                            generation_config=genai.GenerationConfig(
+                                temperature=0.2
+                            )
+                        )
+                        
+                        # Extract response for this page
+                        if page_response.text:
+                            print(f"Extracted data from page {page_num + 1}")
+                            try:
+                                # Try to parse the JSON response
+                                page_json = self._extract_json_from_text(page_response.text)
+                                if page_json:
+                                    # Add to results (could be a single object or array)
+                                    if isinstance(page_json, list):
+                                        all_results.extend(page_json)
+                                    else:
+                                        all_results.append(page_json)
+                            except Exception as e:
+                                print(f"Error processing data from page {page_num + 1}: {str(e)}")
+                    
+                    # Return combined results from all pages
+                    if all_results:
+                        print(f"Successfully extracted data from {len(all_results)} donation records across {len(pdf_doc)} pages")
+                        return all_results
+                    
+                    # If we didn't get any results, try processing the first page again
+                    # as a fallback (in case the multi-page approach had issues)
+                    if not all_results:
+                        print("No results from multi-page processing, falling back to single page")
+                        page = pdf_doc[0]
+                        pix = page.get_pixmap()
+                        img_data = pix.tobytes("png")
+                        image = Image.open(io.BytesIO(img_data))
+                        content_parts = [enhanced_extraction_prompt, image]
                     
                 except Exception as e:
                     print(f"Error processing PDF visually: {str(e)}")
@@ -220,6 +298,12 @@ Based on this text, please extract the donation information and return it in the
             
             # Call Gemini API with content
             print(f"Processing {file_ext} file with Gemini: {file_path}")
+            
+            # For Gemini API 0.5.4, we need to explicitly request JSON in the prompt
+            # Update the prompt to strongly emphasize structured JSON output
+            if isinstance(content_parts[0], str):
+                content_parts[0] += "\n\nVery important: Your response must be VALID JSON only. No explanation text or Markdown formatting."
+                
             response = model.generate_content(
                 contents=content_parts,
                 generation_config=genai.GenerationConfig(
@@ -230,46 +314,20 @@ Based on this text, please extract the donation information and return it in the
             # Extract response text
             text_response = response.text
             
-            # Check for JSON in the response
-            # Look for either array '[' or object '{' as valid JSON start characters
             if text_response:
                 # For clarity in logs
                 print(f"Response text: {text_response}")
                 
-                # First try to directly parse the text as JSON
-                try:
-                    parsed_json = json.loads(text_response)
-                    print("Successfully parsed complete JSON response")
-                    
-                    # Return the full array of donations (or single object)
+                # Use the helper method to extract JSON
+                parsed_json = self._extract_json_from_text(text_response)
+                if parsed_json:
+                    # Structure the output consistently - always return a list
                     if isinstance(parsed_json, list):
                         print(f"Found array of {len(parsed_json)} donations, returning all items")
-                    return parsed_json
-                    
-                except json.JSONDecodeError:
-                    # If that fails, try to extract JSON from the text
-                    try:
-                        # Check for array format
-                        if '[' in text_response and ']' in text_response:
-                            json_start = text_response.find('[')
-                            json_end = text_response.rfind(']') + 1
-                        # Check for object format
-                        elif '{' in text_response and '}' in text_response:
-                            json_start = text_response.find('{')
-                            json_end = text_response.rfind('}') + 1
-                        else:
-                            raise ValueError("No JSON markers found in response")
-                            
-                        json_str = text_response[json_start:json_end]
-                        parsed_json = json.loads(json_str)
-                        
-                        # Return the full array of donations (or single object)
-                        if isinstance(parsed_json, list):
-                            print(f"Found array of {len(parsed_json)} donations, returning all items")
                         return parsed_json
-                        
-                    except (json.JSONDecodeError, ValueError) as e:
-                        print(f"Error extracting JSON from response: {str(e)}")
+                    else:
+                        # Wrap single donation in a list for consistency
+                        return [parsed_json]
             
             print("Failed to extract donation data from Gemini response")
             return None
