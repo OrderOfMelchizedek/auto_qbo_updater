@@ -11,10 +11,17 @@ from utils.prompt_manager import PromptManager
 class FileProcessor:
     """Service for processing different file types (images, PDFs) for donation extraction."""
     
-    def __init__(self, gemini_service: GeminiService):
-        """Initialize the file processor with a Gemini service."""
+    def __init__(self, gemini_service: GeminiService, qbo_service=None):
+        """Initialize the file processor with Gemini and QBO services.
+        
+        Args:
+            gemini_service: Service for AI-based extraction and matching
+            qbo_service: Optional QuickBooks Online service for customer lookups
+        """
         self.gemini_service = gemini_service
+        self.qbo_service = qbo_service
         self.prompt_manager = PromptManager(prompt_dir='prompts')
+        self.qbo_customers = None  # Will be lazily loaded when needed
     
     def process(self, file_path: str, file_ext: str) -> Any:
         """Process a file to extract donation information.
@@ -126,12 +133,17 @@ class FileProcessor:
                         
                 # Add the donation to complete list (even if some fields still missing)
                 complete_donations.append(donation)
+        
+        # Match donations with QuickBooks customers if QBO service is available
+        if self.qbo_service:
+            print("Performing QBO customer matching for all donations...")
+            complete_donations = self.match_donations_with_qbo_customers(complete_donations)
                         
         # Return in the same format as the original data
         if isinstance(donation_data, list):
             return complete_donations
         elif complete_donations:
-            return complete_donations[0]
+            return complete_donations[0] if isinstance(complete_donations, list) else complete_donations
         else:
             return None
     
@@ -229,8 +241,97 @@ class FileProcessor:
             
             # Send CSV text to Gemini for processing
             donation_data = self.gemini_service.extract_text_data(csv_prompt)
+            
+            # Match each donation with QuickBooks customers
+            if donation_data and self.qbo_service:
+                donation_data = self.match_donations_with_qbo_customers(donation_data)
+                
             return donation_data
             
         except Exception as e:
             print(f"Error processing CSV {csv_path}: {str(e)}")
             return None
+            
+    def get_qbo_customers(self):
+        """Lazily load all QBO customers when needed.
+        
+        Returns:
+            List of QuickBooks customer records
+        """
+        if self.qbo_customers is None and self.qbo_service:
+            print("Fetching QuickBooks customer list for the first time...")
+            self.qbo_customers = self.qbo_service.get_all_customers()
+            print(f"Retrieved {len(self.qbo_customers)} QuickBooks customers")
+        return self.qbo_customers or []
+        
+    def match_donations_with_qbo_customers(self, donations):
+        """Match extracted donations with QuickBooks customers.
+        
+        Args:
+            donations: List of donation dictionaries or single donation dictionary
+            
+        Returns:
+            Enhanced donations with customer matching information
+        """
+        if not self.qbo_service:
+            print("QBO service not available - customer matching skipped")
+            return donations
+            
+        # Make sure we have the customer list loaded
+        customers = self.get_qbo_customers()
+        if not customers:
+            print("No QuickBooks customers available - customer matching skipped")
+            return donations
+            
+        print(f"Matching {len(donations) if isinstance(donations, list) else 1} donation(s) with {len(customers)} QuickBooks customers")
+        
+        # Handle both single donation and list of donations
+        is_single = not isinstance(donations, list)
+        donations_list = [donations] if is_single else donations
+        matched_donations = []
+        
+        for donation in donations_list:
+            # Skip if the donation doesn't have the minimum required fields for matching
+            if not donation.get('Donor Name'):
+                print("Donation missing donor name - skipping customer matching")
+                matched_donations.append(donation)
+                continue
+                
+            try:
+                # Use Gemini to match the donation with QBO customers
+                match_result = self.gemini_service.match_donation_with_customers(donation, customers)
+                
+                # Enhance the donation with matching information
+                enhanced_donation = match_result.get('updatedDonation', donation)
+                
+                # Add QBO-specific fields
+                if match_result.get('matched', False):
+                    # Set fields related to customer matching
+                    customer_match = match_result.get('customerMatch', {})
+                    enhanced_donation['customerLookup'] = customer_match.get('DisplayName', '')
+                    enhanced_donation['qboCustomerId'] = match_result.get('customerMatchId')
+                    
+                    # Set QBO status
+                    if match_result.get('addressChanged', False):
+                        enhanced_donation['qbCustomerStatus'] = 'Matched-AddressMismatch'
+                    else:
+                        enhanced_donation['qbCustomerStatus'] = 'Matched'
+                else:
+                    # No match found
+                    enhanced_donation['qbCustomerStatus'] = 'New'
+                    
+                # Add confidence level and notes
+                enhanced_donation['matchConfidence'] = match_result.get('matchConfidence', 0)
+                enhanced_donation['matchingNotes'] = match_result.get('matchingNotes', '')
+                enhanced_donation['needsReview'] = match_result.get('needsReview', False)
+                
+                # Add the enhanced donation to the result list
+                matched_donations.append(enhanced_donation)
+                
+            except Exception as e:
+                print(f"Error matching donation: {str(e)}")
+                # If matching fails, keep the original donation
+                matched_donations.append(donation)
+                
+        # Return in the same format as input
+        return matched_donations[0] if is_single else matched_donations

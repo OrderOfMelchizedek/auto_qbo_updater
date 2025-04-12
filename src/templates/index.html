@@ -177,6 +177,60 @@
             </div>
         </div>
         
+        <!-- QuickBooks Connection Modal -->
+        <div class="modal fade" id="qboConnectionModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">Connect to QuickBooks Online</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="text-center mb-4">
+                            <i class="fas fa-link fa-3x text-primary mb-3"></i>
+                            <h4>Enhance Your Donation Processing</h4>
+                        </div>
+                        
+                        <p>Connecting to QuickBooks Online enables these powerful features:</p>
+                        
+                        <ul class="list-group mb-4">
+                            <li class="list-group-item d-flex">
+                                <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                <div>
+                                    <strong>Automatic Donor Matching</strong>
+                                    <div class="text-muted small">Instantly match donations to existing QBO customers</div>
+                                </div>
+                            </li>
+                            <li class="list-group-item d-flex">
+                                <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                <div>
+                                    <strong>Smart Address Detection</strong>
+                                    <div class="text-muted small">Identify donor address changes automatically</div>
+                                </div>
+                            </li>
+                            <li class="list-group-item d-flex">
+                                <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                <div>
+                                    <strong>One-Click Sales Receipts</strong>
+                                    <div class="text-muted small">Create QuickBooks sales receipts with a single click</div>
+                                </div>
+                            </li>
+                        </ul>
+                        
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Without QBO connection, you'll need to manually match donors and create receipts.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="skipQboConnectionBtn">Process Without QBO</button>
+                        <button type="button" class="btn btn-primary" id="proceedToQboAuthBtn">
+                            <i class="fas fa-link me-1"></i>Connect to QuickBooks
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Bootstrap & jQuery JS -->

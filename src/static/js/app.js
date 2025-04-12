@@ -883,6 +883,21 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize Bootstrap modals
     reportModal = new bootstrap.Modal(document.getElementById('reportModal'));
     customerModal = new bootstrap.Modal(document.getElementById('customerModal'));
+    qboConnectionModal = new bootstrap.Modal(document.getElementById('qboConnectionModal'));
+    
+    // Set up QBO connection modal buttons
+    document.getElementById('proceedToQboAuthBtn').addEventListener('click', function() {
+        window.location.href = '/qbo/authorize';
+    });
+    
+    document.getElementById('skipQboConnectionBtn').addEventListener('click', function() {
+        // If we have pending files, process them
+        if (window.pendingFiles && window.pendingFiles.length > 0) {
+            showToast("Processing without QuickBooks connection. Customer matching will be unavailable.", "warning");
+            uploadAndProcessFiles(window.pendingFiles);
+            window.pendingFiles = null; // Clear pending files
+        }
+    });
     
     // Check QBO authentication status
     checkQBOAuthStatus();
@@ -963,7 +978,26 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const files = fileInput.files;
         if (files.length > 0) {
-            uploadAndProcessFiles(files);
+            // First check if QBO is connected
+            fetch('/qbo/auth-status')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.authenticated) {
+                        // Store the files in a global variable for later processing
+                        window.pendingFiles = files;
+                        
+                        // Show QBO connection modal
+                        qboConnectionModal.show();
+                        return;
+                    }
+                    // If QBO is already connected, proceed with file processing
+                    uploadAndProcessFiles(files);
+                })
+                .catch(error => {
+                    console.error("Error checking QBO auth status:", error);
+                    // Proceed with file processing if there's an error checking auth
+                    uploadAndProcessFiles(files);
+                });
         } else {
             showToast('Please select files to upload', 'warning');
         }

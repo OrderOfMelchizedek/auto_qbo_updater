@@ -276,3 +276,94 @@ class QBOService:
         except Exception as e:
             print(f"Exception in create_sales_receipt: {str(e)}")
             return None
+            
+    def get_all_customers(self) -> List[Dict[str, Any]]:
+        """Fetch the complete list of customers from QBO.
+        
+        Returns:
+            List of all customer data dictionaries
+        """
+        if not self.access_token or not self.realm_id:
+            print("Not authenticated with QBO - Missing access_token or realm_id")
+            print(f"access_token exists: {self.access_token is not None}")
+            print(f"realm_id exists: {self.realm_id is not None}")
+            return []
+        
+        try:
+            print("==== STARTING CUSTOMER RETRIEVAL FROM QUICKBOOKS ====")
+            print(f"Using realm_id: {self.realm_id}")
+            print(f"API Base URL: {self.api_base}")
+            
+            customers = []
+            start_position = 1
+            max_results = 1000  # QBO API limit per query
+            batch_count = 0
+            
+            while True:
+                batch_count += 1
+                # Query for a batch of customers
+                query = f"SELECT * FROM Customer STARTPOSITION {start_position} MAXRESULTS {max_results}"
+                encoded_query = quote(query)
+                url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+                
+                print(f"Batch {batch_count}: Requesting customers at position {start_position}")
+                print(f"Request URL: {url}")
+                
+                # Print auth headers (but mask token for security)
+                headers = self._get_auth_headers()
+                auth_value = headers.get('Authorization', '')
+                if auth_value:
+                    masked_token = auth_value[:15] + "..." + auth_value[-5:]
+                    print(f"Authorization header: {masked_token}")
+                
+                response = requests.get(url, headers=headers)
+                
+                print(f"Response status: {response.status_code}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    batch = data['QueryResponse'].get('Customer', [])
+                    
+                    # If no more customers, break the loop
+                    if not batch:
+                        print(f"Batch {batch_count}: No more customers found")
+                        break
+                    
+                    # Print first customer info for debugging
+                    if batch and len(batch) > 0:
+                        first_customer = batch[0]
+                        print(f"Sample customer - ID: {first_customer.get('Id')}, Name: {first_customer.get('DisplayName')}")
+                        
+                    # Add this batch to our collection
+                    customers.extend(batch)
+                    print(f"Batch {batch_count}: Retrieved {len(batch)} customers (running total: {len(customers)})")
+                    
+                    # If we got fewer customers than the max, we're done
+                    if len(batch) < max_results:
+                        print(f"Batch {batch_count}: Less than max results, finished retrieving")
+                        break
+                        
+                    # Otherwise, update the start position for the next batch
+                    start_position += max_results
+                else:
+                    error_text = response.text[:200] + "..." if len(response.text) > 200 else response.text
+                    print(f"Error fetching customers: {response.status_code}")
+                    print(f"Error details: {error_text}")
+                    break
+            
+            print("==== CUSTOMER RETRIEVAL SUMMARY ====")
+            print(f"Successfully retrieved {len(customers)} customers in {batch_count} batches")
+            
+            # Log a few customer names for verification
+            if customers:
+                print("Sample of retrieved customers:")
+                for i, customer in enumerate(customers[:5]):
+                    print(f"  {i+1}. {customer.get('DisplayName', 'Unknown')}")
+                print("  ...")
+                
+            return customers
+        except Exception as e:
+            print(f"Exception in get_all_customers: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
