@@ -4,7 +4,7 @@ import io
 import base64
 from PIL import Image
 import google.generativeai as genai
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Union
 
 class GeminiService:
     """Service for interacting with Google's Gemini 2.5 Pro Preview API."""
@@ -14,11 +14,11 @@ class GeminiService:
         self.api_key = api_key
         genai.configure(api_key=api_key)
     
-    def extract_donation_data(self, image_path: str) -> Optional[Dict[str, Any]]:
-        """Extract donation data from an image using Gemini.
+    def extract_donation_data(self, file_path: str) -> Optional[Dict[str, Any]]:
+        """Extract donation data from an image or PDF using Gemini.
         
         Args:
-            image_path: Path to the image file
+            file_path: Path to the image or PDF file
             
         Returns:
             Dictionary containing extracted donation data or None if extraction failed
@@ -28,20 +28,14 @@ class GeminiService:
             with open('FOM Deposit Assistant Prompt 2025-04-12.md', 'r') as f:
                 prompt_template = f.read()
             
-            # Load image
-            image = Image.open(image_path)
+            # Determine file type by extension
+            file_ext = os.path.splitext(file_path)[1].lower()
             
-            # Convert image to base64 for API
-            image_buffer = io.BytesIO()
-            image.save(image_buffer, format=image.format or 'JPEG')
-            image_bytes = image_buffer.getvalue()
-            
-            # Create simplified implementation without function calling
-            # Create a direct prompt that asks for structured output
+            # Create extraction prompt that asks for structured output
             extraction_prompt = f"""
 {prompt_template}
 
-Please extract the donation information from the image and return it in JSON format with the following fields:
+Please extract the donation information from the document and return it in JSON format with the following fields:
 - customerLookup
 - Salutation
 - Donor Name 
@@ -67,9 +61,42 @@ Format your response as valid JSON only.
             # Set up model
             model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
             
-            # Call Gemini API with image
+            # Process based on file type
+            if file_ext == '.pdf':
+                # For PDFs, we'll use PyPDF2 to extract text for processing
+                import PyPDF2
+                
+                with open(file_path, 'rb') as f:
+                    pdf_reader = PyPDF2.PdfReader(f)
+                    pdf_text = ""
+                    for page in pdf_reader.pages:
+                        pdf_text += page.extract_text() + "\n\n"
+                
+                # Create a special prompt that includes the PDF text
+                pdf_prompt = f"""
+{extraction_prompt}
+
+Here is the extracted text from the PDF document:
+
+{pdf_text}
+
+Based on this text, please extract the donation information and return it in the requested JSON format.
+"""
+                
+                # Use text-based processing for PDFs
+                content_parts = [pdf_prompt]
+                
+            elif file_ext in ['.jpg', '.jpeg', '.png']:
+                # For images, use PIL to load the image
+                image = Image.open(file_path)
+                content_parts = [extraction_prompt, image]
+            else:
+                raise ValueError(f"Unsupported file type: {file_ext}")
+            
+            # Call Gemini API with content
+            print(f"Processing {file_ext} file with Gemini: {file_path}")
             response = model.generate_content(
-                contents=[extraction_prompt, image],
+                contents=content_parts,
                 generation_config=genai.GenerationConfig(
                     temperature=0.2
                 )
@@ -77,18 +104,49 @@ Format your response as valid JSON only.
             
             # Extract response text
             text_response = response.text
-            if text_response and '{' in text_response and '}' in text_response:
-                # Try to extract JSON from text
-                json_start = text_response.find('{')
-                json_end = text_response.rfind('}') + 1
-                json_str = text_response[json_start:json_end]
+            
+            # Check for JSON in the response
+            # Look for either array '[' or object '{' as valid JSON start characters
+            if text_response:
+                # For clarity in logs
+                print(f"Response text: {text_response}")
+                
+                # First try to directly parse the text as JSON
                 try:
-                    return json.loads(json_str)
+                    parsed_json = json.loads(text_response)
+                    print("Successfully parsed complete JSON response")
+                    
+                    # Return the full array of donations (or single object)
+                    if isinstance(parsed_json, list):
+                        print(f"Found array of {len(parsed_json)} donations, returning all items")
+                    return parsed_json
+                    
                 except json.JSONDecodeError:
-                    print("Error parsing JSON from Gemini response")
+                    # If that fails, try to extract JSON from the text
+                    try:
+                        # Check for array format
+                        if '[' in text_response and ']' in text_response:
+                            json_start = text_response.find('[')
+                            json_end = text_response.rfind(']') + 1
+                        # Check for object format
+                        elif '{' in text_response and '}' in text_response:
+                            json_start = text_response.find('{')
+                            json_end = text_response.rfind('}') + 1
+                        else:
+                            raise ValueError("No JSON markers found in response")
+                            
+                        json_str = text_response[json_start:json_end]
+                        parsed_json = json.loads(json_str)
+                        
+                        # Return the full array of donations (or single object)
+                        if isinstance(parsed_json, list):
+                            print(f"Found array of {len(parsed_json)} donations, returning all items")
+                        return parsed_json
+                        
+                    except (json.JSONDecodeError, ValueError) as e:
+                        print(f"Error extracting JSON from response: {str(e)}")
             
             print("Failed to extract donation data from Gemini response")
-            print(f"Response text: {text_response}")
             return None
         
         except Exception as e:

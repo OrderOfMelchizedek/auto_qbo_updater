@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Union
 import PyPDF2
 from PIL import Image
 import io
@@ -13,7 +13,7 @@ class FileProcessor:
         """Initialize the file processor with a Gemini service."""
         self.gemini_service = gemini_service
     
-    def process(self, file_path: str, file_ext: str) -> Optional[Dict[str, Any]]:
+    def process(self, file_path: str, file_ext: str) -> Any:
         """Process a file to extract donation information.
         
         Args:
@@ -21,7 +21,8 @@ class FileProcessor:
             file_ext: File extension (.jpg, .png, .pdf, etc.)
             
         Returns:
-            Dictionary containing extracted donation data or None if extraction failed
+            Dictionary containing extracted donation data or 
+            List of dictionaries (for PDFs with multiple donations) or None if extraction failed
         """
         if file_ext in ['.jpg', '.jpeg', '.png']:
             return self._process_image(file_path)
@@ -53,30 +54,21 @@ class FileProcessor:
             print(f"Error processing image {image_path}: {str(e)}")
             return None
     
-    def _process_pdf(self, pdf_path: str) -> Optional[Dict[str, Any]]:
+    def _process_pdf(self, pdf_path: str) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
         """Process a PDF file.
         
         Args:
             pdf_path: Path to the PDF file
             
         Returns:
-            Dictionary containing extracted donation data or None if extraction failed
+            Dictionary containing extracted donation data,
+            List of dictionaries (for PDFs with multiple donations),
+            or None if extraction failed
         """
         try:
-            # For simplicity, convert the first page of the PDF to an image
-            # and then process it using Gemini
-            
-            # Extract first page as image
-            with open(pdf_path, 'rb') as pdf_file:
-                pdf_reader = PyPDF2.PdfReader(pdf_file)
-                if len(pdf_reader.pages) > 0:
-                    # Convert PDF page to image (requires additional libraries in production)
-                    # For now, just pass the PDF directly to Gemini
-                    donation_data = self.gemini_service.extract_donation_data(pdf_path)
-                    return donation_data
-                else:
-                    print(f"PDF file {pdf_path} has no pages")
-                    return None
+            # Send PDF directly to Gemini for processing
+            donation_data = self.gemini_service.extract_donation_data(pdf_path)
+            return donation_data
         
         except Exception as e:
             print(f"Error processing PDF {pdf_path}: {str(e)}")

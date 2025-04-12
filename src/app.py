@@ -71,13 +71,25 @@ def upload_files():
                 donations.append(donation)
         elif file_ext in ['.jpg', '.jpeg', '.png', '.pdf']:
             # Process images and PDFs using Gemini
-            extracted_donation = file_processor.process(file_path, file_ext)
-            if extracted_donation:
-                extracted_donation['dataSource'] = 'LLM'
-                extracted_donation['internalId'] = f"llm_{len(donations)}"
-                extracted_donation['qbSyncStatus'] = 'Pending'
-                extracted_donation['qbCustomerStatus'] = 'Unknown'
-                donations.append(extracted_donation)
+            extracted_data = file_processor.process(file_path, file_ext)
+            
+            if extracted_data:
+                # Check if we have a list of donations (PDF) or a single donation (image)
+                if isinstance(extracted_data, list):
+                    print(f"Processing multiple donations from PDF: {len(extracted_data)}")
+                    for idx, donation in enumerate(extracted_data):
+                        donation['dataSource'] = 'LLM'
+                        donation['internalId'] = f"llm_{len(donations) + idx}"
+                        donation['qbSyncStatus'] = 'Pending'
+                        donation['qbCustomerStatus'] = 'Unknown'
+                        donations.append(donation)
+                else:
+                    # Single donation (typically from image)
+                    extracted_data['dataSource'] = 'LLM'
+                    extracted_data['internalId'] = f"llm_{len(donations)}"
+                    extracted_data['qbSyncStatus'] = 'Pending'
+                    extracted_data['qbCustomerStatus'] = 'Unknown'
+                    donations.append(extracted_data)
         
         # Store file temporarily
         # In a production environment, consider more robust file storage
