@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+import argparse
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from werkzeug.utils import secure_filename
 import pandas as pd
@@ -13,6 +14,16 @@ from utils.file_processor import FileProcessor
 
 # Load environment variables
 load_dotenv()
+
+# Parse command line arguments for QBO environment
+parser = argparse.ArgumentParser(description="FOM to QBO Automation App")
+parser.add_argument('--env', type=str, choices=['sandbox', 'production'], default=os.getenv('QBO_ENVIRONMENT', 'sandbox'),
+                    help='QuickBooks Online environment (sandbox or production)')
+args, _ = parser.parse_known_args()
+
+# Use the command-line specified environment
+qbo_environment = args.env
+print(f"Starting application with QBO environment: {qbo_environment}")
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # For session management
@@ -28,7 +39,7 @@ qbo_service = QBOService(
     client_id=os.getenv('QBO_CLIENT_ID'),
     client_secret=os.getenv('QBO_CLIENT_SECRET'),
     redirect_uri=os.getenv('QBO_REDIRECT_URI'),
-    environment=os.getenv('QBO_ENVIRONMENT')
+    environment=qbo_environment  # Use the command-line specified environment
 )
 # Pass both services to the file processor for integrated customer matching
 file_processor = FileProcessor(gemini_service, qbo_service)
@@ -241,7 +252,8 @@ def qbo_status():
     return jsonify({
         'authenticated': qbo_service.access_token is not None and qbo_service.realm_id is not None,
         'realmId': qbo_service.realm_id,
-        'tokenExpiry': qbo_service.token_expires_at if hasattr(qbo_service, 'token_expires_at') else None
+        'tokenExpiry': qbo_service.token_expires_at if hasattr(qbo_service, 'token_expires_at') else None,
+        'environment': qbo_service.environment  # Include the environment in the status
     })
 
 @app.route('/qbo/authorize')
@@ -816,5 +828,21 @@ def test_customer_matching():
             'error': str(e)
         }), 500
 
+@app.route('/qbo/environment')
+def qbo_environment_info():
+    """Show current QBO environment information."""
+    return jsonify({
+        'environment': qbo_service.environment,
+        'apiBaseUrl': qbo_service.api_base,
+        'authenticated': qbo_service.access_token is not None and qbo_service.realm_id is not None,
+        'realmId': qbo_service.realm_id if qbo_service.realm_id else None
+    })
+
 if __name__ == '__main__':
+    # Display the environment when starting
+    print(f"====== Starting with QuickBooks Online {qbo_environment.upper()} environment ======")
+    print(f"API Base URL: {qbo_service.api_base}")
+    print(f"To change environments, restart with: python src/app.py --env [sandbox|production]")
+    print("================================================================")
+    
     app.run(debug=True)

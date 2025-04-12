@@ -875,6 +875,25 @@ function checkQBOAuthStatus() {
         .then(response => response.json())
         .then(data => {
             const qboBtn = document.getElementById('connectQBOBtn');
+            const envBadge = document.getElementById('qboEnvironmentBadge');
+            
+            // Update environment badge
+            if (envBadge) {
+                const envName = data.environment || 'unknown';
+                envBadge.textContent = envName.toUpperCase();
+                
+                // Different badge colors for different environments
+                if (envName === 'production') {
+                    envBadge.classList.remove('bg-info', 'bg-secondary');
+                    envBadge.classList.add('bg-success');
+                } else if (envName === 'sandbox') {
+                    envBadge.classList.remove('bg-success', 'bg-secondary');
+                    envBadge.classList.add('bg-info');
+                } else {
+                    envBadge.classList.remove('bg-success', 'bg-info');
+                    envBadge.classList.add('bg-secondary');
+                }
+            }
             
             if (data.authenticated) {
                 // QBO is connected
@@ -883,7 +902,7 @@ function checkQBOAuthStatus() {
                     qboBtn.classList.add('btn-primary');
                     qboBtn.innerHTML = '<i class="fas fa-check me-1"></i>Connected to QBO';
                 }
-                console.log("QBO authentication is active");
+                console.log(`QBO authentication is active (${data.environment} environment)`);
                 
                 // Check if we just connected and need to process pending files
                 if (data.justConnected && window.pendingFiles && window.pendingFiles.length > 0) {
@@ -899,7 +918,7 @@ function checkQBOAuthStatus() {
                     qboBtn.classList.add('btn-warning');
                     qboBtn.innerHTML = '<i class="fas fa-link me-1"></i>Connect to QBO';
                 }
-                console.warn("Not authenticated with QBO");
+                console.warn(`Not authenticated with QBO (${data.environment} environment)`);
             }
         })
         .catch(error => {
@@ -936,6 +955,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 clearInterval(pollInterval);
                 // Check if we've authenticated after window close
                 checkAuthAndProcessFiles();
+                
+                // Also update the environment badge
+                setTimeout(() => {
+                    checkQBOAuthStatus();
+                }, 1000);
                 return;
             }
             
@@ -950,6 +974,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         
                         // Use the helper to process files
                         checkAuthAndProcessFiles();
+                        
+                        // Also update the environment badge
+                        setTimeout(() => {
+                            checkQBOAuthStatus();
+                        }, 1000);
                     }
                 })
                 .catch(error => {

@@ -293,6 +293,7 @@ class QBOService:
             print("==== STARTING CUSTOMER RETRIEVAL FROM QUICKBOOKS ====")
             print(f"Using realm_id: {self.realm_id}")
             print(f"API Base URL: {self.api_base}")
+            print(f"Environment: {self.environment}")
             
             customers = []
             start_position = 1

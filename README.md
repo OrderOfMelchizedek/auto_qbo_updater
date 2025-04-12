@@ -36,10 +36,18 @@ A web application to process donation information for Friends of Mwangaza, inclu
    Then edit `.env` with your QuickBooks Online and Gemini API credentials
 7. Run the application:
    ```
-   python src/app.py
+   # Run with Sandbox environment (default)
+   python src/app.py --env sandbox
+
+   # Run with Production environment
+   python src/app.py --env production
    ```
 
 ## QuickBooks Online Integration
+
+This application can connect to either QuickBooks Sandbox or Production environments. Use the `--env` flag when starting the application to choose your environment.
+
+**Note**: When switching between environments, you need to re-authenticate, as each environment has different authentication tokens and company data.
 
 This application uses OAuth 2.0 to authenticate with QuickBooks Online. You'll need to:
 
@@ -83,6 +91,7 @@ To use the Gemini API for donation document processing:
    heroku config:set QBO_ENVIRONMENT=sandbox
    heroku config:set GEMINI_API_KEY=your_gemini_api_key
    ```
+   Note: For Heroku deployment, you'll need to modify the app to accept the environment from config vars instead of command-line arguments.
 4. Push to Heroku:
    ```
    git push heroku master
