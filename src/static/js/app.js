@@ -405,62 +405,357 @@ function updateCustomer(donationId) {
         });
 }
 
-// Product/Service selection and storage
+// QBO reference data storage
 let qboItems = [];
+let qboAccounts = [];
+let qboPaymentMethods = [];
 let defaultItemId = '1';
+let defaultAccountId = '12000';
+let defaultPaymentMethodId = 'CHECK';
 
 function fetchQBOItems() {
-    fetch('/qbo/items/all')
+    return fetch('/qbo/items/all')
         .then(response => response.json())
         .then(data => {
             if (data.success && data.items) {
                 qboItems = data.items;
                 
-                // Populate both select dropdowns with items
+                // Populate all item select dropdowns
                 populateItemSelects();
                 
                 // Set default item if available
                 if (data.default_item) {
                     defaultItemId = data.default_item.id;
+                    console.log(`Using default item: ${data.default_item.name} (${defaultItemId})`);
                 }
+                return data.items;
+            } else {
+                console.error("Error in fetchQBOItems response:", data.message || "Unknown error");
+                return [];
             }
         })
         .catch(error => {
             console.error("Error fetching QBO items:", error);
+            return [];
+        });
+}
+
+function fetchQBOAccounts() {
+    return fetch('/qbo/accounts/all')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.accounts) {
+                qboAccounts = data.accounts;
+                
+                // Populate all account select dropdowns
+                populateAccountSelects();
+                
+                // Set default account (Undeposited Funds) if available
+                if (data.undepositedFunds) {
+                    defaultAccountId = data.undepositedFunds.id;
+                    console.log(`Using default account: ${data.undepositedFunds.name} (${defaultAccountId})`);
+                }
+                
+                // Also populate the income accounts dropdown for item creation
+                populateIncomeAccountSelect();
+                
+                return data.accounts;
+            } else {
+                console.error("Error in fetchQBOAccounts response:", data.message || "Unknown error");
+                return [];
+            }
+        })
+        .catch(error => {
+            console.error("Error fetching QBO accounts:", error);
+            return [];
+        });
+}
+
+function fetchQBOPaymentMethods() {
+    return fetch('/qbo/payment-methods/all')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.paymentMethods) {
+                qboPaymentMethods = data.paymentMethods;
+                
+                // Populate payment method select dropdown
+                populatePaymentMethodSelects();
+                
+                // Set default payment method (Check) if available
+                if (data.checkMethod) {
+                    defaultPaymentMethodId = data.checkMethod.id;
+                    console.log(`Using default payment method: ${data.checkMethod.name} (${defaultPaymentMethodId})`);
+                }
+                return data.paymentMethods;
+            } else {
+                console.error("Error in fetchQBOPaymentMethods response:", data.message || "Unknown error");
+                return [];
+            }
+        })
+        .catch(error => {
+            console.error("Error fetching QBO payment methods:", error);
+            return [];
         });
 }
 
 function populateItemSelects() {
-    const previewSelect = document.getElementById('previewItemRef');
-    const batchSelect = document.getElementById('batchItemRef');
+    // Get all item selects in the UI
+    const selects = [
+        document.getElementById('previewItemRef'),
+        document.getElementById('batchItemRef'),
+        document.getElementById('alternativeItemSelect')
+    ];
     
-    // Clear existing options
-    previewSelect.innerHTML = '';
-    batchSelect.innerHTML = '';
-    
-    // Add items to both selects
-    qboItems.forEach(item => {
-        const previewOption = document.createElement('option');
-        previewOption.value = item.id;
-        previewOption.textContent = item.name;
-        previewSelect.appendChild(previewOption);
-        
-        const batchOption = document.createElement('option');
-        batchOption.value = item.id;
-        batchOption.textContent = item.name;
-        batchSelect.appendChild(batchOption);
+    // Process each select that exists
+    selects.forEach(select => {
+        if (select) {
+            // Clear existing options
+            select.innerHTML = '';
+            
+            // Check if we have items
+            if (qboItems.length === 0) {
+                const option = document.createElement('option');
+                option.value = "";
+                option.textContent = "No items found";
+                select.appendChild(option);
+                return;
+            }
+            
+            // Add default empty option
+            const emptyOption = document.createElement('option');
+            emptyOption.value = "";
+            emptyOption.textContent = "Select a product/service...";
+            select.appendChild(emptyOption);
+            
+            // Add items
+            qboItems.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = item.name;
+                
+                // Add description as title if available
+                if (item.description) {
+                    option.title = item.description;
+                }
+                
+                select.appendChild(option);
+            });
+            
+            // Set default item
+            select.value = defaultItemId;
+        }
     });
+}
+
+function populateAccountSelects() {
+    console.log("Populating account dropdowns with", qboAccounts.length, "accounts");
     
-    // Set default item
-    previewSelect.value = defaultItemId;
-    batchSelect.value = defaultItemId;
+    // Get all account selects in the UI
+    const selects = [
+        document.getElementById('previewDepositToAccount'),
+        document.getElementById('alternativeAccountSelect'),
+        document.getElementById('batchDepositToAccount')
+    ];
+    
+    // Process each select element
+    selects.forEach(select => {
+        if (!select) {
+            // Skip if element doesn't exist in DOM
+            console.log("Account select element not found in DOM");
+            return;
+        }
+        
+        // Clear existing options
+        select.innerHTML = '';
+        
+        // Check if we have accounts
+        if (!qboAccounts || qboAccounts.length === 0) {
+            console.log("No accounts available to populate dropdown");
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "No accounts found";
+            select.appendChild(option);
+            return;
+        }
+        
+        // Add default empty option
+        const emptyOption = document.createElement('option');
+        emptyOption.value = "";
+        emptyOption.textContent = "Select an account...";
+        select.appendChild(emptyOption);
+        
+        // Add accounts
+        qboAccounts.forEach(account => {
+            const option = document.createElement('option');
+            option.value = account.id;
+            
+            // Format option text with account number if available
+            if (account.number) {
+                option.textContent = `${account.number} ${account.name} (${account.type})`;
+            } else {
+                option.textContent = `${account.name} (${account.type})`;
+            }
+            
+            select.appendChild(option);
+        });
+        
+        // Set default account (Undeposited Funds) if available
+        if (defaultAccountId) {
+            console.log(`Setting default account to ${defaultAccountId}`);
+            select.value = defaultAccountId;
+            
+            // If setting the value didn't work (option doesn't exist), add it
+            if (select.value !== defaultAccountId) {
+                // Find the account in our data
+                const defaultAccount = qboAccounts.find(a => a.id === defaultAccountId);
+                if (defaultAccount) {
+                    const option = document.createElement('option');
+                    option.value = defaultAccount.id;
+                    if (defaultAccount.number) {
+                        option.textContent = `${defaultAccount.number} ${defaultAccount.name} (${defaultAccount.type})`;
+                    } else {
+                        option.textContent = `${defaultAccount.name} (${defaultAccount.type})`;
+                    }
+                    select.appendChild(option);
+                    select.value = defaultAccountId;
+                } else {
+                    console.warn(`Default account ID ${defaultAccountId} not found in QBO accounts`);
+                }
+            }
+        } else {
+            console.warn("No default account ID set");
+        }
+    });
+}
+
+function populateIncomeAccountSelect() {
+    const incomeAccountSelect = document.getElementById('newItemIncomeAccount');
+    
+    if (incomeAccountSelect) {
+        // Clear existing options
+        incomeAccountSelect.innerHTML = '';
+        
+        // Filter for income accounts
+        const incomeAccounts = qboAccounts.filter(account => 
+            account.type === 'Income' || account.type.includes('Income')
+        );
+        
+        // Check if we have any income accounts
+        if (incomeAccounts.length === 0) {
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "No income accounts found";
+            incomeAccountSelect.appendChild(option);
+            return;
+        }
+        
+        // Add default empty option
+        const emptyOption = document.createElement('option');
+        emptyOption.value = "";
+        emptyOption.textContent = "Select an income account...";
+        incomeAccountSelect.appendChild(emptyOption);
+        
+        // Add income accounts
+        incomeAccounts.forEach(account => {
+            const option = document.createElement('option');
+            option.value = account.id;
+            
+            // Format option text with account number if available
+            if (account.number) {
+                option.textContent = `${account.number} ${account.name}`;
+            } else {
+                option.textContent = account.name;
+            }
+            
+            incomeAccountSelect.appendChild(option);
+        });
+    }
+}
+
+function populatePaymentMethodSelects() {
+    console.log("Populating payment method dropdowns with", qboPaymentMethods.length, "methods");
+    
+    // Get all payment method selects in the UI
+    const selects = [
+        document.getElementById('previewPaymentMethodRef'),
+        document.getElementById('alternativePaymentMethodSelect'),
+        document.getElementById('batchPaymentMethodRef')
+    ];
+    
+    // Process each select element
+    selects.forEach(select => {
+        if (!select) {
+            // Skip if element doesn't exist in DOM
+            console.log("Payment method select element not found in DOM");
+            return;
+        }
+        
+        // Clear existing options
+        select.innerHTML = '';
+        
+        // Check if we have payment methods
+        if (!qboPaymentMethods || qboPaymentMethods.length === 0) {
+            console.log("No payment methods available to populate dropdown");
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "No payment methods found";
+            select.appendChild(option);
+            return;
+        }
+        
+        // Add default empty option
+        const emptyOption = document.createElement('option');
+        emptyOption.value = "";
+        emptyOption.textContent = "Select a payment method...";
+        select.appendChild(emptyOption);
+        
+        // Add payment methods
+        qboPaymentMethods.forEach(method => {
+            const option = document.createElement('option');
+            option.value = method.id;
+            option.textContent = method.name;
+            select.appendChild(option);
+        });
+        
+        // Set default payment method (Check) if available
+        if (defaultPaymentMethodId) {
+            console.log(`Setting default payment method to ${defaultPaymentMethodId}`);
+            select.value = defaultPaymentMethodId;
+            
+            // If setting the value didn't work (option doesn't exist), add it
+            if (select.value !== defaultPaymentMethodId) {
+                // Find the payment method in our data
+                const defaultMethod = qboPaymentMethods.find(m => m.id === defaultPaymentMethodId);
+                if (defaultMethod) {
+                    const option = document.createElement('option');
+                    option.value = defaultMethod.id;
+                    option.textContent = defaultMethod.name;
+                    select.appendChild(option);
+                    select.value = defaultPaymentMethodId;
+                } else {
+                    console.warn(`Default payment method ID ${defaultPaymentMethodId} not found in QBO payment methods`);
+                    
+                    // Add the default "CHECK" method if missing
+                    if (defaultPaymentMethodId === 'CHECK') {
+                        const option = document.createElement('option');
+                        option.value = 'CHECK';
+                        option.textContent = 'Check';
+                        select.appendChild(option);
+                        select.value = 'CHECK';
+                    }
+                }
+            }
+        } else {
+            console.warn("No default payment method ID set");
+        }
+    });
 }
 
 // QuickBooks setup handling
 let setupAccountId, setupItemId, setupPaymentMethodId, pendingDonationId;
-let qboAccounts = [];
+// qboAccounts is already defined above
 // qboItems is already defined above
-let qboPaymentMethods = [];
+// qboPaymentMethods is already defined above
 
 function showQboSetupModal(type, invalidId, message, detail, donationId) {
     // Store the donation ID for later use
@@ -859,6 +1154,21 @@ function trySendWithAlternative(donationId, customFields) {
         customFields.itemRef = document.getElementById('previewItemRef').value || defaultItemId || '1';
     }
     
+    // Get the standard account (if not overridden in customFields)
+    if (!customFields.depositToAccountId) {
+        customFields.depositToAccountId = document.getElementById('previewDepositToAccount').value || defaultAccountId || '12000';
+    }
+    
+    // Get the standard payment method (if not overridden in customFields)
+    if (!customFields.paymentMethodId) {
+        const paymentMethodSelect = document.getElementById('previewPaymentMethodRef');
+        if (paymentMethodSelect && paymentMethodSelect.value) {
+            customFields.paymentMethodId = paymentMethodSelect.value;
+        } else {
+            customFields.paymentMethodId = defaultPaymentMethodId || 'CHECK';
+        }
+    }
+    
     // Log what we're sending
     console.log(`Sending sales receipt with alternative settings: ${JSON.stringify(customFields)}`);
     
@@ -922,12 +1232,24 @@ function showSalesReceiptPreview(donationId) {
         previewBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     }
     
-    // Make sure we have the latest items before showing the preview
-    fetchQBOItems();
+    // Make sure we have the latest QBO data before showing the preview
+    // Fetch all QBO references in parallel
+    Promise.all([
+        fetchQBOItems(),
+        fetchQBOAccounts(),
+        fetchQBOPaymentMethods()
+    ]).catch(error => {
+        console.error("Error fetching QBO data:", error);
+    });
     
-    // Get the currently selected item ref - use '1' as the default if no item is selected
-    // We need to ensure we always have a valid itemRef
+    // Get the currently selected item ref - use a default if no item is selected
     const itemRef = document.getElementById('previewItemRef').value || defaultItemId || '1';
+    
+    // Get the currently selected deposit account ID
+    let depositToAccountId;
+    if (document.getElementById('previewDepositToAccount').value) {
+        depositToAccountId = document.getElementById('previewDepositToAccount').value;
+    }
     
     // Fetch preview data
     fetch(`/qbo/sales-receipt/preview/${donationId}`, {
@@ -935,7 +1257,10 @@ function showSalesReceiptPreview(donationId) {
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ itemRef })
+        body: JSON.stringify({ 
+            itemRef,
+            depositToAccountId
+        })
     })
         .then(response => response.json())
         .then(data => {
@@ -945,7 +1270,6 @@ function showSalesReceiptPreview(donationId) {
                 // Populate preview fields
                 document.getElementById('previewCustomer').textContent = preview.customerName;
                 document.getElementById('previewAmount').textContent = formatCurrency(preview.amount);
-                document.getElementById('previewPaymentMethod').textContent = preview.paymentMethod;
                 document.getElementById('previewReferenceNo').textContent = preview.referenceNo;
                 document.getElementById('previewDate').textContent = preview.date;
                 document.getElementById('previewDepositTo').textContent = preview.depositTo;
@@ -957,6 +1281,36 @@ function showSalesReceiptPreview(donationId) {
                 // Set the item ref if specified
                 if (preview.itemRef) {
                     document.getElementById('previewItemRef').value = preview.itemRef;
+                }
+                
+                // Set the deposit account if specified
+                if (preview.depositToAccountId) {
+                    const depositSelect = document.getElementById('previewDepositToAccount');
+                    if (depositSelect.querySelector(`option[value="${preview.depositToAccountId}"]`)) {
+                        depositSelect.value = preview.depositToAccountId;
+                    } else {
+                        // If the account doesn't exist in the dropdown, add it
+                        const option = document.createElement('option');
+                        option.value = preview.depositToAccountId;
+                        option.textContent = preview.depositTo;
+                        depositSelect.appendChild(option);
+                        depositSelect.value = preview.depositToAccountId;
+                    }
+                }
+                
+                // Set the payment method if specified
+                if (preview.paymentMethodId) {
+                    const paymentMethodSelect = document.getElementById('previewPaymentMethodRef');
+                    if (paymentMethodSelect.querySelector(`option[value="${preview.paymentMethodId}"]`)) {
+                        paymentMethodSelect.value = preview.paymentMethodId;
+                    } else {
+                        // If the payment method doesn't exist in the dropdown, add it
+                        const option = document.createElement('option');
+                        option.value = preview.paymentMethodId;
+                        option.textContent = preview.paymentMethod;
+                        paymentMethodSelect.appendChild(option);
+                        paymentMethodSelect.value = preview.paymentMethodId;
+                    }
                 }
                 
                 // Show the modal
@@ -989,19 +1343,38 @@ function sendToQBO(donationId) {
 }
 
 function showBatchReceiptModal() {
-    // Make sure we have the latest items
-    fetchQBOItems();
+    // Make sure we have the latest QBO data before showing the modal
+    // Use Promise.all to fetch all data in parallel
+    const loadingToast = showToast('Loading QuickBooks data...', 'info');
     
-    // Show the modal
-    batchReceiptModal.show();
+    Promise.all([
+        fetchQBOItems(),
+        fetchQBOAccounts(),
+        fetchQBOPaymentMethods()
+    ])
+    .then(() => {
+        // Now that we have all the data, populate the dropdowns
+        populateItemSelects();
+        populateAccountSelects();
+        populatePaymentMethodSelects();
+        
+        // Show the modal
+        batchReceiptModal.show();
+    })
+    .catch(error => {
+        console.error("Error loading QuickBooks data for batch modal:", error);
+        showToast('Error loading QuickBooks data. Please try again.', 'danger');
+    });
 }
 
 function sendAllToQBO() {
-    // Get the default item ref - ensure we have a valid value (never send empty)
-    const defaultItemRef = document.getElementById('batchItemRef').value || defaultItemId || '1';
+    // Get the default values - ensure we have valid values (never send empty)
+    const batchItemRef = document.getElementById('batchItemRef').value || defaultItemId || '1';
+    const batchDepositToAccountId = document.getElementById('batchDepositToAccount').value || defaultAccountId || '12000';
+    const batchPaymentMethodId = document.getElementById('batchPaymentMethodRef').value || 'CHECK';
     
     // Log what we're sending for debugging
-    console.log(`Sending batch sales receipts with default itemRef: ${defaultItemRef}`);
+    console.log(`Sending batch sales receipts with defaults - Item: ${batchItemRef}, Account: ${batchDepositToAccountId}, Payment Method: ${batchPaymentMethodId}`);
     
     // Close the modal
     batchReceiptModal.hide();
@@ -1014,7 +1387,11 @@ function sendAllToQBO() {
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ defaultItemRef })
+        body: JSON.stringify({ 
+            defaultItemRef: batchItemRef,
+            defaultDepositToAccountId: batchDepositToAccountId,
+            defaultPaymentMethodId: batchPaymentMethodId 
+        })
     })
         .then(response => response.json())
         .then(data => {
@@ -1462,32 +1839,47 @@ function checkAuthAndProcessFiles() {
 
 // Check QBO authentication status and update UI
 function checkQBOAuthStatus() {
+    // Add cache-busting parameter to prevent 304 responses
+    const cacheBuster = new Date().getTime();
+    
     // First fetch environment info
-    fetch('/qbo/environment')
+    fetch(`/qbo/environment?_=${cacheBuster}`)
         .then(response => response.json())
         .then(envData => {
+            console.log("Environment data received:", envData);
             const envBadge = document.getElementById('qboEnvironmentBadge');
             
             // Update environment badge
             if (envBadge) {
-                const envName = envData.environment || 'unknown';
+                // Get environment name with fallback
+                const envName = envData && envData.environment ? envData.environment : 'unknown';
+                console.log("Setting environment badge to:", envName.toUpperCase());
+                
+                // Set text content
                 envBadge.textContent = envName.toUpperCase();
                 
-                // Different badge colors for different environments
+                // Reset all classes
+                envBadge.classList.remove('bg-success', 'bg-info', 'bg-secondary');
+                
+                // Set appropriate class
                 if (envName === 'production') {
-                    envBadge.classList.remove('bg-info', 'bg-secondary');
                     envBadge.classList.add('bg-success');
                 } else if (envName === 'sandbox') {
-                    envBadge.classList.remove('bg-success', 'bg-secondary');
                     envBadge.classList.add('bg-info');
                 } else {
-                    envBadge.classList.remove('bg-success', 'bg-info');
                     envBadge.classList.add('bg-secondary');
                 }
             }
         })
         .catch(error => {
-            console.error('Error fetching QBO environment:', error);
+            console.error("Error fetching environment info:", error);
+            // Update badge to show error state
+            const envBadge = document.getElementById('qboEnvironmentBadge');
+            if (envBadge) {
+                envBadge.textContent = "ERROR";
+                envBadge.classList.remove('bg-success', 'bg-info');
+                envBadge.classList.add('bg-danger');
+            }
         });
     
     // Then check authentication status
@@ -1714,12 +2106,24 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('createItemBtn').addEventListener('click', createQBOItem);
     document.getElementById('createPaymentMethodBtn').addEventListener('click', createQBOPaymentMethod);
     document.getElementById('useAlternativeBtn').addEventListener('click', useAlternative);
+    
+    // Set up Sales Receipt Preview modal
     document.getElementById('sendReceiptBtn').addEventListener('click', function() {
         const donationId = document.getElementById('previewDonationId').value;
         if (donationId) {
-            sendToQBO(donationId);
+            // Get the custom fields from the preview modal
+            const customFields = {
+                itemRef: document.getElementById('previewItemRef').value,
+                depositToAccountId: document.getElementById('previewDepositToAccount').value,
+                paymentMethodId: document.getElementById('previewPaymentMethodRef').value
+            };
+            
+            // Send with the selected values
+            trySendWithAlternative(donationId, customFields);
         }
     });
+    
+    // Set up other buttons
     document.getElementById('sendAllReceiptsBtn').addEventListener('click', sendAllToQBO);
     
     // Add event listener for batch modal button
@@ -1790,6 +2194,15 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Check QBO authentication status
     checkQBOAuthStatus();
+    
+    // Fetch QBO references
+    Promise.all([
+        fetchQBOItems(),
+        fetchQBOAccounts(),
+        fetchQBOPaymentMethods()
+    ]).catch(error => {
+        console.error("Error fetching QBO references:", error);
+    });
     
     // Set up file upload area
     const uploadArea = document.getElementById('uploadArea');
