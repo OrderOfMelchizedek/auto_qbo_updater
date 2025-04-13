@@ -153,7 +153,7 @@ class QBOService:
         }
     
     def find_customer(self, customer_lookup: str) -> Optional[Dict[str, Any]]:
-        """Find a customer in QBO by name or other lookup value.
+        """Find a customer in QBO by name or other lookup value with enhanced fuzzy matching.
         
         Args:
             customer_lookup: Customer name or other lookup value
@@ -165,9 +165,20 @@ class QBOService:
             print("Not authenticated with QBO")
             return None
         
+        # Handle empty lookup values
+        if not customer_lookup or customer_lookup.strip() == '':
+            print("Empty customer lookup value")
+            return None
+            
+        # Sanitize input for SQL injection prevention
+        # This is a simple sanitization, QuickBooks API handles more complex cases
+        safe_lookup = customer_lookup.replace("'", "''")
+        
         try:
-            # First, try an exact match on DisplayName
-            query = f"SELECT * FROM Customer WHERE DisplayName = '{customer_lookup}'"
+            print(f"Finding customer with progressive matching: '{customer_lookup}'")
+            
+            # Strategy 1: Exact match on DisplayName (highest confidence)
+            query = f"SELECT * FROM Customer WHERE DisplayName = '{safe_lookup}'"
             encoded_query = quote(query)
             url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
             
@@ -176,10 +187,11 @@ class QBOService:
             if response.status_code == 200:
                 data = response.json()
                 if data['QueryResponse'].get('Customer'):
+                    print(f"Strategy 1 - Exact match found: {data['QueryResponse']['Customer'][0].get('DisplayName')}")
                     return data['QueryResponse']['Customer'][0]
             
-            # If no exact match, try a wider search
-            query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{customer_lookup}%'"
+            # Strategy 2: Match on partial DisplayName (contains)
+            query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{safe_lookup}%'"
             encoded_query = quote(query)
             url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
             
@@ -188,8 +200,117 @@ class QBOService:
             if response.status_code == 200:
                 data = response.json()
                 if data['QueryResponse'].get('Customer'):
+                    print(f"Strategy 2 - Partial match found: {data['QueryResponse']['Customer'][0].get('DisplayName')}")
                     return data['QueryResponse']['Customer'][0]
             
+            # Strategy 3: Try matching after reversing the name parts
+            # This handles cases like "John Smith" vs "Smith, John"
+            name_parts = safe_lookup.split()
+            if len(name_parts) >= 2:
+                # Try last name first pattern
+                if ',' not in safe_lookup:  # Only if original doesn't have a comma
+                    reversed_name = f"{name_parts[-1]}, {' '.join(name_parts[:-1])}"
+                    query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{reversed_name}%'"
+                    encoded_query = quote(query)
+                    url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+                    
+                    response = requests.get(url, headers=self._get_auth_headers())
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data['QueryResponse'].get('Customer'):
+                            print(f"Strategy 3 - Reversed name match found: {data['QueryResponse']['Customer'][0].get('DisplayName')}")
+                            return data['QueryResponse']['Customer'][0]
+                # Try comma-separated to space-separated conversion
+                elif ',' in safe_lookup:  # Handle "Smith, John" to "John Smith" format
+                    parts = safe_lookup.split(',')
+                    if len(parts) == 2:
+                        # Take last name from before comma, first name from after comma, and reverse them
+                        space_separated = f"{parts[1].strip()} {parts[0].strip()}"
+                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{space_separated}%'"
+                        encoded_query = quote(query)
+                        url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+                        
+                        response = requests.get(url, headers=self._get_auth_headers())
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data['QueryResponse'].get('Customer'):
+                                print(f"Strategy 3b - Comma to space conversion match found: {data['QueryResponse']['Customer'][0].get('DisplayName')}")
+                                return data['QueryResponse']['Customer'][0]
+            
+            # Strategy 4: Try matching on significant parts
+            # Remove common tokens like "and", "&", etc.
+            significant_parts = []
+            skip_tokens = ['and', '&', 'mr', 'mrs', 'ms', 'dr', 'the', 'of', 'for']
+            
+            # Extract significant tokens
+            for part in safe_lookup.lower().replace(',', ' ').replace('.', ' ').split():
+                if part not in skip_tokens and len(part) > 1:
+                    significant_parts.append(part)
+            
+            if significant_parts:
+                # Sort tokens by length (longer tokens are likely more specific)
+                significant_parts.sort(key=len, reverse=True)
+                
+                # Try to match on the most significant tokens
+                for significant_part in significant_parts:
+                    if len(significant_part) > 3:  # Only use tokens with more than 3 chars
+                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{significant_part}%'"
+                        encoded_query = quote(query)
+                        url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+                        
+                        response = requests.get(url, headers=self._get_auth_headers())
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data['QueryResponse'].get('Customer'):
+                                print(f"Strategy 4 - Significant part match found: {data['QueryResponse']['Customer'][0].get('DisplayName')} (matched on '{significant_part}')")
+                                return data['QueryResponse']['Customer'][0]
+            
+            # Strategy 5: Try matching on email domain
+            # This handles organization names vs email domains (e.g., "XYZ Foundation" vs "xyz.org")
+            email_part = None
+            if '@' in safe_lookup:
+                # Extract the domain part of the email
+                email_parts = safe_lookup.split('@')
+                if len(email_parts) == 2 and '.' in email_parts[1]:
+                    domain = email_parts[1]
+                    # Get the part before the TLD
+                    org_name = domain.split('.')[0]
+                    if len(org_name) > 3:  # Only use if meaningful
+                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{org_name}%'"
+                        encoded_query = quote(query)
+                        url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+                        
+                        response = requests.get(url, headers=self._get_auth_headers())
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data['QueryResponse'].get('Customer'):
+                                print(f"Strategy 5 - Email domain match found: {data['QueryResponse']['Customer'][0].get('DisplayName')} (matched on '{org_name}')")
+                                return data['QueryResponse']['Customer'][0]
+            
+            # Strategy 6: Try searching by Primary Phone for numeric inputs
+            # This is useful if the lookup string is a phone number
+            if safe_lookup.replace('-', '').replace(' ', '').replace('(', '').replace(')', '').isdigit():
+                # Format a cleaned phone number (last 10 digits)
+                cleaned_phone = ''.join([c for c in safe_lookup if c.isdigit()])[-10:]
+                if len(cleaned_phone) >= 7:  # Need at least 7 digits for meaningful phone match
+                    query = f"SELECT * FROM Customer WHERE PrimaryPhone LIKE '%{cleaned_phone[-7:]}%'"
+                    encoded_query = quote(query)
+                    url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+                    
+                    response = requests.get(url, headers=self._get_auth_headers())
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data['QueryResponse'].get('Customer'):
+                            print(f"Strategy 6 - Phone match found: {data['QueryResponse']['Customer'][0].get('DisplayName')} (matched on phone ending in '{cleaned_phone[-7:]}')")
+                            return data['QueryResponse']['Customer'][0]
+            
+            # No match found after all strategies
+            print(f"No matching customer found for: '{customer_lookup}' after trying all strategies")
             return None
         
         except Exception as e:

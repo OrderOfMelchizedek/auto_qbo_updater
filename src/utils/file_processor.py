@@ -281,32 +281,85 @@ class FileProcessor:
                 continue
             
             try:
-                # Use the customerLookup field or Donor Name for matching
-                customer_lookup = donation.get('customerLookup', donation.get('Donor Name', ''))
-                
-                if customer_lookup:
-                    print(f"Looking up customer: {customer_lookup}")
-                    # Use QBO service's find_customer method for direct API matching
-                    customer = self.qbo_service.find_customer(customer_lookup)
+                # Try multiple lookup strategies for better matching
+                customer = None
+                match_method = None
+                lookup_strategies = [
+                    # Strategy 1: Use explicit customerLookup field if available
+                    {'field': 'customerLookup', 'description': 'explicit customerLookup field'},
                     
-                    if customer:
-                        print(f"Customer found: {customer.get('DisplayName')}")
-                        # Compare addresses to detect changes
-                        address_match = True
-                        if (donation.get('Address - Line 1') and 
-                            donation.get('Address - Line 1') != customer.get('BillAddr', {}).get('Line1', '')):
-                            address_match = False
-                            print("Address mismatch detected")
+                    # Strategy 2: Use donor name
+                    {'field': 'Donor Name', 'description': 'donor name'},
+                    
+                    # Strategy 3: Use email if available
+                    {'field': 'Email', 'description': 'email address'},
+                    
+                    # Strategy 4: Use phone if available
+                    {'field': 'Phone', 'description': 'phone number'}
+                ]
+                
+                for strategy in lookup_strategies:
+                    field = strategy['field']
+                    lookup_value = donation.get(field)
+                    
+                    if lookup_value and str(lookup_value).strip():
+                        print(f"Trying lookup with {strategy['description']}: {lookup_value}")
+                        potential_customer = self.qbo_service.find_customer(str(lookup_value))
                         
-                        # Update donation with customer information
-                        donation['customerLookup'] = customer.get('DisplayName', '')
-                        donation['qboCustomerId'] = customer.get('Id')
-                        donation['qbCustomerStatus'] = 'Matched' if address_match else 'Matched-AddressMismatch'
-                    else:
-                        print(f"No customer found for: {customer_lookup}")
-                        donation['qbCustomerStatus'] = 'New'
+                        if potential_customer:
+                            customer = potential_customer
+                            match_method = strategy['description']
+                            print(f"Customer found using {match_method}: {customer.get('DisplayName')}")
+                            break
+                
+                if customer:
+                    # Compare addresses to detect changes
+                    address_match = True
+                    if (donation.get('Address - Line 1') and 
+                        donation.get('Address - Line 1') != customer.get('BillAddr', {}).get('Line1', '')):
+                        address_match = False
+                        print("Address mismatch detected")
+                    
+                    # Update donation with customer information
+                    donation['customerLookup'] = customer.get('DisplayName', '')
+                    donation['qboCustomerId'] = customer.get('Id')
+                    donation['qbCustomerStatus'] = 'Matched' if address_match else 'Matched-AddressMismatch'
+                    donation['matchMethod'] = match_method
+                    
+                    # Check if any of the address fields need updating
+                    needs_update = False
+                    update_fields = []
+                    
+                    # Compare address fields if we have them in the donation
+                    if donation.get('Address - Line 1') and 'BillAddr' in customer:
+                        bill_addr = customer.get('BillAddr', {})
+                        
+                        # Check address line 1
+                        if donation.get('Address - Line 1') != bill_addr.get('Line1', ''):
+                            needs_update = True
+                            update_fields.append('Address Line 1')
+                        
+                        # Check city
+                        if donation.get('City') and donation.get('City') != bill_addr.get('City', ''):
+                            needs_update = True
+                            update_fields.append('City')
+                        
+                        # Check state
+                        if donation.get('State') and donation.get('State') != bill_addr.get('CountrySubDivisionCode', ''):
+                            needs_update = True
+                            update_fields.append('State')
+                        
+                        # Check ZIP
+                        if donation.get('ZIP') and donation.get('ZIP') != bill_addr.get('PostalCode', ''):
+                            needs_update = True
+                            update_fields.append('ZIP')
+                    
+                    if needs_update:
+                        donation['addressNeedsUpdate'] = True
+                        donation['addressUpdateFields'] = ', '.join(update_fields)
+                        print(f"Customer record needs address update. Fields: {donation['addressUpdateFields']}")
                 else:
-                    print("No customer lookup information available")
+                    print(f"No customer found for donation from: {donation.get('Donor Name')}")
                     donation['qbCustomerStatus'] = 'New'
                 
                 # Add the matched donation to the result list
