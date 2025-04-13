@@ -132,7 +132,15 @@ function renderDonationTable() {
             statusHtml += '<span class="badge bg-info me-1">New Customer</span>';
         } else if (donation.qbCustomerStatus === 'Matched-AddressMismatch') {
             statusHtml += '<span class="badge bg-warning me-1">Address Mismatch</span>';
+        } else if (donation.qbCustomerStatus === 'Matched-AddressNeedsReview') {
+            statusHtml += '<span class="badge bg-warning me-1">Review Address</span>';
         } else if (donation.qbCustomerStatus === 'Matched') {
+            statusHtml += '<span class="badge bg-success me-1">Customer Matched</span>';
+        } else if (donation.matchRejectionReason) {
+            // For rejected matches that initially looked like they might match
+            statusHtml += `<span class="badge bg-danger me-1" title="${donation.matchRejectionReason}">Match Rejected</span>`;
+        } else if (donation.qbCustomerStatus === 'Unknown' && donation.qboCustomerId) {
+            // If status wasn't updated but we do have a customer ID, show as matched
             statusHtml += '<span class="badge bg-success me-1">Customer Matched</span>';
         }
         

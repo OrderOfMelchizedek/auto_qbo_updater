@@ -137,14 +137,18 @@ def upload_files():
                                 donation['dataSource'] = data_source
                                 donation['internalId'] = f"{source_prefix}_{len(donations) + idx}"
                                 donation['qbSyncStatus'] = 'Pending'
-                                donation['qbCustomerStatus'] = 'Unknown'
+                                # Only initialize as Unknown if no status was set during matching
+                                if 'qbCustomerStatus' not in donation:
+                                    donation['qbCustomerStatus'] = 'Unknown'
                                 donations.append(donation)
                         else:
                             # Single donation (typically from image)
                             extracted_data['dataSource'] = data_source
                             extracted_data['internalId'] = f"{source_prefix}_{len(donations)}"
                             extracted_data['qbSyncStatus'] = 'Pending'
-                            extracted_data['qbCustomerStatus'] = 'Unknown'
+                            # Only initialize as Unknown if no status was set during matching
+                            if 'qbCustomerStatus' not in extracted_data:
+                                extracted_data['qbCustomerStatus'] = 'Unknown'
                             donations.append(extracted_data)
                     else:
                         print(f"No donation data extracted from {filename}")
