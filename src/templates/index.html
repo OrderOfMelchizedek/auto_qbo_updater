@@ -276,6 +276,336 @@
                 </div>
             </div>
         </div>
+        
+        <!-- QuickBooks Setup Modal -->
+        <div class="modal fade" id="qboSetupModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title">QuickBooks Setup Required</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="setupDonationId">
+                        <input type="hidden" id="setupType">
+                        <input type="hidden" id="setupInvalidId">
+                        
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <span id="setupErrorMessage">A required QuickBooks element is missing.</span>
+                        </div>
+                        
+                        <div id="accountSetupSection" class="d-none">
+                            <p>The account ID <strong id="missingAccountId">12000</strong> (typically "Undeposited Funds") doesn't exist in your QuickBooks company.</p>
+                            
+                            <ul class="nav nav-tabs mb-3" id="accountSetupTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="existing-account-tab" data-bs-toggle="tab" data-bs-target="#existing-account" type="button" role="tab">
+                                        Use Existing Account
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="new-account-tab" data-bs-toggle="tab" data-bs-target="#new-account" type="button" role="tab">
+                                        Create New Account
+                                    </button>
+                                </li>
+                            </ul>
+                            
+                            <div class="tab-content" id="accountSetupTabContent">
+                                <!-- Use Existing Account -->
+                                <div class="tab-pane fade show active" id="existing-account" role="tabpanel">
+                                    <p>Select an alternative deposit account from existing accounts:</p>
+                                    <div class="mb-3">
+                                        <select id="alternativeAccountSelect" class="form-select">
+                                            <!-- Options will be populated dynamically -->
+                                            <option value="">Loading accounts...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <!-- Create New Account -->
+                                <div class="tab-pane fade" id="new-account" role="tabpanel">
+                                    <p>Create a new account in QuickBooks:</p>
+                                    <form id="createAccountForm">
+                                        <div class="mb-3">
+                                            <label for="newAccountName" class="form-label">Account Name</label>
+                                            <input type="text" class="form-control" id="newAccountName" value="Undeposited Funds" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="newAccountType" class="form-label">Account Type</label>
+                                            <select class="form-select" id="newAccountType" required>
+                                                <option value="Other Current Asset" selected>Other Current Asset</option>
+                                                <option value="Bank">Bank</option>
+                                                <option value="Income">Income</option>
+                                                <option value="Expense">Expense</option>
+                                                <option value="Other Asset">Other Asset</option>
+                                                <option value="Fixed Asset">Fixed Asset</option>
+                                                <option value="Other Current Liability">Other Current Liability</option>
+                                                <option value="Long Term Liability">Long Term Liability</option>
+                                                <option value="Equity">Equity</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="newAccountNumber" class="form-label">Account Number (Optional)</label>
+                                            <input type="text" class="form-control" id="newAccountNumber" value="12000">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="newAccountDescription" class="form-label">Description (Optional)</label>
+                                            <textarea class="form-control" id="newAccountDescription" rows="2">For donations before deposit</textarea>
+                                        </div>
+                                        <button type="button" class="btn btn-primary" id="createAccountBtn">Create Account</button>
+                                        <div id="createAccountStatus" class="mt-2"></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="itemSetupSection" class="d-none">
+                            <p>The product/service item ID <strong id="missingItemId">1</strong> (typically "Gift - General - 503") doesn't exist in your QuickBooks company.</p>
+                            
+                            <ul class="nav nav-tabs mb-3" id="itemSetupTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="existing-item-tab" data-bs-toggle="tab" data-bs-target="#existing-item" type="button" role="tab">
+                                        Use Existing Item
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="new-item-tab" data-bs-toggle="tab" data-bs-target="#new-item" type="button" role="tab">
+                                        Create New Item
+                                    </button>
+                                </li>
+                            </ul>
+                            
+                            <div class="tab-content" id="itemSetupTabContent">
+                                <!-- Use Existing Item -->
+                                <div class="tab-pane fade show active" id="existing-item" role="tabpanel">
+                                    <p>Select an alternative product/service from existing items:</p>
+                                    <div class="mb-3">
+                                        <select id="alternativeItemSelect" class="form-select">
+                                            <!-- Options will be populated dynamically -->
+                                            <option value="">Loading items...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <!-- Create New Item -->
+                                <div class="tab-pane fade" id="new-item" role="tabpanel">
+                                    <p>Create a new product/service in QuickBooks:</p>
+                                    <form id="createItemForm">
+                                        <div class="mb-3">
+                                            <label for="newItemName" class="form-label">Item Name</label>
+                                            <input type="text" class="form-control" id="newItemName" value="Gift - General - 503" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="newItemType" class="form-label">Item Type</label>
+                                            <select class="form-select" id="newItemType" required>
+                                                <option value="Service" selected>Service</option>
+                                                <option value="Inventory">Inventory</option>
+                                                <option value="NonInventory">Non-Inventory</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="newItemDescription" class="form-label">Description (Optional)</label>
+                                            <textarea class="form-control" id="newItemDescription" rows="2">General donation for 501(c)(3)</textarea>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="newItemPrice" class="form-label">Price (Optional)</label>
+                                            <input type="number" class="form-control" id="newItemPrice" value="0">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="newItemIncomeAccount" class="form-label">Income Account</label>
+                                            <select class="form-select" id="newItemIncomeAccount" required>
+                                                <!-- Will be populated with income accounts -->
+                                                <option value="">Loading accounts...</option>
+                                            </select>
+                                        </div>
+                                        <button type="button" class="btn btn-primary" id="createItemBtn">Create Item</button>
+                                        <div id="createItemStatus" class="mt-2"></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="paymentMethodSetupSection" class="d-none">
+                            <p>The payment method "CHECK" doesn't exist in your QuickBooks company.</p>
+                            
+                            <ul class="nav nav-tabs mb-3" id="paymentMethodSetupTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="existing-payment-method-tab" data-bs-toggle="tab" data-bs-target="#existing-payment-method" type="button" role="tab">
+                                        Use Existing Method
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="new-payment-method-tab" data-bs-toggle="tab" data-bs-target="#new-payment-method" type="button" role="tab">
+                                        Create New Method
+                                    </button>
+                                </li>
+                            </ul>
+                            
+                            <div class="tab-content" id="paymentMethodSetupTabContent">
+                                <!-- Use Existing Payment Method -->
+                                <div class="tab-pane fade show active" id="existing-payment-method" role="tabpanel">
+                                    <p>Select an alternative payment method from existing methods:</p>
+                                    <div class="mb-3">
+                                        <select id="alternativePaymentMethodSelect" class="form-select">
+                                            <!-- Options will be populated dynamically -->
+                                            <option value="">Loading payment methods...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <!-- Create New Payment Method -->
+                                <div class="tab-pane fade" id="new-payment-method" role="tabpanel">
+                                    <p>Create a new payment method in QuickBooks:</p>
+                                    <form id="createPaymentMethodForm">
+                                        <div class="mb-3">
+                                            <label for="newPaymentMethodName" class="form-label">Payment Method Name</label>
+                                            <input type="text" class="form-control" id="newPaymentMethodName" value="Check" required>
+                                        </div>
+                                        <button type="button" class="btn btn-primary" id="createPaymentMethodBtn">Create Payment Method</button>
+                                        <div id="createPaymentMethodStatus" class="mt-2"></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="generalSetupSection" class="d-none">
+                            <p>QuickBooks has reported an error with a required reference. Please check your QuickBooks setup.</p>
+                            <p>Error details: <span id="setupErrorDetail"></span></p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="useAlternativeBtn">
+                            <i class="fas fa-paper-plane me-1"></i>Use Alternative & Send Receipt
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sales Receipt Preview Modal -->
+        <div class="modal fade" id="salesReceiptPreviewModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title">Sales Receipt Preview</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="previewDonationId">
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Customer:</label>
+                                <div id="previewCustomer"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Amount:</label>
+                                <div id="previewAmount"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Payment Method:</label>
+                                <div id="previewPaymentMethod"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Reference No.:</label>
+                                <div id="previewReferenceNo"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Sales Receipt Date:</label>
+                                <div id="previewDate"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Deposit To:</label>
+                                <div id="previewDepositTo"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Service Date:</label>
+                                <div id="previewServiceDate"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Receipt No.:</label>
+                                <div id="previewDocNumber"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="previewItemRef" class="form-label fw-bold">Product/Service:</label>
+                                <select id="previewItemRef" class="form-select">
+                                    <!-- Options will be populated dynamically -->
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Message on Receipt:</label>
+                                <div id="previewMessage"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label class="form-label fw-bold">Description:</label>
+                                <div id="previewDescription" class="text-break"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-success" id="sendReceiptBtn">
+                            <i class="fas fa-paper-plane me-1"></i>Send to QuickBooks
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Batch Sales Receipt Modal -->
+        <div class="modal fade" id="batchReceiptModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title">Send Multiple Sales Receipts</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>This will create sales receipts in QuickBooks for all donations that have:</p>
+                        <ul>
+                            <li>Not already been sent</li>
+                            <li>Have a matched customer</li>
+                            <li>Have a valid gift amount</li>
+                        </ul>
+                        
+                        <div class="mb-3">
+                            <label for="batchItemRef" class="form-label">Default Product/Service for all receipts:</label>
+                            <select id="batchItemRef" class="form-select">
+                                <!-- Options will be populated dynamically -->
+                            </select>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            You can preview and send individual sales receipts by clicking the send button for each donation.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-success" id="sendAllReceiptsBtn">
+                            <i class="fas fa-paper-plane me-1"></i>Send All to QuickBooks
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Bootstrap & jQuery JS -->

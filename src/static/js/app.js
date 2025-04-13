@@ -405,9 +405,470 @@ function updateCustomer(donationId) {
         });
 }
 
-function sendToQBO(donationId) {
+// Product/Service selection and storage
+let qboItems = [];
+let defaultItemId = '1';
+
+function fetchQBOItems() {
+    fetch('/qbo/items/all')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.items) {
+                qboItems = data.items;
+                
+                // Populate both select dropdowns with items
+                populateItemSelects();
+                
+                // Set default item if available
+                if (data.default_item) {
+                    defaultItemId = data.default_item.id;
+                }
+            }
+        })
+        .catch(error => {
+            console.error("Error fetching QBO items:", error);
+        });
+}
+
+function populateItemSelects() {
+    const previewSelect = document.getElementById('previewItemRef');
+    const batchSelect = document.getElementById('batchItemRef');
+    
+    // Clear existing options
+    previewSelect.innerHTML = '';
+    batchSelect.innerHTML = '';
+    
+    // Add items to both selects
+    qboItems.forEach(item => {
+        const previewOption = document.createElement('option');
+        previewOption.value = item.id;
+        previewOption.textContent = item.name;
+        previewSelect.appendChild(previewOption);
+        
+        const batchOption = document.createElement('option');
+        batchOption.value = item.id;
+        batchOption.textContent = item.name;
+        batchSelect.appendChild(batchOption);
+    });
+    
+    // Set default item
+    previewSelect.value = defaultItemId;
+    batchSelect.value = defaultItemId;
+}
+
+// QuickBooks setup handling
+let setupAccountId, setupItemId, setupPaymentMethodId, pendingDonationId;
+let qboAccounts = [];
+// qboItems is already defined above
+let qboPaymentMethods = [];
+
+function showQboSetupModal(type, invalidId, message, detail, donationId) {
+    // Store the donation ID for later use
+    pendingDonationId = donationId;
+    
+    // Hide all setup sections
+    document.getElementById('accountSetupSection').classList.add('d-none');
+    document.getElementById('itemSetupSection').classList.add('d-none');
+    document.getElementById('paymentMethodSetupSection').classList.add('d-none');
+    document.getElementById('generalSetupSection').classList.add('d-none');
+    
+    // Show error message
+    document.getElementById('setupErrorMessage').textContent = message || 'A required QuickBooks element is missing.';
+    
+    // Set hidden fields
+    document.getElementById('setupType').value = type;
+    document.getElementById('setupInvalidId').value = invalidId;
+    document.getElementById('setupDonationId').value = donationId;
+    
+    // Show the appropriate section based on type
+    if (type === 'account') {
+        setupAccountId = invalidId;
+        document.getElementById('missingAccountId').textContent = invalidId;
+        document.getElementById('accountSetupSection').classList.remove('d-none');
+        
+        // Fetch accounts
+        fetchQBOAccounts();
+    } 
+    else if (type === 'item') {
+        setupItemId = invalidId;
+        document.getElementById('missingItemId').textContent = invalidId;
+        document.getElementById('itemSetupSection').classList.remove('d-none');
+        
+        // Items should already be loaded, but refresh just in case
+        fetchQBOItems();
+    }
+    else if (type === 'paymentMethod') {
+        setupPaymentMethodId = invalidId;
+        document.getElementById('paymentMethodSetupSection').classList.remove('d-none');
+        
+        // Fetch payment methods
+        fetchQBOPaymentMethods();
+    }
+    else {
+        // Unknown type, show generic message
+        document.getElementById('setupErrorDetail').textContent = detail || 'Check your QuickBooks configuration.';
+        document.getElementById('generalSetupSection').classList.remove('d-none');
+    }
+    
+    // Show the modal
+    qboSetupModal.show();
+}
+
+function fetchQBOAccounts() {
+    fetch('/qbo/accounts/all')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.accounts) {
+                qboAccounts = data.accounts;
+                
+                // Populate the account select dropdown
+                const accountSelect = document.getElementById('alternativeAccountSelect');
+                accountSelect.innerHTML = '';
+                
+                // Add all accounts as options
+                qboAccounts.forEach(account => {
+                    const option = document.createElement('option');
+                    option.value = account.id;
+                    option.textContent = `${account.name} (${account.type})`;
+                    accountSelect.appendChild(option);
+                });
+                
+                // If Undeposited Funds account exists, select it
+                if (data.undepositedFunds) {
+                    accountSelect.value = data.undepositedFunds.id;
+                }
+                
+                // Also populate the income accounts dropdown for item creation
+                const incomeAccountSelect = document.getElementById('newItemIncomeAccount');
+                if (incomeAccountSelect) {
+                    incomeAccountSelect.innerHTML = '';
+                    
+                    // Add only income accounts as options
+                    const incomeAccounts = qboAccounts.filter(account => 
+                        account.type === 'Income' || account.type.includes('Income'));
+                        
+                    if (incomeAccounts.length > 0) {
+                        incomeAccounts.forEach(account => {
+                            const option = document.createElement('option');
+                            option.value = account.id;
+                            option.textContent = account.name;
+                            incomeAccountSelect.appendChild(option);
+                        });
+                    } else {
+                        incomeAccountSelect.innerHTML = '<option value="">No income accounts found</option>';
+                    }
+                }
+            } else {
+                document.getElementById('alternativeAccountSelect').innerHTML = 
+                    '<option value="">No accounts found</option>';
+                
+                if (document.getElementById('newItemIncomeAccount')) {
+                    document.getElementById('newItemIncomeAccount').innerHTML = 
+                        '<option value="">No income accounts found</option>';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching accounts:', error);
+            document.getElementById('alternativeAccountSelect').innerHTML = 
+                '<option value="">Error loading accounts</option>';
+            
+            if (document.getElementById('newItemIncomeAccount')) {
+                document.getElementById('newItemIncomeAccount').innerHTML = 
+                    '<option value="">Error loading accounts</option>';
+            }
+        });
+}
+
+function createQBOAccount() {
+    // Show loading state
+    const statusElement = document.getElementById('createAccountStatus');
+    statusElement.innerHTML = '<div class="alert alert-info">Creating account...</div>';
+    
+    // Get form values
+    const accountName = document.getElementById('newAccountName').value;
+    const accountType = document.getElementById('newAccountType').value;
+    const accountNumber = document.getElementById('newAccountNumber').value;
+    const accountDescription = document.getElementById('newAccountDescription').value;
+    
+    // Validate name
+    if (!accountName.trim()) {
+        statusElement.innerHTML = '<div class="alert alert-danger">Account name is required</div>';
+        return;
+    }
+    
+    // Prepare data
+    const accountData = {
+        name: accountName,
+        accountType: accountType
+    };
+    
+    // Add optional fields
+    if (accountNumber) accountData.accountNumber = accountNumber;
+    if (accountDescription) accountData.description = accountDescription;
+    
+    // Send request
+    fetch('/qbo/account/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(accountData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            statusElement.innerHTML = '<div class="alert alert-success">Account created successfully!</div>';
+            
+            // Add to dropdown and select it
+            const newAccount = data.account;
+            
+            // If no accounts dropdown exists yet, refresh the accounts list
+            if (!document.getElementById('alternativeAccountSelect').options.length) {
+                fetchQBOAccounts();
+            } else {
+                // Add to dropdown
+                const option = document.createElement('option');
+                option.value = newAccount.id;
+                option.textContent = `${newAccount.name} (${newAccount.type})`;
+                const accountSelect = document.getElementById('alternativeAccountSelect');
+                accountSelect.appendChild(option);
+                accountSelect.value = newAccount.id;
+            }
+            
+            // Switch to "Use Existing" tab
+            document.getElementById('existing-account-tab').click();
+        } else {
+            statusElement.innerHTML = `<div class="alert alert-danger">${data.message || 'Error creating account'}</div>`;
+        }
+    })
+    .catch(error => {
+        console.error('Error creating account:', error);
+        statusElement.innerHTML = '<div class="alert alert-danger">Failed to create account. Please try again.</div>';
+    });
+}
+
+function createQBOItem() {
+    // Show loading state
+    const statusElement = document.getElementById('createItemStatus');
+    statusElement.innerHTML = '<div class="alert alert-info">Creating item...</div>';
+    
+    // Get form values
+    const itemName = document.getElementById('newItemName').value;
+    const itemType = document.getElementById('newItemType').value;
+    const itemDescription = document.getElementById('newItemDescription').value;
+    const itemPrice = document.getElementById('newItemPrice').value;
+    const itemIncomeAccount = document.getElementById('newItemIncomeAccount').value;
+    
+    // Validate required fields
+    if (!itemName.trim()) {
+        statusElement.innerHTML = '<div class="alert alert-danger">Item name is required</div>';
+        return;
+    }
+    
+    if (!itemIncomeAccount) {
+        statusElement.innerHTML = '<div class="alert alert-danger">Income account is required</div>';
+        return;
+    }
+    
+    // Prepare data
+    const itemData = {
+        name: itemName,
+        type: itemType,
+        incomeAccountId: itemIncomeAccount
+    };
+    
+    // Add optional fields
+    if (itemDescription) itemData.description = itemDescription;
+    if (itemPrice) itemData.unitPrice = parseFloat(itemPrice);
+    
+    // Send request
+    fetch('/qbo/item/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(itemData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            statusElement.innerHTML = '<div class="alert alert-success">Item created successfully!</div>';
+            
+            // Add to dropdown and select it
+            const newItem = data.item;
+            
+            // Refresh items list to include the new item
+            qboItems.push(newItem);
+            
+            // Update the items dropdown
+            const itemSelect = document.getElementById('alternativeItemSelect');
+            
+            // Add to dropdown
+            const option = document.createElement('option');
+            option.value = newItem.id;
+            option.textContent = newItem.name;
+            itemSelect.appendChild(option);
+            itemSelect.value = newItem.id;
+            
+            // Also add to preview and batch item selects
+            populateItemSelects();
+            
+            // Switch to "Use Existing" tab
+            document.getElementById('existing-item-tab').click();
+        } else {
+            statusElement.innerHTML = `<div class="alert alert-danger">${data.message || 'Error creating item'}</div>`;
+        }
+    })
+    .catch(error => {
+        console.error('Error creating item:', error);
+        statusElement.innerHTML = '<div class="alert alert-danger">Failed to create item. Please try again.</div>';
+    });
+}
+
+function createQBOPaymentMethod() {
+    // Show loading state
+    const statusElement = document.getElementById('createPaymentMethodStatus');
+    statusElement.innerHTML = '<div class="alert alert-info">Creating payment method...</div>';
+    
+    // Get form values
+    const paymentMethodName = document.getElementById('newPaymentMethodName').value;
+    
+    // Validate name
+    if (!paymentMethodName.trim()) {
+        statusElement.innerHTML = '<div class="alert alert-danger">Payment method name is required</div>';
+        return;
+    }
+    
+    // Prepare data
+    const paymentMethodData = {
+        name: paymentMethodName
+    };
+    
+    // Send request
+    fetch('/qbo/payment-method/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(paymentMethodData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            statusElement.innerHTML = '<div class="alert alert-success">Payment method created successfully!</div>';
+            
+            // Add to dropdown and select it
+            const newPaymentMethod = data.paymentMethod;
+            
+            // If no payment methods dropdown exists yet, refresh the list
+            if (!document.getElementById('alternativePaymentMethodSelect').options.length) {
+                fetchQBOPaymentMethods();
+            } else {
+                // Add to dropdown
+                const option = document.createElement('option');
+                option.value = newPaymentMethod.id;
+                option.textContent = newPaymentMethod.name;
+                const methodSelect = document.getElementById('alternativePaymentMethodSelect');
+                methodSelect.appendChild(option);
+                methodSelect.value = newPaymentMethod.id;
+            }
+            
+            // Switch to "Use Existing" tab
+            document.getElementById('existing-payment-method-tab').click();
+        } else {
+            statusElement.innerHTML = `<div class="alert alert-danger">${data.message || 'Error creating payment method'}</div>`;
+        }
+    })
+    .catch(error => {
+        console.error('Error creating payment method:', error);
+        statusElement.innerHTML = '<div class="alert alert-danger">Failed to create payment method. Please try again.</div>';
+    });
+}
+
+function fetchQBOPaymentMethods() {
+    fetch('/qbo/payment-methods/all')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.paymentMethods) {
+                qboPaymentMethods = data.paymentMethods;
+                
+                // Populate the payment method select dropdown
+                const methodSelect = document.getElementById('alternativePaymentMethodSelect');
+                methodSelect.innerHTML = '';
+                
+                // Add all payment methods as options
+                qboPaymentMethods.forEach(method => {
+                    const option = document.createElement('option');
+                    option.value = method.id;
+                    option.textContent = method.name;
+                    methodSelect.appendChild(option);
+                });
+                
+                // If Check payment method exists, select it
+                if (data.checkMethod) {
+                    methodSelect.value = data.checkMethod.id;
+                }
+            } else {
+                document.getElementById('alternativePaymentMethodSelect').innerHTML = 
+                    '<option value="">No payment methods found</option>';
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching payment methods:', error);
+            document.getElementById('alternativePaymentMethodSelect').innerHTML = 
+                '<option value="">Error loading payment methods</option>';
+        });
+}
+
+function useAlternative() {
+    // Get the setup type
+    const setupType = document.getElementById('setupType').value;
+    const donationId = document.getElementById('setupDonationId').value;
+    
+    // Get the selected alternative based on setup type
+    let alternativeId;
+    let customFields = {};
+    
+    if (setupType === 'account') {
+        alternativeId = document.getElementById('alternativeAccountSelect').value;
+        customFields.depositToAccountId = alternativeId;
+    } 
+    else if (setupType === 'item') {
+        alternativeId = document.getElementById('alternativeItemSelect').value;
+        customFields.itemRef = alternativeId;
+    }
+    else if (setupType === 'paymentMethod') {
+        alternativeId = document.getElementById('alternativePaymentMethodSelect').value;
+        customFields.paymentMethodId = alternativeId;
+    }
+    
+    // Close the setup modal
+    qboSetupModal.hide();
+    
+    // Try sending again with the alternative
+    trySendWithAlternative(donationId, customFields);
+}
+
+function trySendWithAlternative(donationId, customFields) {
+    // Get the standard itemRef (if not overridden in customFields)
+    if (!customFields.itemRef) {
+        customFields.itemRef = document.getElementById('previewItemRef').value || defaultItemId || '1';
+    }
+    
+    // Log what we're sending
+    console.log(`Sending sales receipt with alternative settings: ${JSON.stringify(customFields)}`);
+    
+    // Send the request with custom fields
     fetch(`/qbo/sales-receipt/${donationId}`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(customFields)
     })
         .then(response => response.json())
         .then(data => {
@@ -421,8 +882,22 @@ function sendToQBO(donationId) {
                     // Re-render the table
                     renderDonationTable();
                     
+                    // Hide the preview modal if it's open
+                    salesReceiptPreviewModal.hide();
+                    // Hide the setup modal
+                    qboSetupModal.hide();
+                    
                     showToast('Sales receipt created successfully in QBO');
                 }
+            } else if (data.requiresSetup) {
+                // Another setup issue was encountered
+                showQboSetupModal(
+                    data.setupType, 
+                    data.invalidId, 
+                    data.message,
+                    data.detail,
+                    donationId
+                );
             } else {
                 showToast(data.message || 'Error creating sales receipt in QBO', 'danger');
             }
@@ -433,40 +908,147 @@ function sendToQBO(donationId) {
         });
 }
 
-function sendAllToQBO() {
-    fetch('/qbo/sales-receipt/batch', {
-        method: 'POST'
+function showSalesReceiptPreview(donationId) {
+    const donation = donations.find(d => d.internalId === donationId);
+    if (!donation) return;
+    
+    // Store donation ID for later use
+    document.getElementById('previewDonationId').value = donationId;
+    
+    // Show loading state
+    const previewBtn = document.querySelector(`.send-to-qbo-btn[data-id="${donationId}"]`);
+    if (previewBtn) {
+        previewBtn.disabled = true;
+        previewBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+    
+    // Make sure we have the latest items before showing the preview
+    fetchQBOItems();
+    
+    // Get the currently selected item ref - use '1' as the default if no item is selected
+    // We need to ensure we always have a valid itemRef
+    const itemRef = document.getElementById('previewItemRef').value || defaultItemId || '1';
+    
+    // Fetch preview data
+    fetch(`/qbo/sales-receipt/preview/${donationId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ itemRef })
     })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Count successes and failures
-                const successCount = data.results.filter(r => r.success).length;
-                const failureCount = data.results.filter(r => !r.success).length;
+                const preview = data.salesReceiptPreview;
                 
-                // Update UI with results
-                if (successCount > 0) {
-                    // Update the donations array with updated status
-                    data.results.forEach(result => {
-                        if (result.success) {
-                            const donation = donations.find(d => d.internalId === result.internalId);
-                            if (donation) {
-                                donation.qbSyncStatus = 'Sent';
-                                donation.qboSalesReceiptId = result.salesReceiptId;
-                            }
+                // Populate preview fields
+                document.getElementById('previewCustomer').textContent = preview.customerName;
+                document.getElementById('previewAmount').textContent = formatCurrency(preview.amount);
+                document.getElementById('previewPaymentMethod').textContent = preview.paymentMethod;
+                document.getElementById('previewReferenceNo').textContent = preview.referenceNo;
+                document.getElementById('previewDate').textContent = preview.date;
+                document.getElementById('previewDepositTo').textContent = preview.depositTo;
+                document.getElementById('previewServiceDate').textContent = preview.serviceDate;
+                document.getElementById('previewDocNumber').textContent = preview.docNumber;
+                document.getElementById('previewMessage').textContent = preview.message;
+                document.getElementById('previewDescription').textContent = preview.description;
+                
+                // Set the item ref if specified
+                if (preview.itemRef) {
+                    document.getElementById('previewItemRef').value = preview.itemRef;
+                }
+                
+                // Show the modal
+                salesReceiptPreviewModal.show();
+            } else {
+                showToast(data.message || 'Error previewing sales receipt', 'danger');
+            }
+            
+            // Reset button state
+            if (previewBtn) {
+                previewBtn.disabled = false;
+                previewBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+            }
+        })
+        .catch(error => {
+            console.error('Error previewing sales receipt:', error);
+            showToast('Error previewing sales receipt', 'danger');
+            
+            // Reset button state
+            if (previewBtn) {
+                previewBtn.disabled = false;
+                previewBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+            }
+        });
+}
+
+function sendToQBO(donationId) {
+    // First show a preview before sending
+    showSalesReceiptPreview(donationId);
+}
+
+function showBatchReceiptModal() {
+    // Make sure we have the latest items
+    fetchQBOItems();
+    
+    // Show the modal
+    batchReceiptModal.show();
+}
+
+function sendAllToQBO() {
+    // Get the default item ref - ensure we have a valid value (never send empty)
+    const defaultItemRef = document.getElementById('batchItemRef').value || defaultItemId || '1';
+    
+    // Log what we're sending for debugging
+    console.log(`Sending batch sales receipts with default itemRef: ${defaultItemRef}`);
+    
+    // Close the modal
+    batchReceiptModal.hide();
+    
+    // Show processing toast
+    showToast('Processing sales receipts batch...', 'info');
+    
+    fetch('/qbo/sales-receipt/batch', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ defaultItemRef })
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const summary = data.summary;
+                
+                // Update the UI with results
+                data.results.forEach(result => {
+                    if (result.success) {
+                        const donation = donations.find(d => d.internalId === result.internalId);
+                        if (donation) {
+                            donation.qbSyncStatus = 'Sent';
+                            donation.qboSalesReceiptId = result.salesReceiptId;
                         }
-                    });
-                    
-                    // Re-render the table
-                    renderDonationTable();
-                }
+                    } else {
+                        const donation = donations.find(d => d.internalId === result.internalId);
+                        if (donation) {
+                            donation.qbSyncStatus = 'Error';
+                            donation.qbSyncError = result.message;
+                        }
+                    }
+                });
                 
-                // Show toast with results
-                let message = `${successCount} sales receipt(s) created successfully in QBO`;
-                if (failureCount > 0) {
-                    message += `, ${failureCount} failed`;
+                // Re-render the table
+                renderDonationTable();
+                
+                // Show summary toast
+                let message = `Created ${summary.success} sales receipt(s) in QBO`;
+                if (summary.failure > 0) {
+                    message += `, ${summary.failure} failed. Check error messages in the table.`;
+                    showToast(message, 'warning');
+                } else {
+                    showToast(message, 'success');
                 }
-                showToast(message, failureCount > 0 ? 'warning' : 'success');
             } else {
                 showToast('Error processing batch sales receipts', 'danger');
             }
@@ -1123,8 +1705,27 @@ document.addEventListener('DOMContentLoaded', function() {
     customerModal = new bootstrap.Modal(document.getElementById('customerModal'));
     customerMatchModal = new bootstrap.Modal(document.getElementById('customerMatchModal'));
     qboConnectionModal = new bootstrap.Modal(document.getElementById('qboConnectionModal'));
+    qboSetupModal = new bootstrap.Modal(document.getElementById('qboSetupModal'));
+    salesReceiptPreviewModal = new bootstrap.Modal(document.getElementById('salesReceiptPreviewModal'));
+    batchReceiptModal = new bootstrap.Modal(document.getElementById('batchReceiptModal'));
     
-    // No longer needed with the popup window approach
+    // Set up QBO setup modal buttons
+    document.getElementById('createAccountBtn').addEventListener('click', createQBOAccount);
+    document.getElementById('createItemBtn').addEventListener('click', createQBOItem);
+    document.getElementById('createPaymentMethodBtn').addEventListener('click', createQBOPaymentMethod);
+    document.getElementById('useAlternativeBtn').addEventListener('click', useAlternative);
+    document.getElementById('sendReceiptBtn').addEventListener('click', function() {
+        const donationId = document.getElementById('previewDonationId').value;
+        if (donationId) {
+            sendToQBO(donationId);
+        }
+    });
+    document.getElementById('sendAllReceiptsBtn').addEventListener('click', sendAllToQBO);
+    
+    // Add event listener for batch modal button
+    document.getElementById('sendAllQBOBtn').addEventListener('click', function() {
+        showBatchReceiptModal();
+    });
     
     // Set up QBO connection modal buttons
     document.getElementById('proceedToQboAuthBtn').addEventListener('click', function() {
