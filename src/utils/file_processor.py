@@ -313,51 +313,61 @@ class FileProcessor:
                             break
                 
                 if customer:
-                    # Compare addresses to detect changes
-                    address_match = True
-                    if (donation.get('Address - Line 1') and 
-                        donation.get('Address - Line 1') != customer.get('BillAddr', {}).get('Line1', '')):
-                        address_match = False
-                        print("Address mismatch detected")
+                    print(f"Verifying match between {donation.get('Donor Name')} and {customer.get('DisplayName')}")
                     
-                    # Update donation with customer information
-                    donation['customerLookup'] = customer.get('DisplayName', '')
-                    donation['qboCustomerId'] = customer.get('Id')
-                    donation['qbCustomerStatus'] = 'Matched' if address_match else 'Matched-AddressMismatch'
-                    donation['matchMethod'] = match_method
+                    # Use Gemini to verify the match and enhance the data
+                    verification_result = self.gemini_service.verify_customer_match(donation, customer)
                     
-                    # Check if any of the address fields need updating
-                    needs_update = False
-                    update_fields = []
-                    
-                    # Compare address fields if we have them in the donation
-                    if donation.get('Address - Line 1') and 'BillAddr' in customer:
-                        bill_addr = customer.get('BillAddr', {})
+                    # First, check if this is a valid match according to Gemini
+                    if verification_result.get('validMatch', False):
+                        print(f"Valid match confirmed with {verification_result.get('matchConfidence', 'unknown')} confidence")
                         
-                        # Check address line 1
-                        if donation.get('Address - Line 1') != bill_addr.get('Line1', ''):
-                            needs_update = True
-                            update_fields.append('Address Line 1')
+                        # Update donation with customer information
+                        donation['customerLookup'] = customer.get('DisplayName', '')
+                        donation['qboCustomerId'] = customer.get('Id')
+                        donation['matchMethod'] = match_method
+                        donation['matchConfidence'] = verification_result.get('matchConfidence')
                         
-                        # Check city
-                        if donation.get('City') and donation.get('City') != bill_addr.get('City', ''):
-                            needs_update = True
-                            update_fields.append('City')
-                        
-                        # Check state
-                        if donation.get('State') and donation.get('State') != bill_addr.get('CountrySubDivisionCode', ''):
-                            needs_update = True
-                            update_fields.append('State')
-                        
-                        # Check ZIP
-                        if donation.get('ZIP') and donation.get('ZIP') != bill_addr.get('PostalCode', ''):
-                            needs_update = True
-                            update_fields.append('ZIP')
-                    
-                    if needs_update:
-                        donation['addressNeedsUpdate'] = True
-                        donation['addressUpdateFields'] = ', '.join(update_fields)
-                        print(f"Customer record needs address update. Fields: {donation['addressUpdateFields']}")
+                        # Check if address is materially different (requiring user attention)
+                        if verification_result.get('addressMateriallyDifferent', False):
+                            print("Address is materially different - will need user confirmation")
+                            donation['qbCustomerStatus'] = 'Matched-AddressNeedsReview'
+                            donation['addressMateriallyDifferent'] = True
+                            
+                            # Preserve both address versions for user to choose
+                            if 'BillAddr' in customer:
+                                bill_addr = customer.get('BillAddr', {})
+                                donation['qboAddress'] = {
+                                    'Line1': bill_addr.get('Line1', ''),
+                                    'City': bill_addr.get('City', ''),
+                                    'State': bill_addr.get('CountrySubDivisionCode', ''),
+                                    'ZIP': bill_addr.get('PostalCode', '')
+                                }
+                        else:
+                            # Address is not materially different, use the enhanced data
+                            donation['qbCustomerStatus'] = 'Matched'
+                            
+                            # Update the donation with the enhanced data from verification
+                            if 'enhancedData' in verification_result:
+                                # Replace the donation with the enhanced data, but preserve
+                                # any fields that should always come from the extracted data
+                                preserved_fields = ['Gift Amount', 'Gift Date', 'Check No', 'Memo']
+                                preserved_values = {field: donation.get(field) for field in preserved_fields if field in donation}
+                                
+                                # Update with enhanced data
+                                enhanced_data = verification_result['enhancedData']
+                                for key, value in enhanced_data.items():
+                                    donation[key] = value
+                                    
+                                # Restore preserved fields
+                                for field, value in preserved_values.items():
+                                    donation[field] = value
+                    else:
+                        # This is not a valid match despite the fuzzy matching
+                        mismatch_reason = verification_result.get('mismatchReason', 'No specific reason provided')
+                        print(f"Not a valid match: {mismatch_reason}")
+                        donation['qbCustomerStatus'] = 'New'
+                        donation['matchRejectionReason'] = mismatch_reason
                 else:
                     print(f"No customer found for donation from: {donation.get('Donor Name')}")
                     donation['qbCustomerStatus'] = 'New'

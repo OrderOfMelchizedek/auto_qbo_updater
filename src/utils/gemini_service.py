@@ -98,7 +98,71 @@ class GeminiService:
             print(f"Error calling Gemini API: {str(e)}")
             return None
     
-    # AI-assisted customer matching has been removed in favor of direct QBO API matching
+    def verify_customer_match(self, extracted_donor: Dict[str, Any], qbo_customer: Dict[str, Any]) -> Dict[str, Any]:
+        """Verify if the QuickBooks customer is a match for the extracted donor data.
+        
+        This uses Gemini to intelligently verify the match and enrich the donor data
+        with information from QuickBooks, handling discrepancies appropriately.
+        
+        Args:
+            extracted_donor: Dictionary of extracted donor data
+            qbo_customer: Dictionary of QuickBooks customer data
+            
+        Returns:
+            Dictionary containing verification results and enhanced data if it's a match
+        """
+        try:
+            # Format the input data as JSON strings for the prompt
+            extracted_json = json.dumps(extracted_donor, indent=2)
+            qbo_json = json.dumps(qbo_customer, indent=2)
+            
+            # Get the verification prompt with placeholders replaced
+            verification_prompt = self.prompt_manager.get_prompt('customer_verification_prompt', {
+                'extracted_data': extracted_json,
+                'qbo_data': qbo_json
+            })
+            
+            # Set up the model
+            model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
+            
+            # Call Gemini API with verification prompt
+            print("Verifying customer match with Gemini")
+            response = model.generate_content(
+                contents=[verification_prompt],
+                generation_config=genai.GenerationConfig(
+                    temperature=0.1  # Lower temperature for more deterministic response
+                )
+            )
+            
+            # Extract response text
+            text_response = response.text
+            
+            if text_response:
+                # Use the helper method to extract JSON
+                verification_result = self._extract_json_from_text(text_response)
+                if verification_result:
+                    print(f"Match verification result: valid match = {verification_result.get('validMatch', False)}")
+                    if verification_result.get('validMatch') == False:
+                        print(f"Mismatch reason: {verification_result.get('mismatchReason', 'No reason provided')}")
+                    if verification_result.get('addressMateriallyDifferent'):
+                        print("Address is materially different - will need user input")
+                    return verification_result
+            
+            # If verification failed, return a default result indicating no match
+            print("Failed to verify customer match with Gemini")
+            return {
+                "validMatch": False,
+                "mismatchReason": "Verification process failed",
+                "matchConfidence": "none"
+            }
+        
+        except Exception as e:
+            print(f"Error verifying customer match: {str(e)}")
+            return {
+                "validMatch": False,
+                "mismatchReason": f"Error during verification: {str(e)}",
+                "matchConfidence": "none"
+            }
             
     def extract_donation_data(self, file_path: str, custom_prompt: str = None) -> Optional[Dict[str, Any]]:
         """Extract donation data from an image or PDF using Gemini.
