@@ -154,10 +154,6 @@ function renderDonationTable() {
         
         // Only show QBO actions for LLM-extracted donations
         if (donation.dataSource === 'LLM') {
-            // Check Customer button
-            actionsHtml += `<button class="btn btn-sm btn-outline-primary me-1 check-customer-btn" data-id="${donation.internalId}" title="Check if customer exists in QBO">
-                <i class="fas fa-user-check"></i>
-            </button>`;
             
             // Create or update customer buttons, depending on status
             if (donation.qbCustomerStatus === 'New') {
@@ -197,13 +193,6 @@ function renderDonationTable() {
 }
 
 function attachActionButtonListeners() {
-    // Check customer button
-    document.querySelectorAll('.check-customer-btn').forEach(button => {
-        button.addEventListener('click', function() {
-            const donationId = this.dataset.id;
-            checkCustomer(donationId);
-        });
-    });
     
     // Create customer button
     document.querySelectorAll('.create-customer-btn').forEach(button => {
