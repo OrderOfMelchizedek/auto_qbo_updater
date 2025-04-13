@@ -27,6 +27,7 @@ You are a helpful assistant verifying whether a donor from an extracted document
    - Fill in any missing fields in the extracted donor data with information from QuickBooks
    - For small discrepancies (minor spelling differences, formatting differences), use the QuickBooks data
    - Keep the original `Gift Amount`, `Gift Date`, and donation-specific fields from the extracted data
+   - Always set `customerLookup` field to the DisplayName from the QuickBooks customer data
 
 3. **Address Comparison**: Compare the address information carefully:
    - If addresses have minor discrepancies (e.g., "Street" vs "St.", slightly different formatting), use QuickBooks data

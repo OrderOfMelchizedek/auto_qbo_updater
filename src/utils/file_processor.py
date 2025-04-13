@@ -362,6 +362,10 @@ class FileProcessor:
                                 # Restore preserved fields
                                 for field, value in preserved_values.items():
                                     donation[field] = value
+                                    
+                                # Ensure customerLookup is always set to QBO DisplayName 
+                                # (in case it was overwritten by enhancedData)
+                                donation['customerLookup'] = customer.get('DisplayName', '')
                     else:
                         # This is not a valid match despite the fuzzy matching
                         mismatch_reason = verification_result.get('mismatchReason', 'No specific reason provided')
