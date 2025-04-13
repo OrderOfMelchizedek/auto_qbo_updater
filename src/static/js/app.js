@@ -163,8 +163,13 @@ function renderDonationTable() {
         // Only show QBO actions for LLM-extracted donations
         if (donation.dataSource === 'LLM') {
             
-            // Create or update customer buttons, depending on status
+            // Create, manual match or update customer buttons, depending on status
             if (donation.qbCustomerStatus === 'New') {
+                // Manual match button to select from existing customers
+                actionsHtml += `<button class="btn btn-sm btn-outline-primary me-1 manual-match-btn" data-id="${donation.internalId}" title="Manually select customer from QBO">
+                    <i class="fas fa-link"></i>
+                </button>`;
+                // Create new customer button
                 actionsHtml += `<button class="btn btn-sm btn-outline-info me-1 create-customer-btn" data-id="${donation.internalId}" title="Create new customer in QBO">
                     <i class="fas fa-user-plus"></i>
                 </button>`;
@@ -201,6 +206,13 @@ function renderDonationTable() {
 }
 
 function attachActionButtonListeners() {
+    // Manual match button
+    document.querySelectorAll('.manual-match-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const donationId = this.dataset.id;
+            showManualMatchModal(donationId);
+        });
+    });
     
     // Create customer button
     document.querySelectorAll('.create-customer-btn').forEach(button => {
@@ -933,11 +945,183 @@ function checkQBOAuthStatus() {
         });
 }
 
+// Manual customer matching functionality
+function showManualMatchModal(donationId) {
+    // Store the donation ID
+    document.getElementById('matchDonationId').value = donationId;
+    
+    // Get the donation data for reference
+    const donation = donations.find(d => d.internalId === donationId);
+    if (!donation) return;
+    
+    // Show the modal
+    customerMatchModal.show();
+    
+    // Show loading indicator
+    document.getElementById('customerLoadingIndicator').classList.remove('d-none');
+    document.getElementById('noCustomersFound').classList.add('d-none');
+    document.querySelector('#customerSelectionTable tbody').innerHTML = '';
+    
+    // Fetch all customers from QBO
+    fetchAllCustomers();
+    
+    // Set up search input handler
+    const searchInput = document.getElementById('customerSearchInput');
+    searchInput.value = donation.customerLookup || donation['Donor Name'] || '';
+    
+    // Trigger search with the initial value after customers are loaded
+    setTimeout(() => {
+        searchInput.dispatchEvent(new Event('input'));
+    }, 500);
+}
+
+function fetchAllCustomers() {
+    fetch('/qbo/customers/all')
+        .then(response => response.json())
+        .then(data => {
+            // Hide loading indicator
+            document.getElementById('customerLoadingIndicator').classList.add('d-none');
+            
+            if (data.success && data.customers && data.customers.length > 0) {
+                // Store customers globally for filtering
+                window.qboCustomers = data.customers;
+                
+                // Populate the table initially
+                populateCustomerTable(data.customers);
+                
+                // Set up search filtering
+                document.getElementById('customerSearchInput').addEventListener('input', function() {
+                    const searchTerm = this.value.toLowerCase();
+                    filterCustomers(searchTerm);
+                });
+            } else {
+                document.getElementById('noCustomersFound').classList.remove('d-none');
+                document.getElementById('noCustomersFound').textContent = data.message || 'No customers found in QBO';
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching customers:', error);
+            document.getElementById('customerLoadingIndicator').classList.add('d-none');
+            document.getElementById('noCustomersFound').classList.remove('d-none');
+            document.getElementById('noCustomersFound').textContent = 'Error loading customers';
+        });
+}
+
+function populateCustomerTable(customers) {
+    const tbody = document.querySelector('#customerSelectionTable tbody');
+    tbody.innerHTML = '';
+    
+    if (customers.length === 0) {
+        document.getElementById('noCustomersFound').classList.remove('d-none');
+        return;
+    }
+    
+    document.getElementById('noCustomersFound').classList.add('d-none');
+    
+    // Only show first 100 to prevent browser slowdowns
+    const displayCustomers = customers.slice(0, 100);
+    
+    displayCustomers.forEach(customer => {
+        const tr = document.createElement('tr');
+        
+        // Name cell
+        const nameCell = document.createElement('td');
+        nameCell.textContent = customer.name;
+        tr.appendChild(nameCell);
+        
+        // Address cell
+        const addressCell = document.createElement('td');
+        addressCell.textContent = customer.address;
+        tr.appendChild(addressCell);
+        
+        // Action cell
+        const actionCell = document.createElement('td');
+        const selectBtn = document.createElement('button');
+        selectBtn.className = 'btn btn-sm btn-primary';
+        selectBtn.textContent = 'Select';
+        selectBtn.dataset.id = customer.id;
+        selectBtn.addEventListener('click', function() {
+            manualMatchCustomer(this.dataset.id);
+        });
+        actionCell.appendChild(selectBtn);
+        tr.appendChild(actionCell);
+        
+        tbody.appendChild(tr);
+    });
+    
+    // Show message if showing partial results
+    if (customers.length > 100) {
+        const infoRow = document.createElement('tr');
+        const infoCell = document.createElement('td');
+        infoCell.colSpan = 3;
+        infoCell.className = 'text-center text-muted';
+        infoCell.textContent = `Showing 100 of ${customers.length} results. Please refine your search to see more specific results.`;
+        infoRow.appendChild(infoCell);
+        tbody.appendChild(infoRow);
+    }
+}
+
+function filterCustomers(searchTerm) {
+    if (!window.qboCustomers) return;
+    
+    let filtered;
+    if (!searchTerm) {
+        filtered = window.qboCustomers;
+    } else {
+        filtered = window.qboCustomers.filter(customer => 
+            customer.name.toLowerCase().includes(searchTerm) ||
+            customer.address.toLowerCase().includes(searchTerm)
+        );
+    }
+    
+    populateCustomerTable(filtered);
+}
+
+function manualMatchCustomer(customerId) {
+    const donationId = document.getElementById('matchDonationId').value;
+    
+    fetch(`/qbo/customer/manual-match/${donationId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ customerId })
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update the donation in the UI
+                const donation = donations.find(d => d.internalId === donationId);
+                if (donation) {
+                    donation.qbCustomerStatus = 'Matched';
+                    donation.qboCustomerId = data.customer.id;
+                    donation.customerLookup = data.customer.name;
+                    donation.matchMethod = 'manual';
+                }
+                
+                // Hide the modal
+                customerMatchModal.hide();
+                
+                // Re-render the table
+                renderDonationTable();
+                
+                showToast('Customer manually matched successfully');
+            } else {
+                showToast(data.message || 'Error matching customer', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error matching customer:', error);
+            showToast('Error manually matching customer', 'danger');
+        });
+}
+
 // Document ready
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize Bootstrap modals
     reportModal = new bootstrap.Modal(document.getElementById('reportModal'));
     customerModal = new bootstrap.Modal(document.getElementById('customerModal'));
+    customerMatchModal = new bootstrap.Modal(document.getElementById('customerMatchModal'));
     qboConnectionModal = new bootstrap.Modal(document.getElementById('qboConnectionModal'));
     
     // No longer needed with the popup window approach

@@ -359,6 +359,135 @@ def find_customer(donation_id):
     
     return jsonify({'success': False, 'message': 'Donation not found'}), 404
 
+@app.route('/qbo/customers/all', methods=['GET'])
+def get_all_customers():
+    """Get all QuickBooks customers for manual matching."""
+    try:
+        # Check if authenticated
+        if not qbo_service.access_token or not qbo_service.realm_id:
+            return jsonify({
+                'success': False,
+                'message': 'Not authenticated with QuickBooks Online'
+            }), 401
+        
+        # Get all customers
+        all_customers = qbo_service.get_all_customers()
+        
+        # Prepare simplified customer data for the UI
+        customers = []
+        for customer in all_customers:
+            # Extract address if available
+            address = "No address on file"
+            if customer.get('BillAddr'):
+                bill_addr = customer.get('BillAddr', {})
+                addr_parts = []
+                if bill_addr.get('Line1'):
+                    addr_parts.append(bill_addr.get('Line1'))
+                if bill_addr.get('City'):
+                    addr_parts.append(bill_addr.get('City'))
+                if bill_addr.get('CountrySubDivisionCode'):
+                    addr_parts.append(bill_addr.get('CountrySubDivisionCode'))
+                if bill_addr.get('PostalCode'):
+                    addr_parts.append(bill_addr.get('PostalCode'))
+                
+                if addr_parts:
+                    address = ", ".join(addr_parts)
+            
+            customers.append({
+                'id': customer.get('Id'),
+                'name': customer.get('DisplayName', ''),
+                'address': address,
+                'syncToken': customer.get('SyncToken', '0')
+            })
+        
+        # Sort customers by name for easier browsing
+        customers.sort(key=lambda x: x['name'].lower())
+        
+        return jsonify({
+            'success': True,
+            'customers': customers
+        })
+        
+    except Exception as e:
+        print(f"Error fetching customers: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching customers: {str(e)}'
+        }), 500
+
+@app.route('/qbo/customer/manual-match/<donation_id>', methods=['POST'])
+def manual_match_customer(donation_id):
+    """Manually match a donation to a QBO customer."""
+    try:
+        # Get donation from session
+        donations = session.get('donations', [])
+        donation_index = None
+        
+        for i, donation in enumerate(donations):
+            if donation['internalId'] == donation_id:
+                donation_index = i
+                break
+        
+        if donation_index is None:
+            return jsonify({
+                'success': False,
+                'message': 'Donation not found'
+            }), 404
+        
+        # Get customer ID from request
+        if not request.json or 'customerId' not in request.json:
+            return jsonify({
+                'success': False,
+                'message': 'Customer ID is required'
+            }), 400
+            
+        customer_id = request.json['customerId']
+        
+        # Get customer details from QBO
+        query = f"SELECT * FROM Customer WHERE Id = '{customer_id}'"
+        encoded_query = quote(query)
+        url = f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
+        response = requests.get(url, headers=qbo_service._get_auth_headers())
+        
+        customer = None
+        if response.status_code == 200:
+            data = response.json()
+            if data['QueryResponse'].get('Customer'):
+                customer = data['QueryResponse']['Customer'][0]
+        
+        if not customer:
+            return jsonify({
+                'success': False,
+                'message': 'Customer not found in QBO'
+            }), 404
+        
+        # Update donation with customer info
+        donation = donations[donation_index]
+        donation['qbCustomerStatus'] = 'Matched'
+        donation['qboCustomerId'] = customer.get('Id')
+        donation['customerLookup'] = customer.get('DisplayName', '')
+        donation['matchMethod'] = 'manual'
+        donation['matchConfidence'] = 'high'
+        
+        # Update session
+        session['donations'] = donations
+        
+        return jsonify({
+            'success': True,
+            'customer': {
+                'id': customer.get('Id'),
+                'name': customer.get('DisplayName', ''),
+                'syncToken': customer.get('SyncToken', '0')
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error manually matching customer: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error manually matching customer: {str(e)}'
+        }), 500
+
 @app.route('/qbo/customer/create/<donation_id>', methods=['POST'])
 def create_customer(donation_id):
     """Create a new QBO customer from donation information."""
