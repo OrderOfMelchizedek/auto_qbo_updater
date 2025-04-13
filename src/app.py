@@ -600,28 +600,139 @@ def create_sales_receipt(donation_id):
                         'message': 'Customer lookup field is empty'
                     }), 400
             
+            # Get the item ref from request or use default
+            # Ensure we always have a valid itemRef to avoid QBO API errors
+            item_ref = request.json.get('itemRef')
+            if not item_ref or item_ref.strip() == '':
+                item_ref = '1'  # Default fallback
+            print(f"Using item_ref: {item_ref} for donation {donation_id}")
+            
+            # Format dates with validation
+            today = pd.Timestamp.now().strftime('%Y-%m-%d')
+            
+            # Validate Gift Date
+            gift_date = donation.get('Gift Date', '')
+            try:
+                # Check if it's a valid date and format it
+                if gift_date:
+                    pd.to_datetime(gift_date)
+            except:
+                # If invalid date, use today's date
+                print(f"Invalid Gift Date: {gift_date}, using today's date")
+                gift_date = today
+            
+            # Validate Check Date
+            check_date = donation.get('Check Date', '')
+            try:
+                # Check if it's a valid date and format it
+                if check_date:
+                    pd.to_datetime(check_date)
+            except:
+                # If invalid date, use gift date or today
+                print(f"Invalid Check Date: {check_date}, using Gift Date or today")
+                check_date = gift_date if gift_date else today
+            
+            # Get other fields with validation
+            check_no = donation.get('Check No.', 'N/A')
+            # Validate Gift Amount
+            try:
+                gift_amount = float(donation.get('Gift Amount', 0))
+            except ValueError:
+                return jsonify({
+                    'success': False,
+                    'message': 'Invalid Gift Amount, must be a number'
+                }), 400
+            
+            last_name = donation.get('Last Name', '')
+            first_name = donation.get('First Name', '')
+            memo = donation.get('Memo', '')
+            
+            # Format description, limiting to reasonable length
+            description = f"{check_no}_{gift_date}_{gift_amount}_{last_name}_{first_name}"
+            if memo:
+                description += f"_{memo}"
+            
+            # Truncate if too long - QuickBooks has limits
+            if len(description) > 1000:
+                description = description[:997] + "..."
+            
+            # Format receipt number
+            doc_number = f"{today}_{check_no}"
+            if len(doc_number) > 21:  # QB has a 21 char limit
+                doc_number = doc_number[:21]
+            
+            # Check for custom account ID from setup modal
+            deposit_account_id = request.json.get('depositToAccountId', '12000')
+            payment_method_id = request.json.get('paymentMethodId', 'CHECK')
+            
+            # Log custom fields if provided
+            if request.json.get('depositToAccountId'):
+                print(f"Using custom deposit account ID: {deposit_account_id}")
+            if request.json.get('paymentMethodId'):
+                print(f"Using custom payment method ID: {payment_method_id}")
+                
             # Prepare sales receipt data
             sales_receipt_data = {
                 'CustomerRef': {
                     'value': donation['qboCustomerId']
                 },
-                'TxnDate': donation.get('Gift Date', donation.get('Check Date', '')),
+                'PaymentMethodRef': {
+                    'value': payment_method_id  # May be custom or default 'CHECK'
+                },
+                'PaymentRefNum': check_no,
+                'TxnDate': gift_date,
+                'DepositToAccountRef': {
+                    'value': deposit_account_id  # May be custom or default '12000'
+                },
+                'DocNumber': doc_number,
                 'Line': [
                     {
-                        'Amount': float(donation.get('Gift Amount', 0)),
                         'DetailType': 'SalesItemLineDetail',
+                        'Amount': gift_amount,
                         'SalesItemLineDetail': {
                             'ItemRef': {
-                                'value': '1'  # Default item ID, should be configured
-                            }
+                                'value': item_ref
+                            },
+                            'ServiceDate': check_date
                         },
-                        'Description': donation.get('Memo', '')
+                        'Description': description
                     }
                 ],
-                'PrivateNote': f"Check No: {donation.get('Check No.', 'N/A')}"
+                'CustomerMemo': {
+                    'value': f"auto import on {today}"
+                }
             }
             
             result = qbo_service.create_sales_receipt(sales_receipt_data)
+            
+            # Check for error returned from enhanced error handling
+            if result and result.get('error'):
+                error_message = result.get('message', 'Unknown error')
+                error_detail = result.get('detail', '')
+                
+                # Format storage of the error in the donation record
+                donation['qbSyncStatus'] = 'Error'
+                donation['qbSyncError'] = error_message
+                donations[i] = donation
+                session['donations'] = donations
+                
+                # Check for specific types of errors
+                if result.get('requiresSetup'):
+                    return jsonify({
+                        'success': False,
+                        'requiresSetup': True,
+                        'setupType': result.get('setupType'),
+                        'invalidId': result.get('invalidId'),
+                        'message': error_message,
+                        'detail': error_detail
+                    }), 400
+                
+                # Default error response for other types of errors
+                return jsonify({
+                    'success': False,
+                    'message': error_message,
+                    'detail': error_detail
+                }), 500
             
             if result and 'Id' in result:
                 donation['qbSyncStatus'] = 'Sent'
@@ -651,80 +762,234 @@ def create_batch_sales_receipts():
     donations = session.get('donations', [])
     results = []
     
+    # Get the default item ref from request or use default
+    default_item_ref = request.json.get('defaultItemRef', '1')  # Default fallback
+    
+    # Log what we're sending for debugging
+    print(f"Sending batch sales receipts with default itemRef: {default_item_ref}")
+    
+    # Track processing stats
+    success_count = 0
+    failure_count = 0
+    
     for i, donation in enumerate(donations):
-        # Skip CSV donations and already sent donations
-        if donation['dataSource'] == 'CSV' or donation['qbSyncStatus'] == 'Sent':
-            continue
-        
-        if not donation.get('qboCustomerId'):
-            # Try to find customer first
-            customer_lookup = donation.get('customerLookup', '')
-            if customer_lookup:
-                customer = qbo_service.find_customer(customer_lookup)
-                if customer:
-                    donation['qboCustomerId'] = customer.get('Id')
+        try:
+            # Skip CSV donations and already sent donations
+            if donation['dataSource'] == 'CSV' or donation['qbSyncStatus'] == 'Sent':
+                continue
+            
+            # Skip donations marked to exclude
+            if donation.get('excludeFromBatch'):
+                results.append({
+                    'internalId': donation['internalId'],
+                    'success': False,
+                    'message': 'Excluded from batch processing'
+                })
+                failure_count += 1
+                continue
+            
+            if not donation.get('qboCustomerId'):
+                # Try to find customer first
+                customer_lookup = donation.get('customerLookup', '')
+                if customer_lookup:
+                    customer = qbo_service.find_customer(customer_lookup)
+                    if customer:
+                        donation['qboCustomerId'] = customer.get('Id')
+                    else:
+                        results.append({
+                            'internalId': donation['internalId'],
+                            'success': False,
+                            'message': 'Customer not found in QBO'
+                        })
+                        failure_count += 1
+                        continue
                 else:
                     results.append({
                         'internalId': donation['internalId'],
                         'success': False,
-                        'message': 'Customer not found in QBO'
+                        'message': 'Customer lookup field is empty'
                     })
+                    failure_count += 1
                     continue
-            else:
+            
+            # Validate data before sending
+            
+            # Validate Gift Date
+            today = pd.Timestamp.now().strftime('%Y-%m-%d')
+            gift_date = donation.get('Gift Date', '')
+            try:
+                # Check if it's a valid date
+                if gift_date:
+                    pd.to_datetime(gift_date)
+                else:
+                    raise ValueError("Empty gift date")
+            except:
+                # If invalid date, use today's date
+                print(f"Invalid Gift Date for donation {donation['internalId']}: {gift_date}, using today's date")
+                gift_date = today
+            
+            # Validate Check Date
+            check_date = donation.get('Check Date', '')
+            try:
+                # Check if it's a valid date
+                if check_date:
+                    pd.to_datetime(check_date)
+                else:
+                    raise ValueError("Empty check date")
+            except:
+                # If invalid date, use gift date or today
+                print(f"Invalid Check Date for donation {donation['internalId']}: {check_date}, using Gift Date or today")
+                check_date = gift_date if gift_date else today
+            
+            # Validate Gift Amount
+            try:
+                gift_amount = float(donation.get('Gift Amount', 0))
+                if gift_amount <= 0:
+                    raise ValueError("Gift amount must be greater than zero")
+            except ValueError as e:
+                # Skip donations with invalid amounts
+                error_msg = f"Invalid Gift Amount: {donation.get('Gift Amount')} - {str(e)}"
                 results.append({
                     'internalId': donation['internalId'],
                     'success': False,
-                    'message': 'Customer lookup field is empty'
+                    'message': error_msg
                 })
+                # Mark donation as error
+                donation['qbSyncStatus'] = 'Error'
+                donation['qbSyncError'] = error_msg
+                donations[i] = donation
+                failure_count += 1
                 continue
-        
-        # Prepare sales receipt data
-        sales_receipt_data = {
-            'CustomerRef': {
-                'value': donation['qboCustomerId']
-            },
-            'TxnDate': donation.get('Gift Date', donation.get('Check Date', '')),
-            'Line': [
-                {
-                    'Amount': float(donation.get('Gift Amount', 0)),
-                    'DetailType': 'SalesItemLineDetail',
-                    'SalesItemLineDetail': {
-                        'ItemRef': {
-                            'value': '1'  # Default item ID, should be configured
-                        }
-                    },
-                    'Description': donation.get('Memo', '')
+            
+            # Get other fields with validation
+            check_no = donation.get('Check No.', 'N/A')
+            last_name = donation.get('Last Name', '')
+            first_name = donation.get('First Name', '')
+            memo = donation.get('Memo', '')
+            
+            # Format description
+            description = f"{check_no}_{gift_date}_{gift_amount}_{last_name}_{first_name}"
+            if memo:
+                description += f"_{memo}"
+            
+            # Truncate if too long - QuickBooks has limits
+            if len(description) > 1000:
+                description = description[:997] + "..."
+            
+            # Format receipt number
+            doc_number = f"{today}_{check_no}"
+            if len(doc_number) > 21:  # QB has a 21 char limit
+                doc_number = doc_number[:21]
+            
+            # Use item ref from the donation if specified, otherwise use the default
+            # Ensure we always have a valid item reference to avoid QBO API errors
+            item_ref = donation.get('itemRef') 
+            if not item_ref or (isinstance(item_ref, str) and item_ref.strip() == ''):
+                item_ref = default_item_ref
+            # If we still don't have a valid item_ref, use '1' as the last resort
+            if not item_ref or (isinstance(item_ref, str) and item_ref.strip() == ''):
+                item_ref = '1'
+            print(f"Using item_ref: {item_ref} for batch donation {donation.get('internalId')}")
+            
+            # Prepare sales receipt data with all required fields
+            sales_receipt_data = {
+                'CustomerRef': {
+                    'value': donation['qboCustomerId']
+                },
+                'PaymentMethodRef': {
+                    'value': 'CHECK'  # Hard-coded for "Check" payment method
+                },
+                'PaymentRefNum': check_no,
+                'TxnDate': gift_date,
+                'DepositToAccountRef': {
+                    'value': '12000'  # Undeposited Funds account
+                },
+                'DocNumber': doc_number,
+                'Line': [
+                    {
+                        'DetailType': 'SalesItemLineDetail',
+                        'Amount': gift_amount,
+                        'SalesItemLineDetail': {
+                            'ItemRef': {
+                                'value': item_ref
+                            },
+                            'ServiceDate': check_date
+                        },
+                        'Description': description
+                    }
+                ],
+                'CustomerMemo': {
+                    'value': f"auto import on {today}"
                 }
-            ],
-            'PrivateNote': f"Check No: {donation.get('Check No.', 'N/A')}"
-        }
-        
-        result = qbo_service.create_sales_receipt(sales_receipt_data)
-        
-        if result and 'Id' in result:
-            donation['qbSyncStatus'] = 'Sent'
-            donation['qboSalesReceiptId'] = result['Id']
-            donations[i] = donation
+            }
             
-            results.append({
-                'internalId': donation['internalId'],
-                'success': True,
-                'salesReceiptId': result['Id']
-            })
-        else:
-            donation['qbSyncStatus'] = 'Error'
-            donations[i] = donation
+            result = qbo_service.create_sales_receipt(sales_receipt_data)
             
+            # Check for error returned from enhanced error handling
+            if result and result.get('error'):
+                error_msg = result.get('message', 'Unknown error')
+                donation['qbSyncStatus'] = 'Error'
+                donation['qbSyncError'] = error_msg
+                donations[i] = donation
+                
+                results.append({
+                    'internalId': donation['internalId'],
+                    'success': False,
+                    'message': error_msg
+                })
+                failure_count += 1
+                continue
+            
+            if result and 'Id' in result:
+                donation['qbSyncStatus'] = 'Sent'
+                donation['qboSalesReceiptId'] = result['Id']
+                donations[i] = donation
+                
+                results.append({
+                    'internalId': donation['internalId'],
+                    'success': True,
+                    'salesReceiptId': result['Id']
+                })
+                success_count += 1
+            else:
+                error_msg = 'Failed to create sales receipt in QBO'
+                donation['qbSyncStatus'] = 'Error'
+                donation['qbSyncError'] = error_msg
+                donations[i] = donation
+                
+                results.append({
+                    'internalId': donation['internalId'],
+                    'success': False,
+                    'message': error_msg
+                })
+                failure_count += 1
+        
+        except Exception as e:
+            # Catch any unexpected errors during processing
+            error_msg = f"Unexpected error: {str(e)}"
             results.append({
-                'internalId': donation['internalId'],
+                'internalId': donation.get('internalId', 'unknown'),
                 'success': False,
-                'message': 'Failed to create sales receipt in QBO'
+                'message': error_msg
             })
+            
+            # If we have a valid donation index, update its status
+            if i < len(donations):
+                donations[i]['qbSyncStatus'] = 'Error'
+                donations[i]['qbSyncError'] = error_msg
+            
+            failure_count += 1
     
+    # Save all donation changes to session
     session['donations'] = donations
     
     return jsonify({
         'success': True,
+        'summary': {
+            'total': len(results),
+            'success': success_count,
+            'failure': failure_count
+        },
         'results': results
     })
 
@@ -974,6 +1239,77 @@ def test_customer_matching():
             'error': str(e)
         }), 500
 
+@app.route('/qbo/sales-receipt/preview/<donation_id>', methods=['POST'])
+def preview_sales_receipt(donation_id):
+    """Preview a QBO sales receipt for a donation without sending it."""
+    try:
+        donations = session.get('donations', [])
+        donation = None
+        
+        # Find the donation
+        for d in donations:
+            if d['internalId'] == donation_id:
+                donation = d
+                break
+        
+        if not donation:
+            return jsonify({'success': False, 'message': 'Donation not found'}), 404
+        
+        if donation['dataSource'] == 'CSV':
+            return jsonify({'success': False, 'message': 'Cannot create sales receipt from CSV data'}), 400
+        
+        # Get the item ref from request or use default
+        item_ref = '1'  # Default fallback
+        if request.json and 'itemRef' in request.json:
+            item_ref = request.json['itemRef']
+        
+        # Format dates and construct the sales receipt data
+        today = pd.Timestamp.now().strftime('%Y-%m-%d')
+        gift_date = donation.get('Gift Date', '')
+        check_date = donation.get('Check Date', '')
+        check_no = donation.get('Check No.', 'N/A')
+        gift_amount = donation.get('Gift Amount', '0')
+        last_name = donation.get('Last Name', '')
+        first_name = donation.get('First Name', '')
+        memo = donation.get('Memo', '')
+        
+        # Format description
+        description = f"{check_no}_{gift_date}_{gift_amount}_{last_name}_{first_name}"
+        if memo:
+            description += f"_{memo}"
+        
+        # Format receipt number
+        doc_number = f"{today}_{check_no}"
+        if len(doc_number) > 21:  # QB has a 21 char limit
+            doc_number = doc_number[:21]
+        
+        # Construct the preview data
+        preview_data = {
+            'success': True,
+            'salesReceiptPreview': {
+                'customerName': donation.get('customerLookup', ''),
+                'paymentMethod': 'Check',
+                'referenceNo': check_no,
+                'date': gift_date,
+                'depositTo': '12000 Undeposited Funds',
+                'serviceDate': check_date,
+                'itemRef': item_ref,
+                'description': description,
+                'amount': float(gift_amount),
+                'message': f"auto import on {today}",
+                'docNumber': doc_number
+            }
+        }
+        
+        return jsonify(preview_data)
+        
+    except Exception as e:
+        print(f"Error previewing sales receipt: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error previewing sales receipt: {str(e)}'
+        }), 500
+
 @app.route('/qbo/environment')
 def qbo_environment_info():
     """Show current QBO environment information."""
@@ -983,6 +1319,222 @@ def qbo_environment_info():
         'authenticated': qbo_service.access_token is not None and qbo_service.realm_id is not None,
         'realmId': qbo_service.realm_id if qbo_service.realm_id else None
     })
+
+@app.route('/qbo/item/create', methods=['POST'])
+def create_item():
+    """Create a new QBO product/service item."""
+    try:
+        # Check if authenticated
+        if not qbo_service.access_token or not qbo_service.realm_id:
+            return jsonify({
+                'success': False,
+                'message': 'Not authenticated with QuickBooks Online'
+            }), 401
+        
+        # Get item data from request
+        if not request.json:
+            return jsonify({
+                'success': False,
+                'message': 'No item data provided'
+            }), 400
+        
+        # Validate required fields
+        item_data = request.json
+        if 'name' not in item_data or not item_data['name']:
+            return jsonify({
+                'success': False,
+                'message': 'Item name is required'
+            }), 400
+        
+        if 'incomeAccountId' not in item_data or not item_data['incomeAccountId']:
+            return jsonify({
+                'success': False,
+                'message': 'Income account is required'
+            }), 400
+        
+        # Build QBO-formatted item data
+        qbo_item_data = {
+            'Name': item_data['name'],
+            'Type': item_data.get('type', 'Service'),
+            'IncomeAccountRef': {
+                'value': item_data['incomeAccountId']
+            },
+            'Active': True
+        }
+        
+        # Add optional fields if present
+        if 'description' in item_data and item_data['description']:
+            qbo_item_data['Description'] = item_data['description']
+            
+        if 'price' in item_data and item_data['price']:
+            try:
+                price = float(item_data['price'])
+                qbo_item_data['UnitPrice'] = price
+            except (ValueError, TypeError):
+                pass  # Skip invalid price values
+        
+        # Create the item
+        created_item = qbo_service.create_item(qbo_item_data)
+        
+        if created_item:
+            return jsonify({
+                'success': True,
+                'item': {
+                    'id': created_item.get('Id'),
+                    'name': created_item.get('Name'),
+                    'description': created_item.get('Description', ''),
+                    'type': created_item.get('Type', 'Other'),
+                    'price': created_item.get('UnitPrice', 0)
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to create item in QBO'
+            }), 500
+            
+    except Exception as e:
+        print(f"Error creating item: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error creating item: {str(e)}'
+        }), 500
+
+@app.route('/qbo/account/create', methods=['POST'])
+def create_account():
+    """Create a new QBO account."""
+    try:
+        # Check if authenticated
+        if not qbo_service.access_token or not qbo_service.realm_id:
+            return jsonify({
+                'success': False,
+                'message': 'Not authenticated with QuickBooks Online'
+            }), 401
+        
+        # Get account data from request
+        if not request.json:
+            return jsonify({
+                'success': False,
+                'message': 'No account data provided'
+            }), 400
+        
+        # Validate required fields
+        account_data = request.json
+        if 'name' not in account_data or not account_data['name']:
+            return jsonify({
+                'success': False,
+                'message': 'Account name is required'
+            }), 400
+        
+        if 'accountType' not in account_data or not account_data['accountType']:
+            return jsonify({
+                'success': False,
+                'message': 'Account type is required'
+            }), 400
+        
+        # Build QBO-formatted account data
+        qbo_account_data = {
+            'Name': account_data['name'],
+            'AccountType': account_data['accountType'],
+            'Active': True
+        }
+        
+        # Add optional fields if present
+        if 'accountSubType' in account_data and account_data['accountSubType']:
+            qbo_account_data['AccountSubType'] = account_data['accountSubType']
+            
+        if 'description' in account_data and account_data['description']:
+            qbo_account_data['Description'] = account_data['description']
+            
+        if 'accountNumber' in account_data and account_data['accountNumber']:
+            qbo_account_data['AcctNum'] = account_data['accountNumber']
+        
+        # Create the account
+        created_account = qbo_service.create_account(qbo_account_data)
+        
+        if created_account:
+            return jsonify({
+                'success': True,
+                'account': {
+                    'id': created_account.get('Id'),
+                    'name': created_account.get('Name'),
+                    'type': created_account.get('AccountType')
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to create account in QBO'
+            }), 500
+            
+    except Exception as e:
+        print(f"Error creating account: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error creating account: {str(e)}'
+        }), 500
+
+@app.route('/qbo/payment-method/create', methods=['POST'])
+def create_payment_method():
+    """Create a new QBO payment method."""
+    try:
+        # Check if authenticated
+        if not qbo_service.access_token or not qbo_service.realm_id:
+            return jsonify({
+                'success': False,
+                'message': 'Not authenticated with QuickBooks Online'
+            }), 401
+        
+        # Get payment method data from request
+        if not request.json:
+            return jsonify({
+                'success': False,
+                'message': 'No payment method data provided'
+            }), 400
+        
+        # Validate required fields
+        payment_method_data = request.json
+        if 'name' not in payment_method_data or not payment_method_data['name']:
+            return jsonify({
+                'success': False,
+                'message': 'Payment method name is required'
+            }), 400
+        
+        # Build QBO-formatted payment method data
+        qbo_payment_method_data = {
+            'Name': payment_method_data['name'],
+            'Active': True
+        }
+        
+        # Create the payment method
+        created_payment_method = qbo_service.create_payment_method(qbo_payment_method_data)
+        
+        if created_payment_method:
+            return jsonify({
+                'success': True,
+                'paymentMethod': {
+                    'id': created_payment_method.get('Id'),
+                    'name': created_payment_method.get('Name')
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to create payment method in QBO'
+            }), 500
+            
+    except Exception as e:
+        print(f"Error creating payment method: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error creating payment method: {str(e)}'
+        }), 500
 
 if __name__ == '__main__':
     # Display the environment when starting

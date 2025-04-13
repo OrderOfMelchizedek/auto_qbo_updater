@@ -371,18 +371,18 @@ class QBOService:
             print(f"Exception in update_customer: {str(e)}")
             return None
     
-    def create_sales_receipt(self, sales_receipt_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Create a sales receipt in QBO.
+    def create_sales_receipt(self, sales_receipt_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a sales receipt in QBO with enhanced error handling.
         
         Args:
             sales_receipt_data: Sales receipt data dictionary
             
         Returns:
-            Created sales receipt data if successful, None otherwise
+            Created sales receipt data if successful, or error details
         """
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
-            return None
+            return {"error": True, "message": "Not authenticated with QBO"}
         
         try:
             url = f"{self.api_base}{self.realm_id}/salesreceipt"
@@ -391,12 +391,107 @@ class QBOService:
             if response.status_code == 200:
                 return response.json()['SalesReceipt']
             else:
-                print(f"Error creating sales receipt: {response.status_code} - {response.text}")
-                return None
+                error_data = {"error": True, "message": "Error creating sales receipt"}
+                
+                # Parse error response to identify specific issues
+                try:
+                    error_json = response.json()
+                    if 'Fault' in error_json:
+                        # Get error details from response
+                        error_detail = error_json['Fault'].get('Error', [{}])[0].get('Detail', '')
+                        error_message = error_json['Fault'].get('Error', [{}])[0].get('Message', '')
+                        error_code = error_json['Fault'].get('Error', [{}])[0].get('code', '')
+                        
+                        # Add to error data
+                        error_data['detail'] = error_detail
+                        error_data['message'] = error_message
+                        error_data['code'] = error_code
+                        
+                        # Log the full error for debugging
+                        print(f"QBO Error Response: {error_json}")
+                        
+                        # Check for specific reference errors
+                        if "Invalid Reference Id" in error_message:
+                            # Account reference errors - multiple possible error formats
+                            if "Accounts element id" in error_detail or "Account id" in error_detail:
+                                import re
+                                # Try different regex patterns for account errors
+                                account_match = re.search(r"Accounts element id (\d+)", error_detail)
+                                if not account_match:
+                                    account_match = re.search(r"Account id (\d+)", error_detail)
+                                
+                                if account_match:
+                                    account_id = account_match.group(1)
+                                    error_data['setupType'] = 'account'
+                                    error_data['invalidId'] = account_id
+                                    error_data['requiresSetup'] = True
+                                    print(f"Detected invalid account reference: {account_id}")
+                            
+                            # Item reference errors - multiple possible error formats
+                            elif "Item elements id" in error_detail or "Item elements Id" in error_detail or "Item id" in error_detail:
+                                import re
+                                # Try different regex patterns for item errors
+                                item_match = re.search(r"Item elements id (\d+)", error_detail)
+                                if not item_match:
+                                    item_match = re.search(r"Item elements Id (\d+)", error_detail)
+                                if not item_match:
+                                    item_match = re.search(r"Item id (\d+)", error_detail)
+                                
+                                if item_match:
+                                    item_id = item_match.group(1)
+                                    error_data['setupType'] = 'item'
+                                    error_data['invalidId'] = item_id
+                                    error_data['requiresSetup'] = True
+                                    print(f"Detected invalid item reference: {item_id}")
+                            
+                            # Payment method reference errors
+                            elif "PaymentMethod id" in error_detail:
+                                # Try to extract the payment method ID from the error
+                                import re
+                                payment_method_match = re.search(r"PaymentMethod id (\w+)", error_detail)
+                                payment_method_id = payment_method_match.group(1) if payment_method_match else 'CHECK'
+                                
+                                error_data['setupType'] = 'paymentMethod'
+                                error_data['invalidId'] = payment_method_id
+                                error_data['requiresSetup'] = True
+                                print(f"Detected invalid payment method reference: {payment_method_id}")
+                        
+                        # Handle validation errors (non-reference errors)
+                        elif "Object is not valid" in error_message:
+                            error_data['validationError'] = True
+                            # Try to extract the validation details
+                            validation_details = []
+                            try:
+                                if 'Object validation failed' in error_detail:
+                                    # Parse validation failures
+                                    validation_lines = error_detail.split('\n')
+                                    for line in validation_lines:
+                                        if ':' in line and line.strip():
+                                            validation_details.append(line.strip())
+                            except Exception:
+                                pass
+                            
+                            error_data['validationDetails'] = validation_details
+                            print(f"Detected validation error: {validation_details}")
+                        
+                        # Check for duplicate document number
+                        elif "Duplicate" in error_message and "DocNumber" in error_detail:
+                            error_data['duplicateError'] = True
+                            error_data['duplicateField'] = "DocNumber"
+                            print("Detected duplicate document number error")
+                except Exception as parse_error:
+                    print(f"Error parsing QBO error response: {str(parse_error)}")
+                    import traceback
+                    traceback.print_exc()
+                    
+                print(f"Error creating sales receipt: {error_data}")
+                return error_data
         
         except Exception as e:
             print(f"Exception in create_sales_receipt: {str(e)}")
-            return None
+            import traceback
+            traceback.print_exc()
+            return {"error": True, "message": str(e)}
             
     def get_all_customers(self) -> List[Dict[str, Any]]:
         """Fetch the complete list of customers from QBO.
@@ -486,6 +581,203 @@ class QBOService:
             return customers
         except Exception as e:
             print(f"Exception in get_all_customers: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
+            
+    def create_account(self, account_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Create a new account in QBO.
+        
+        Args:
+            account_data: Account data dictionary with required fields:
+                - Name: Account name
+                - AccountType: Account type (e.g., Bank, Other Current Asset)
+                - AccountSubType: Optional sub-type
+            
+        Returns:
+            Created account data if successful, None otherwise
+        """
+        if not self.access_token or not self.realm_id:
+            print("Not authenticated with QBO")
+            return None
+        
+        try:
+            # Make sure required fields are present
+            if 'Name' not in account_data or 'AccountType' not in account_data:
+                print("Missing required fields for account creation")
+                return None
+                
+            url = f"{self.api_base}{self.realm_id}/account"
+            response = requests.post(url, headers=self._get_auth_headers(), json=account_data)
+            
+            if response.status_code == 200:
+                account = response.json().get('Account')
+                print(f"Successfully created account: {account.get('Name')} (ID: {account.get('Id')})")
+                return account
+            else:
+                print(f"Error creating account: {response.status_code} - {response.text}")
+                return None
+        
+        except Exception as e:
+            print(f"Exception in create_account: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def create_item(self, item_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Create a new item (product/service) in QBO.
+        
+        Args:
+            item_data: Item data dictionary with required fields:
+                - Name: Item name
+                - Type: Service, Inventory, etc.
+                - IncomeAccountRef: Reference to income account
+            
+        Returns:
+            Created item data if successful, None otherwise
+        """
+        if not self.access_token or not self.realm_id:
+            print("Not authenticated with QBO")
+            return None
+        
+        try:
+            # Make sure required fields are present
+            if 'Name' not in item_data or 'Type' not in item_data:
+                print("Missing required fields for item creation")
+                return None
+                
+            # Default to Service type if not specified
+            if 'Type' not in item_data:
+                item_data['Type'] = 'Service'
+                
+            # Default to Non-inventory if not specified
+            if 'Type' == 'Item' and 'ItemType' not in item_data:
+                item_data['ItemType'] = 'Non-inventory'
+                
+            url = f"{self.api_base}{self.realm_id}/item"
+            response = requests.post(url, headers=self._get_auth_headers(), json=item_data)
+            
+            if response.status_code == 200:
+                item = response.json().get('Item')
+                print(f"Successfully created item: {item.get('Name')} (ID: {item.get('Id')})")
+                return item
+            else:
+                print(f"Error creating item: {response.status_code} - {response.text}")
+                return None
+        
+        except Exception as e:
+            print(f"Exception in create_item: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def create_payment_method(self, payment_method_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Create a new payment method in QBO.
+        
+        Args:
+            payment_method_data: Payment method data dictionary with required fields:
+                - Name: Payment method name
+            
+        Returns:
+            Created payment method data if successful, None otherwise
+        """
+        if not self.access_token or not self.realm_id:
+            print("Not authenticated with QBO")
+            return None
+        
+        try:
+            # Make sure required fields are present
+            if 'Name' not in payment_method_data:
+                print("Missing required Name field for payment method creation")
+                return None
+                
+            url = f"{self.api_base}{self.realm_id}/paymentmethod"
+            response = requests.post(url, headers=self._get_auth_headers(), json=payment_method_data)
+            
+            if response.status_code == 200:
+                payment_method = response.json().get('PaymentMethod')
+                print(f"Successfully created payment method: {payment_method.get('Name')} (ID: {payment_method.get('Id')})")
+                return payment_method
+            else:
+                print(f"Error creating payment method: {response.status_code} - {response.text}")
+                return None
+        
+        except Exception as e:
+            print(f"Exception in create_payment_method: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def get_all_items(self) -> List[Dict[str, Any]]:
+        """Fetch the complete list of items/products/services from QBO.
+        
+        Returns:
+            List of all item data dictionaries
+        """
+        if not self.access_token or not self.realm_id:
+            print("Not authenticated with QBO - Missing access_token or realm_id")
+            return []
+        
+        try:
+            print("==== STARTING ITEM RETRIEVAL FROM QUICKBOOKS ====")
+            
+            items = []
+            start_position = 1
+            max_results = 1000  # QBO API limit per query
+            batch_count = 0
+            
+            while True:
+                batch_count += 1
+                # Query for a batch of items
+                query = f"SELECT * FROM Item STARTPOSITION {start_position} MAXRESULTS {max_results}"
+                encoded_query = quote(query)
+                url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+                
+                print(f"Batch {batch_count}: Requesting items at position {start_position}")
+                
+                response = requests.get(url, headers=self._get_auth_headers())
+                
+                print(f"Response status: {response.status_code}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    batch = data['QueryResponse'].get('Item', [])
+                    
+                    # If no more items, break the loop
+                    if not batch:
+                        print(f"Batch {batch_count}: No more items found")
+                        break
+                    
+                    # Add this batch to our collection
+                    items.extend(batch)
+                    print(f"Batch {batch_count}: Retrieved {len(batch)} items (running total: {len(items)})")
+                    
+                    # If we got fewer items than the max, we're done
+                    if len(batch) < max_results:
+                        print(f"Batch {batch_count}: Less than max results, finished retrieving")
+                        break
+                        
+                    # Otherwise, update the start position for the next batch
+                    start_position += max_results
+                else:
+                    error_text = response.text[:200] + "..." if len(response.text) > 200 else response.text
+                    print(f"Error fetching items: {response.status_code}")
+                    print(f"Error details: {error_text}")
+                    break
+            
+            print("==== ITEM RETRIEVAL SUMMARY ====")
+            print(f"Successfully retrieved {len(items)} items in {batch_count} batches")
+            
+            # Log a few item names for verification
+            if items:
+                print("Sample of retrieved items:")
+                for i, item in enumerate(items[:5]):
+                    print(f"  {i+1}. {item.get('Name', 'Unknown')}")
+                print("  ...")
+            
+            return items
+        except Exception as e:
+            print(f"Exception in get_all_items: {str(e)}")
             import traceback
             traceback.print_exc()
             return []
