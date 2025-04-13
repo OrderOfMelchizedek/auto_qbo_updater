@@ -799,24 +799,37 @@ def test_customer_matching():
             return jsonify({'success': False, 'message': 'No donation data provided'}), 400
             
         donation_data = request.json
+        customer_lookup = donation_data.get('customerLookup', donation_data.get('Donor Name', ''))
         
-        # Get all customers
-        customers = qbo_service.get_all_customers()
-        if not customers:
+        if not customer_lookup:
             return jsonify({
                 'success': False,
-                'message': 'No QuickBooks customers available'
+                'message': 'No customer lookup value provided'
             }), 400
             
-        # Perform the matching using Gemini
-        match_result = gemini_service.match_donation_with_customers(donation_data, customers)
+        # Perform direct QBO API lookup
+        customer = qbo_service.find_customer(customer_lookup)
+        
+        # Check for address match if customer found
+        address_match = True
+        if customer and donation_data.get('Address - Line 1') and donation_data.get('Address - Line 1') != customer.get('BillAddr', {}).get('Line1', ''):
+            address_match = False
         
         # Return the matching result
-        return jsonify({
-            'success': True,
-            'matchResult': match_result,
-            'message': 'Matching completed'
-        })
+        if customer:
+            return jsonify({
+                'success': True,
+                'customerFound': True,
+                'addressMatch': address_match,
+                'customer': customer,
+                'message': 'Customer found in QBO'
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'customerFound': False,
+                'message': 'No matching customer found in QBO'
+            })
         
     except Exception as e:
         print(f"Error in test_customer_matching: {str(e)}")

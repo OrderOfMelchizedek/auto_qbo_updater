@@ -15,13 +15,12 @@ class FileProcessor:
         """Initialize the file processor with Gemini and QBO services.
         
         Args:
-            gemini_service: Service for AI-based extraction and matching
+            gemini_service: Service for AI-based extraction
             qbo_service: Optional QuickBooks Online service for customer lookups
         """
         self.gemini_service = gemini_service
         self.qbo_service = qbo_service
         self.prompt_manager = PromptManager(prompt_dir='prompts')
-        self.qbo_customers = None  # Will be lazily loaded when needed
     
     def process(self, file_path: str, file_ext: str) -> Any:
         """Process a file to extract donation information.
@@ -252,20 +251,10 @@ class FileProcessor:
             print(f"Error processing CSV {csv_path}: {str(e)}")
             return None
             
-    def get_qbo_customers(self):
-        """Lazily load all QBO customers when needed.
-        
-        Returns:
-            List of QuickBooks customer records
-        """
-        if self.qbo_customers is None and self.qbo_service:
-            print("Fetching QuickBooks customer list for the first time...")
-            self.qbo_customers = self.qbo_service.get_all_customers()
-            print(f"Retrieved {len(self.qbo_customers)} QuickBooks customers")
-        return self.qbo_customers or []
+    # We no longer need to get all customers, as we're using direct QBO API lookups
         
     def match_donations_with_qbo_customers(self, donations):
-        """Match extracted donations with QuickBooks customers.
+        """Match extracted donations with QuickBooks customers using direct QBO API.
         
         Args:
             donations: List of donation dictionaries or single donation dictionary
@@ -276,14 +265,8 @@ class FileProcessor:
         if not self.qbo_service:
             print("QBO service not available - customer matching skipped")
             return donations
-            
-        # Make sure we have the customer list loaded
-        customers = self.get_qbo_customers()
-        if not customers:
-            print("No QuickBooks customers available - customer matching skipped")
-            return donations
-            
-        print(f"Matching {len(donations) if isinstance(donations, list) else 1} donation(s) with {len(customers)} QuickBooks customers")
+        
+        print(f"Matching {len(donations) if isinstance(donations, list) else 1} donation(s) with QBO API")
         
         # Handle both single donation and list of donations
         is_single = not isinstance(donations, list)
@@ -296,42 +279,43 @@ class FileProcessor:
                 print("Donation missing donor name - skipping customer matching")
                 matched_donations.append(donation)
                 continue
-                
+            
             try:
-                # Use Gemini to match the donation with QBO customers
-                match_result = self.gemini_service.match_donation_with_customers(donation, customers)
+                # Use the customerLookup field or Donor Name for matching
+                customer_lookup = donation.get('customerLookup', donation.get('Donor Name', ''))
                 
-                # Enhance the donation with matching information
-                enhanced_donation = match_result.get('updatedDonation', donation)
-                
-                # Add QBO-specific fields
-                if match_result.get('matched', False):
-                    # Set fields related to customer matching
-                    customer_match = match_result.get('customerMatch', {})
-                    enhanced_donation['customerLookup'] = customer_match.get('DisplayName', '')
-                    enhanced_donation['qboCustomerId'] = match_result.get('customerMatchId')
+                if customer_lookup:
+                    print(f"Looking up customer: {customer_lookup}")
+                    # Use QBO service's find_customer method for direct API matching
+                    customer = self.qbo_service.find_customer(customer_lookup)
                     
-                    # Set QBO status
-                    if match_result.get('addressChanged', False):
-                        enhanced_donation['qbCustomerStatus'] = 'Matched-AddressMismatch'
+                    if customer:
+                        print(f"Customer found: {customer.get('DisplayName')}")
+                        # Compare addresses to detect changes
+                        address_match = True
+                        if (donation.get('Address - Line 1') and 
+                            donation.get('Address - Line 1') != customer.get('BillAddr', {}).get('Line1', '')):
+                            address_match = False
+                            print("Address mismatch detected")
+                        
+                        # Update donation with customer information
+                        donation['customerLookup'] = customer.get('DisplayName', '')
+                        donation['qboCustomerId'] = customer.get('Id')
+                        donation['qbCustomerStatus'] = 'Matched' if address_match else 'Matched-AddressMismatch'
                     else:
-                        enhanced_donation['qbCustomerStatus'] = 'Matched'
+                        print(f"No customer found for: {customer_lookup}")
+                        donation['qbCustomerStatus'] = 'New'
                 else:
-                    # No match found
-                    enhanced_donation['qbCustomerStatus'] = 'New'
-                    
-                # Add confidence level and notes
-                enhanced_donation['matchConfidence'] = match_result.get('matchConfidence', 0)
-                enhanced_donation['matchingNotes'] = match_result.get('matchingNotes', '')
-                enhanced_donation['needsReview'] = match_result.get('needsReview', False)
+                    print("No customer lookup information available")
+                    donation['qbCustomerStatus'] = 'New'
                 
-                # Add the enhanced donation to the result list
-                matched_donations.append(enhanced_donation)
+                # Add the matched donation to the result list
+                matched_donations.append(donation)
                 
             except Exception as e:
                 print(f"Error matching donation: {str(e)}")
                 # If matching fails, keep the original donation
                 matched_donations.append(donation)
-                
+        
         # Return in the same format as input
         return matched_donations[0] if is_single else matched_donations
