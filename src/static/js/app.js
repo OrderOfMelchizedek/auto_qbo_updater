@@ -871,15 +871,15 @@ function checkAuthAndProcessFiles() {
 
 // Check QBO authentication status and update UI
 function checkQBOAuthStatus() {
-    fetch('/qbo/auth-status')
+    // First fetch environment info
+    fetch('/qbo/environment')
         .then(response => response.json())
-        .then(data => {
-            const qboBtn = document.getElementById('connectQBOBtn');
+        .then(envData => {
             const envBadge = document.getElementById('qboEnvironmentBadge');
             
             // Update environment badge
             if (envBadge) {
-                const envName = data.environment || 'unknown';
+                const envName = envData.environment || 'unknown';
                 envBadge.textContent = envName.toUpperCase();
                 
                 // Different badge colors for different environments
@@ -894,6 +894,16 @@ function checkQBOAuthStatus() {
                     envBadge.classList.add('bg-secondary');
                 }
             }
+        })
+        .catch(error => {
+            console.error('Error fetching QBO environment:', error);
+        });
+    
+    // Then check authentication status
+    fetch('/qbo/auth-status')
+        .then(response => response.json())
+        .then(data => {
+            const qboBtn = document.getElementById('connectQBOBtn');
             
             if (data.authenticated) {
                 // QBO is connected
