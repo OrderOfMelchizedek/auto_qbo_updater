@@ -584,8 +584,29 @@ function populateAccountSelects() {
         emptyOption.textContent = "Select an account...";
         select.appendChild(emptyOption);
         
-        // Add accounts
-        qboAccounts.forEach(account => {
+        // Filter out expense accounts - only show asset, liability, and bank accounts
+        const filteredAccounts = qboAccounts.filter(account => {
+            const type = account.type?.toLowerCase() || '';
+            return !type.includes('expense') && !type.includes('cost');
+        });
+        
+        console.log(`Filtered ${qboAccounts.length} accounts to ${filteredAccounts.length} non-expense accounts`);
+        
+        // Find Undeposited Funds account in the filtered accounts list
+        let undepositedFundsAccount = null;
+        for (const account of filteredAccounts) {
+            const name = account.name?.toLowerCase() || '';
+            const subType = account.subType?.toLowerCase() || '';
+            
+            if (name === 'undeposited funds' || subType === 'undepositedfunds') {
+                undepositedFundsAccount = account;
+                console.log(`Found Undeposited Funds account in filtered list: ${account.name} (${account.id})`);
+                break;
+            }
+        }
+        
+        // Add filtered accounts
+        filteredAccounts.forEach(account => {
             const option = document.createElement('option');
             option.value = account.id;
             
@@ -596,35 +617,75 @@ function populateAccountSelects() {
                 option.textContent = `${account.name} (${account.type})`;
             }
             
+            // Mark the Undeposited Funds account with special styling
+            if (account.id === defaultAccountId || 
+                (undepositedFundsAccount && account.id === undepositedFundsAccount.id)) {
+                option.className = 'fw-bold';
+                option.style.backgroundColor = '#f8f9fa';
+            }
+            
             select.appendChild(option);
         });
         
-        // Set default account (Undeposited Funds) if available
+        // First, try to use defaultAccountId if available
         if (defaultAccountId) {
             console.log(`Setting default account to ${defaultAccountId}`);
             select.value = defaultAccountId;
-            
-            // If setting the value didn't work (option doesn't exist), add it
-            if (select.value !== defaultAccountId) {
-                // Find the account in our data
-                const defaultAccount = qboAccounts.find(a => a.id === defaultAccountId);
-                if (defaultAccount) {
-                    const option = document.createElement('option');
-                    option.value = defaultAccount.id;
-                    if (defaultAccount.number) {
-                        option.textContent = `${defaultAccount.number} ${defaultAccount.name} (${defaultAccount.type})`;
-                    } else {
-                        option.textContent = `${defaultAccount.name} (${defaultAccount.type})`;
-                    }
-                    select.appendChild(option);
-                    select.value = defaultAccountId;
-                } else {
-                    console.warn(`Default account ID ${defaultAccountId} not found in QBO accounts`);
-                }
-            }
-        } else {
-            console.warn("No default account ID set");
         }
+        
+        // If that didn't work, try the undepositedFundsAccount we found
+        if ((select.value === "" || !select.value) && undepositedFundsAccount) {
+            console.log(`Setting default account to Undeposited Funds: ${undepositedFundsAccount.id}`);
+            select.value = undepositedFundsAccount.id;
+            
+            // For the batch account select specifically, ensure we set the Undeposited Funds account
+            if (select.id === 'batchDepositToAccount') {
+                select.value = undepositedFundsAccount.id;
+            }
+        }
+        
+        // If still not set (rare case), add the account if we know it by ID
+        if ((select.value === "" || !select.value) && defaultAccountId) {
+            // Find the account in our data
+            const defaultAccount = qboAccounts.find(a => a.id === defaultAccountId);
+            if (defaultAccount) {
+                const option = document.createElement('option');
+                option.value = defaultAccount.id;
+                if (defaultAccount.number) {
+                    option.textContent = `${defaultAccount.number} ${defaultAccount.name} (${defaultAccount.type})`;
+                } else {
+                    option.textContent = `${defaultAccount.name} (${defaultAccount.type})`;
+                }
+                option.className = 'fw-bold';
+                option.style.backgroundColor = '#f8f9fa';
+                select.appendChild(option);
+                select.value = defaultAccountId;
+            } else {
+                console.warn(`Default account ID ${defaultAccountId} not found in QBO accounts`);
+            }
+        }
+        
+        // Ensure the batch deposit account always has Undeposited Funds selected
+        if (select.id === 'batchDepositToAccount') {
+            if (undepositedFundsAccount) {
+                select.value = undepositedFundsAccount.id;
+            } else if (defaultAccountId) {
+                select.value = defaultAccountId;
+            }
+            
+            // If still not set, create a fallback option
+            if (select.value === "" || !select.value) {
+                const option = document.createElement('option');
+                option.value = "12000"; // Common default ID for Undeposited Funds
+                option.textContent = "Undeposited Funds (Other Current Asset)";
+                option.className = 'fw-bold';
+                option.style.backgroundColor = '#f8f9fa';
+                select.appendChild(option);
+                select.value = "12000";
+            }
+        }
+        
+        console.log(`Account select ${select.id} final value: ${select.value}`);
     });
 }
 
@@ -1233,35 +1294,57 @@ function showSalesReceiptPreview(donationId) {
     }
     
     // Make sure we have the latest QBO data before showing the preview
-    // Fetch all QBO references in parallel
+    // Fetch all QBO references in parallel and WAIT for them to complete
     Promise.all([
         fetchQBOItems(),
         fetchQBOAccounts(),
         fetchQBOPaymentMethods()
-    ]).catch(error => {
+    ])
+    .then(() => {
+        // Now that data is loaded, populate the selects
+        populateItemSelects();
+        populateAccountSelects();
+        populatePaymentMethodSelects();
+        
+        // After populating, get the values
+        continuePreview();
+    })
+    .catch(error => {
         console.error("Error fetching QBO data:", error);
+        // Try to continue anyway
+        continuePreview();
     });
     
-    // Get the currently selected item ref - use a default if no item is selected
-    const itemRef = document.getElementById('previewItemRef').value || defaultItemId || '1';
+    function continuePreview() {
+        // Get the currently selected item ref - use a default if no item is selected
+        const itemRef = document.getElementById('previewItemRef')?.value || defaultItemId || '1';
+        
+        // Get the currently selected deposit account ID - with null check
+        let depositToAccountId = defaultAccountId || '12000'; // Default fallback
+        const depositToAccountElem = document.getElementById('previewDepositToAccount');
+        if (depositToAccountElem && depositToAccountElem.value) {
+            depositToAccountId = depositToAccountElem.value;
+        }
+        
+        // Get payment method with null check
+        let paymentMethodId = defaultPaymentMethodId || 'CHECK'; // Default fallback
+        const paymentMethodElem = document.getElementById('previewPaymentMethodRef');
+        if (paymentMethodElem && paymentMethodElem.value) {
+            paymentMethodId = paymentMethodElem.value;
+        }
     
-    // Get the currently selected deposit account ID
-    let depositToAccountId;
-    if (document.getElementById('previewDepositToAccount').value) {
-        depositToAccountId = document.getElementById('previewDepositToAccount').value;
-    }
-    
-    // Fetch preview data
-    fetch(`/qbo/sales-receipt/preview/${donationId}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-            itemRef,
-            depositToAccountId
+        // Fetch preview data
+        fetch(`/qbo/sales-receipt/preview/${donationId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                itemRef,
+                depositToAccountId,
+                paymentMethodId
+            })
         })
-    })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -1324,17 +1407,18 @@ function showSalesReceiptPreview(donationId) {
                 previewBtn.disabled = false;
                 previewBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
             }
-        })
-        .catch(error => {
-            console.error('Error previewing sales receipt:', error);
-            showToast('Error previewing sales receipt', 'danger');
-            
-            // Reset button state
-            if (previewBtn) {
-                previewBtn.disabled = false;
-                previewBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
-            }
-        });
+            })
+            .catch(error => {
+                console.error('Error previewing sales receipt:', error);
+                showToast('Error previewing sales receipt', 'danger');
+                
+                // Reset button state
+                if (previewBtn) {
+                    previewBtn.disabled = false;
+                    previewBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+                }
+            });
+    }
 }
 
 function sendToQBO(donationId) {
@@ -1368,10 +1452,32 @@ function showBatchReceiptModal() {
 }
 
 function sendAllToQBO() {
-    // Get the default values - ensure we have valid values (never send empty)
+    // Find the undeposited funds account if one exists
+    let undepositedFundsAccount = null;
+    for (const account of qboAccounts) {
+        const name = account.name?.toLowerCase() || '';
+        const subType = account.subType?.toLowerCase() || '';
+        
+        if (name === 'undeposited funds' || subType === 'undepositedfunds') {
+            undepositedFundsAccount = account;
+            break;
+        }
+    }
+    
+    // Get the default values from the modal inputs - with special handling for the deposit account
     const batchItemRef = document.getElementById('batchItemRef').value || defaultItemId || '1';
-    const batchDepositToAccountId = document.getElementById('batchDepositToAccount').value || defaultAccountId || '12000';
-    const batchPaymentMethodId = document.getElementById('batchPaymentMethodRef').value || 'CHECK';
+    
+    // For deposit account, prioritize: 
+    // 1. User selection
+    // 2. Undeposited Funds account we found
+    // 3. Default account from server
+    // 4. Fallback ID "12000"
+    const batchDepositToAccountId = document.getElementById('batchDepositToAccount').value || 
+                                    (undepositedFundsAccount ? undepositedFundsAccount.id : null) || 
+                                    defaultAccountId || 
+                                    '12000';
+                                    
+    const batchPaymentMethodId = document.getElementById('batchPaymentMethodRef').value || defaultPaymentMethodId || 'CHECK';
     
     // Log what we're sending for debugging
     console.log(`Sending batch sales receipts with defaults - Item: ${batchItemRef}, Account: ${batchDepositToAccountId}, Payment Method: ${batchPaymentMethodId}`);
@@ -2132,10 +2238,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Set up other buttons
+    // Set up Batch Processing modal "Send All to QuickBooks" button
     document.getElementById('sendAllReceiptsBtn').addEventListener('click', sendAllToQBO);
     
-    // Add event listener for batch modal button
+    // Set up the main "Send All to QB" button in the table header to show the batch modal
     document.getElementById('sendAllQBOBtn').addEventListener('click', function() {
         showBatchReceiptModal();
     });
@@ -2313,11 +2419,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Save changes button
     document.getElementById('saveChangesBtn').addEventListener('click', function() {
         saveChanges();
-    });
-    
-    // Send all to QBO button
-    document.getElementById('sendAllQBOBtn').addEventListener('click', function() {
-        sendAllToQBO();
     });
     
     // Generate report button

@@ -508,8 +508,11 @@
                         
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label class="form-label fw-bold">Payment Method:</label>
-                                <div id="previewPaymentMethod"></div>
+                                <label for="previewPaymentMethodRef" class="form-label fw-bold">Payment Method:</label>
+                                <select id="previewPaymentMethodRef" class="form-select">
+                                    <!-- Options will be populated dynamically -->
+                                </select>
+                                <div id="previewPaymentMethod" class="d-none"></div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Reference No.:</label>
@@ -523,8 +526,11 @@
                                 <div id="previewDate"></div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-bold">Deposit To:</label>
-                                <div id="previewDepositTo"></div>
+                                <label for="previewDepositToAccount" class="form-label fw-bold">Deposit To Account:</label>
+                                <select id="previewDepositToAccount" class="form-select">
+                                    <!-- Options will be populated dynamically -->
+                                </select>
+                                <div id="previewDepositTo" class="d-none"></div>
                             </div>
                         </div>
                         
@@ -588,6 +594,21 @@
                         <div class="mb-3">
                             <label for="batchItemRef" class="form-label">Default Product/Service for all receipts:</label>
                             <select id="batchItemRef" class="form-select">
+                                <!-- Options will be populated dynamically -->
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="batchDepositToAccount" class="form-label">Default Deposit To Account:</label>
+                            <select id="batchDepositToAccount" class="form-select">
+                                <!-- Options will be populated dynamically -->
+                            </select>
+                            <small class="text-muted">Select the account to be debited for these donations.</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="batchPaymentMethodRef" class="form-label">Default Payment Method:</label>
+                            <select id="batchPaymentMethodRef" class="form-select">
                                 <!-- Options will be populated dynamically -->
                             </select>
                         </div>

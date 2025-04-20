@@ -793,11 +793,13 @@ def create_batch_sales_receipts():
     donations = session.get('donations', [])
     results = []
     
-    # Get the default item ref from request or use default
+    # Get the default values from request or use defaults
     default_item_ref = request.json.get('defaultItemRef', '1')  # Default fallback
+    default_account_id = request.json.get('defaultDepositToAccountId', '12000')  # Default fallback
+    default_payment_method_id = request.json.get('defaultPaymentMethodId', 'CHECK')  # Default fallback
     
     # Log what we're sending for debugging
-    print(f"Sending batch sales receipts with default itemRef: {default_item_ref}")
+    print(f"Sending batch sales receipts with default itemRef: {default_item_ref}, depositToAccountId: {default_account_id}, paymentMethodId: {default_payment_method_id}")
     
     # Track processing stats
     success_count = 0
@@ -928,12 +930,12 @@ def create_batch_sales_receipts():
                     'value': donation['qboCustomerId']
                 },
                 'PaymentMethodRef': {
-                    'value': 'CHECK'  # Hard-coded for "Check" payment method
+                    'value': default_payment_method_id  # Use the parameter from request
                 },
                 'PaymentRefNum': check_no,
                 'TxnDate': gift_date,
                 'DepositToAccountRef': {
-                    'value': '12000'  # Undeposited Funds account
+                    'value': default_account_id  # Use the parameter from request
                 },
                 'DocNumber': doc_number,
                 'Line': [
@@ -1299,13 +1301,26 @@ def preview_sales_receipt(donation_id):
         gift_date = donation.get('Gift Date', '')
         check_date = donation.get('Check Date', '')
         check_no = donation.get('Check No.', 'N/A')
-        gift_amount = donation.get('Gift Amount', '0')
+        
+        # Handle gift amount with proper parsing of currency strings
+        gift_amount_str = donation.get('Gift Amount', '0')
+        try:
+            # If it's already a number, use it directly
+            if isinstance(gift_amount_str, (int, float)):
+                gift_amount = float(gift_amount_str)
+            else:
+                # Remove currency symbols, commas, and other formatting
+                gift_amount = float(gift_amount_str.replace('$', '').replace(',', '').strip())
+        except (ValueError, TypeError) as e:
+            print(f"Error parsing gift amount '{gift_amount_str}': {str(e)}")
+            gift_amount = 0.0  # Default to zero if parsing fails
+        
         last_name = donation.get('Last Name', '')
         first_name = donation.get('First Name', '')
         memo = donation.get('Memo', '')
         
         # Format description
-        description = f"{check_no}_{gift_date}_{gift_amount}_{last_name}_{first_name}"
+        description = f"{check_no}_{gift_date}_{gift_amount_str}_{last_name}_{first_name}"
         if memo:
             description += f"_{memo}"
         
@@ -1313,6 +1328,9 @@ def preview_sales_receipt(donation_id):
         doc_number = f"{today}_{check_no}"
         if len(doc_number) > 21:  # QB has a 21 char limit
             doc_number = doc_number[:21]
+        
+        # Get deposit account info from request
+        deposit_account_id = request.json.get('depositToAccountId', '12000')
         
         # Construct the preview data
         preview_data = {
@@ -1322,11 +1340,12 @@ def preview_sales_receipt(donation_id):
                 'paymentMethod': 'Check',
                 'referenceNo': check_no,
                 'date': gift_date,
-                'depositTo': '12000 Undeposited Funds',
+                'depositTo': f"{deposit_account_id} Undeposited Funds",
+                'depositToAccountId': deposit_account_id,
                 'serviceDate': check_date,
                 'itemRef': item_ref,
                 'description': description,
-                'amount': float(gift_amount),
+                'amount': gift_amount,  # Now properly parsed as float
                 'message': f"auto import on {today}",
                 'docNumber': doc_number
             }
@@ -1491,6 +1510,21 @@ def get_all_accounts():
         # Get all accounts
         all_accounts = qbo_service.get_all_accounts()
         
+        # Look for Undeposited Funds account
+        undeposited_funds = None
+        for account in all_accounts:
+            # Check if this is an Undeposited Funds account by name or account type
+            if (account.get('Name', '').lower() == 'undeposited funds' or
+                account.get('AccountSubType', '').lower() == 'undepositedFunds'.lower()):
+                undeposited_funds = {
+                    'id': account.get('Id'),
+                    'name': account.get('Name', ''),
+                    'type': account.get('AccountType', ''),
+                    'subType': account.get('AccountSubType', '')
+                }
+                print(f"Found Undeposited Funds account: {undeposited_funds}")
+                break
+        
         # Prepare simplified account data for the UI
         accounts = []
         for account in all_accounts:
@@ -1505,7 +1539,8 @@ def get_all_accounts():
         
         return jsonify({
             'success': True,
-            'accounts': accounts
+            'accounts': accounts,
+            'undepositedFunds': undeposited_funds
         })
         
     except Exception as e:
