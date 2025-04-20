@@ -781,3 +781,117 @@ class QBOService:
             import traceback
             traceback.print_exc()
             return []
+            
+    def get_all_accounts(self) -> List[Dict[str, Any]]:
+        """Fetch the complete list of accounts from QBO.
+        
+        Returns:
+            List of all account data dictionaries
+        """
+        if not self.access_token or not self.realm_id:
+            print("Not authenticated with QBO - Missing access_token or realm_id")
+            return []
+        
+        try:
+            print("==== STARTING ACCOUNT RETRIEVAL FROM QUICKBOOKS ====")
+            
+            accounts = []
+            start_position = 1
+            max_results = 1000  # QBO API limit per query
+            batch_count = 0
+            
+            while True:
+                batch_count += 1
+                # Query for a batch of accounts
+                query = f"SELECT * FROM Account STARTPOSITION {start_position} MAXRESULTS {max_results}"
+                encoded_query = quote(query)
+                url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+                
+                print(f"Batch {batch_count}: Requesting accounts at position {start_position}")
+                
+                response = requests.get(url, headers=self._get_auth_headers())
+                
+                print(f"Response status: {response.status_code}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    batch = data['QueryResponse'].get('Account', [])
+                    
+                    # If no more accounts, break the loop
+                    if not batch:
+                        print(f"Batch {batch_count}: No more accounts found")
+                        break
+                    
+                    # Add this batch to our collection
+                    accounts.extend(batch)
+                    print(f"Batch {batch_count}: Retrieved {len(batch)} accounts (running total: {len(accounts)})")
+                    
+                    # If we got fewer accounts than the max, we're done
+                    if len(batch) < max_results:
+                        print(f"Batch {batch_count}: Less than max results, finished retrieving")
+                        break
+                        
+                    # Otherwise, update the start position for the next batch
+                    start_position += max_results
+                else:
+                    error_text = response.text[:200] + "..." if len(response.text) > 200 else response.text
+                    print(f"Error fetching accounts: {response.status_code}")
+                    print(f"Error details: {error_text}")
+                    break
+            
+            print("==== ACCOUNT RETRIEVAL SUMMARY ====")
+            print(f"Successfully retrieved {len(accounts)} accounts in {batch_count} batches")
+            
+            # Sort accounts by name for easier selection in the UI
+            accounts.sort(key=lambda x: x.get('Name', '').lower())
+            
+            return accounts
+        except Exception as e:
+            print(f"Exception in get_all_accounts: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
+            
+    def get_all_payment_methods(self) -> List[Dict[str, Any]]:
+        """Fetch the complete list of payment methods from QBO.
+        
+        Returns:
+            List of all payment method data dictionaries
+        """
+        if not self.access_token or not self.realm_id:
+            print("Not authenticated with QBO - Missing access_token or realm_id")
+            return []
+        
+        try:
+            print("==== STARTING PAYMENT METHOD RETRIEVAL FROM QUICKBOOKS ====")
+            
+            payment_methods = []
+            # Query for payment methods (there's usually not many, so no pagination needed)
+            query = "SELECT * FROM PaymentMethod"
+            encoded_query = quote(query)
+            url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+            
+            print(f"Requesting payment methods")
+            
+            response = requests.get(url, headers=self._get_auth_headers())
+            
+            print(f"Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                payment_methods = data['QueryResponse'].get('PaymentMethod', [])
+                print(f"Retrieved {len(payment_methods)} payment methods")
+            else:
+                error_text = response.text[:200] + "..." if len(response.text) > 200 else response.text
+                print(f"Error fetching payment methods: {response.status_code}")
+                print(f"Error details: {error_text}")
+            
+            # Sort payment methods by name for easier selection in the UI
+            payment_methods.sort(key=lambda x: x.get('Name', '').lower())
+            
+            return payment_methods
+        except Exception as e:
+            print(f"Exception in get_all_payment_methods: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []

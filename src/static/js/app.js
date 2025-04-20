@@ -1897,6 +1897,15 @@ function checkQBOAuthStatus() {
                 }
                 console.log(`QBO authentication is active (${data.environment} environment)`);
                 
+                // Fetch QBO references since we're authenticated
+                Promise.all([
+                    fetchQBOItems(),
+                    fetchQBOAccounts(),
+                    fetchQBOPaymentMethods()
+                ]).catch(error => {
+                    console.error("Error fetching QBO references:", error);
+                });
+                
                 // Check if we just connected and need to process pending files
                 if (data.justConnected && window.pendingFiles && window.pendingFiles.length > 0) {
                     console.log("Just connected to QBO and have pending files - processing them now");
@@ -2194,15 +2203,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Check QBO authentication status
     checkQBOAuthStatus();
-    
-    // Fetch QBO references
-    Promise.all([
-        fetchQBOItems(),
-        fetchQBOAccounts(),
-        fetchQBOPaymentMethods()
-    ]).catch(error => {
-        console.error("Error fetching QBO references:", error);
-    });
     
     // Set up file upload area
     const uploadArea = document.getElementById('uploadArea');

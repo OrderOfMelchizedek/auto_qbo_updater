@@ -1327,6 +1327,50 @@ def qbo_environment_info():
         'realmId': qbo_service.realm_id if qbo_service.realm_id else None
     })
 
+@app.route('/qbo/items/all', methods=['GET'])
+def get_all_items():
+    """Get all QuickBooks items/products/services."""
+    try:
+        # Check if authenticated
+        if not qbo_service.access_token or not qbo_service.realm_id:
+            return jsonify({
+                'success': False,
+                'message': 'Not authenticated with QuickBooks Online'
+            }), 401
+        
+        # Get all items
+        all_items = qbo_service.get_all_items()
+        
+        # Prepare simplified item data for the UI
+        items = []
+        for item in all_items:
+            # Skip inactive items
+            if not item.get('Active', True):
+                continue
+                
+            items.append({
+                'id': item.get('Id'),
+                'name': item.get('Name', ''),
+                'description': item.get('Description', ''),
+                'type': item.get('Type', ''),
+                'unitPrice': item.get('UnitPrice', 0)
+            })
+        
+        # Sort items by name for easier selection in the UI
+        items.sort(key=lambda x: x['name'].lower())
+        
+        return jsonify({
+            'success': True,
+            'items': items
+        })
+        
+    except Exception as e:
+        print(f"Error fetching items: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching items: {str(e)}'
+        }), 500
+
 @app.route('/qbo/item/create', methods=['POST'])
 def create_item():
     """Create a new QBO product/service item."""
@@ -1409,6 +1453,44 @@ def create_item():
             'message': f'Error creating item: {str(e)}'
         }), 500
 
+@app.route('/qbo/accounts/all', methods=['GET'])
+def get_all_accounts():
+    """Get all QuickBooks accounts."""
+    try:
+        # Check if authenticated
+        if not qbo_service.access_token or not qbo_service.realm_id:
+            return jsonify({
+                'success': False,
+                'message': 'Not authenticated with QuickBooks Online'
+            }), 401
+        
+        # Get all accounts
+        all_accounts = qbo_service.get_all_accounts()
+        
+        # Prepare simplified account data for the UI
+        accounts = []
+        for account in all_accounts:
+            accounts.append({
+                'id': account.get('Id'),
+                'name': account.get('Name', ''),
+                'type': account.get('AccountType', ''),
+                'subType': account.get('AccountSubType', ''),
+                'number': account.get('AcctNum', ''),
+                'active': account.get('Active', True)
+            })
+        
+        return jsonify({
+            'success': True,
+            'accounts': accounts
+        })
+        
+    except Exception as e:
+        print(f"Error fetching accounts: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching accounts: {str(e)}'
+        }), 500
+
 @app.route('/qbo/account/create', methods=['POST'])
 def create_account():
     """Create a new QBO account."""
@@ -1483,6 +1565,41 @@ def create_account():
         return jsonify({
             'success': False,
             'message': f'Error creating account: {str(e)}'
+        }), 500
+
+@app.route('/qbo/payment-methods/all', methods=['GET'])
+def get_all_payment_methods():
+    """Get all QuickBooks payment methods."""
+    try:
+        # Check if authenticated
+        if not qbo_service.access_token or not qbo_service.realm_id:
+            return jsonify({
+                'success': False,
+                'message': 'Not authenticated with QuickBooks Online'
+            }), 401
+        
+        # Get all payment methods
+        all_payment_methods = qbo_service.get_all_payment_methods()
+        
+        # Prepare simplified payment method data for the UI
+        payment_methods = []
+        for method in all_payment_methods:
+            payment_methods.append({
+                'id': method.get('Id'),
+                'name': method.get('Name', ''),
+                'active': method.get('Active', True)
+            })
+        
+        return jsonify({
+            'success': True,
+            'paymentMethods': payment_methods
+        })
+        
+    except Exception as e:
+        print(f"Error fetching payment methods: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching payment methods: {str(e)}'
         }), 500
 
 @app.route('/qbo/payment-method/create', methods=['POST'])
