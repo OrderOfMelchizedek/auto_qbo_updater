@@ -28,7 +28,9 @@ setup(
     author_email='IDGSDK@intuit.com',
     url='https://github.com/intuit/oauth-pythonclient',
     packages=find_packages(exclude=('tests*',)),
-    namespace_packages=('intuitlib',),
+    # Comment out namespace_packages to avoid Python 3.13 warnings
+    # # Comment out namespace_packages to avoid Python 3.13 warnings
+    # namespace_packages=('intuitlib',),
     install_requires=[
         'pyjwt[crypto]>=2.0.0',
         'requests>=2.13.0',

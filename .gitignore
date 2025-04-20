@@ -47,3 +47,10 @@ uploads/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# macOS files
+.DS_Store
+
+# Sensitive data
+*Customer Contact List*.csv
+*client ID and secret*.md

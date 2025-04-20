@@ -37,10 +37,10 @@ A web application to process donation information for Friends of Mwangaza, inclu
 7. Run the application:
    ```
    # Run with Sandbox environment (default)
-   python src/app.py --env sandbox
+   python run.py --env sandbox
 
    # Run with Production environment
-   python src/app.py --env production
+   python run.py --env production
    ```
 
 ## QuickBooks Online Integration
@@ -64,6 +64,16 @@ To use the Gemini API for donation document processing:
 2. Enable the Generative Language API
 3. Create an API key
 4. Add your API key to the `.env` file
+
+## Project Structure
+
+- `/src` - Application source code
+- `/docs` - Documentation and reference materials
+  - `/docs/project_specs` - Project specifications and requirements
+  - `/docs/prompts_archive` - AI prompt templates for data extraction
+- `/vendor` - Third-party libraries and dependencies
+- `/tests` - Test suite
+- `/uploads` - Temporary storage for uploaded files (auto-created)
 
 ## Development
 

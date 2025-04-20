@@ -6,7 +6,7 @@ from typing import Dict
 class PromptManager:
     """Manages loading and caching of prompts from files."""
     
-    def __init__(self, prompt_dir: str = 'prompts'):
+    def __init__(self, prompt_dir: str = 'docs/prompts_archive'):
         """Initialize the PromptManager.
         
         Args:

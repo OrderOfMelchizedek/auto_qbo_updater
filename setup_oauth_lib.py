@@ -9,8 +9,8 @@ def setup_oauth_lib():
     """
     print("Setting up Intuit OAuth Python client...")
     
-    # Path to the OAuth library in the docs folder
-    oauth_lib_path = os.path.join('docs', 'oauth-pythonclient-master')
+    # Path to the OAuth library in the vendor folder
+    oauth_lib_path = os.path.join('vendor', 'oauth-pythonclient-master')
     
     # Check if the path exists
     if not os.path.exists(oauth_lib_path):
@@ -18,9 +18,9 @@ def setup_oauth_lib():
         sys.exit(1)
     
     try:
-        # Install the library in development mode
+        # Install the library in regular mode (not editable/development mode)
         result = subprocess.run(
-            [sys.executable, '-m', 'pip', 'install', '-e', oauth_lib_path],
+            [sys.executable, '-m', 'pip', 'install', oauth_lib_path],
             check=True,
             capture_output=True,
             text=True

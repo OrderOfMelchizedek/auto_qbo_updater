@@ -14,7 +14,7 @@ class GeminiService:
         """Initialize the Gemini service with API key."""
         self.api_key = api_key
         genai.configure(api_key=api_key)
-        self.prompt_manager = PromptManager(prompt_dir='prompts')
+        self.prompt_manager = PromptManager(prompt_dir='docs/prompts_archive')
         
     def _extract_json_from_text(self, text: str) -> Any:
         """Extract JSON from text, handling various response formats.

@@ -5,8 +5,14 @@ import PyPDF2
 from PIL import Image
 import io
 
-from utils.gemini_service import GeminiService
-from utils.prompt_manager import PromptManager
+# Try importing from the src package first
+try:
+    from src.utils.gemini_service import GeminiService
+    from src.utils.prompt_manager import PromptManager
+except ModuleNotFoundError:
+    # Fall back to relative imports if running directly
+    from utils.gemini_service import GeminiService
+    from utils.prompt_manager import PromptManager
 
 class FileProcessor:
     """Service for processing different file types (images, PDFs) for donation extraction."""
@@ -20,7 +26,7 @@ class FileProcessor:
         """
         self.gemini_service = gemini_service
         self.qbo_service = qbo_service
-        self.prompt_manager = PromptManager(prompt_dir='prompts')
+        self.prompt_manager = PromptManager(prompt_dir='docs/prompts_archive')
     
     def process(self, file_path: str, file_ext: str) -> Any:
         """Process a file to extract donation information.

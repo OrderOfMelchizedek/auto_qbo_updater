@@ -8,9 +8,16 @@ import pandas as pd
 from dotenv import load_dotenv
 from urllib.parse import quote
 
-from utils.gemini_service import GeminiService
-from utils.qbo_service import QBOService
-from utils.file_processor import FileProcessor
+# Try importing from the src package first
+try:
+    from src.utils.gemini_service import GeminiService
+    from src.utils.qbo_service import QBOService
+    from src.utils.file_processor import FileProcessor
+except ModuleNotFoundError:
+    # Fall back to relative imports if running directly from src directory
+    from utils.gemini_service import GeminiService
+    from utils.qbo_service import QBOService
+    from utils.file_processor import FileProcessor
 
 # Load environment variables
 load_dotenv()
