@@ -8,13 +8,20 @@ from typing import Dict, Any, Optional, List, Union
 from .prompt_manager import PromptManager
 
 class GeminiService:
-    """Service for interacting with Google's Gemini 2.5 Pro Preview API."""
+    """Service for interacting with Google's Gemini API."""
     
-    def __init__(self, api_key: str):
-        """Initialize the Gemini service with API key."""
+    def __init__(self, api_key: str, model_name: str = 'gemini-2.5-flash-preview-04-17'):
+        """Initialize the Gemini service with API key and model name.
+        
+        Args:
+            api_key: Gemini API key
+            model_name: Gemini model name to use ('gemini-2.5-flash-preview-04-17' by default)
+        """
         self.api_key = api_key
+        self.model_name = model_name
         genai.configure(api_key=api_key)
         self.prompt_manager = PromptManager(prompt_dir='docs/prompts_archive')
+        print(f"Initialized Gemini service with model: {self.model_name}")
         
     def _extract_json_from_text(self, text: str) -> Any:
         """Extract JSON from text, handling various response formats.
@@ -63,11 +70,11 @@ class GeminiService:
             Dictionary or list of dictionaries containing extracted data or None if extraction failed
         """
         try:
-            # Set up model
-            model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
+            # Set up model using the configured model name
+            model = genai.GenerativeModel(self.model_name)
             
             # Call Gemini API with prompt text
-            print(f"Processing text with Gemini")
+            print(f"Processing text with Gemini model: {self.model_name}")
             response = model.generate_content(
                 contents=[prompt_text],
                 generation_config=genai.GenerationConfig(
@@ -122,11 +129,11 @@ class GeminiService:
                 'qbo_data': qbo_json
             })
             
-            # Set up the model
-            model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
+            # Set up the model using the configured model name
+            model = genai.GenerativeModel(self.model_name)
             
             # Call Gemini API with verification prompt
-            print("Verifying customer match with Gemini")
+            print(f"Verifying customer match with Gemini model: {self.model_name}")
             response = model.generate_content(
                 contents=[verification_prompt],
                 generation_config=genai.GenerationConfig(
@@ -185,8 +192,8 @@ class GeminiService:
                 # Use prompt manager to combine main prompt and extraction prompt
                 extraction_prompt = self.prompt_manager.combine_prompts(['main_prompt', 'extraction_prompt'])
             
-            # Set up model
-            model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
+            # Set up model using the configured model name
+            model = genai.GenerativeModel(self.model_name)
             
             # Process based on file type
             if file_ext == '.pdf':

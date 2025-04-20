@@ -22,15 +22,36 @@ except ModuleNotFoundError:
 # Load environment variables
 load_dotenv()
 
-# Parse command line arguments for QBO environment
+# Define model aliases
+MODEL_MAPPING = {
+    'gemini-flash': 'gemini-2.5-flash-preview-04-17',
+    'gemini-pro': 'gemini-2.5-pro-preview-03-25',
+    # Include the full model names as keys for consistency
+    'gemini-2.5-flash-preview-04-17': 'gemini-2.5-flash-preview-04-17',
+    'gemini-2.5-pro-preview-03-25': 'gemini-2.5-pro-preview-03-25'
+}
+
+# Resolve the environment variable model
+gemini_env_model = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash-preview-04-17')
+# If the environment variable is an alias, resolve it
+resolved_env_model = MODEL_MAPPING.get(gemini_env_model, gemini_env_model)
+
+# Parse command line arguments for QBO environment and Gemini model
 parser = argparse.ArgumentParser(description="FOM to QBO Automation App")
 parser.add_argument('--env', type=str, choices=['sandbox', 'production'], default=os.getenv('QBO_ENVIRONMENT', 'sandbox'),
                     help='QuickBooks Online environment (sandbox or production)')
+parser.add_argument('--model', type=str, default=resolved_env_model,
+                    choices=['gemini-flash', 'gemini-pro', 'gemini-2.5-flash-preview-04-17', 'gemini-2.5-pro-preview-03-25'],
+                    help='Gemini model to use (flash for faster responses, pro for better quality)')
 args, _ = parser.parse_known_args()
 
 # Use the command-line specified environment
 qbo_environment = args.env
+# Resolve model alias if needed
+gemini_model = MODEL_MAPPING.get(args.model, args.model)
+
 print(f"Starting application with QBO environment: {qbo_environment}")
+print(f"Using Gemini model: {gemini_model}")
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # For session management
@@ -41,7 +62,10 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB upload limit
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Initialize services
-gemini_service = GeminiService(api_key=os.getenv('GEMINI_API_KEY'))
+gemini_service = GeminiService(
+    api_key=os.getenv('GEMINI_API_KEY'),
+    model_name=gemini_model  # Use the command-line specified model
+)
 qbo_service = QBOService(
     client_id=os.getenv('QBO_CLIENT_ID'),
     client_secret=os.getenv('QBO_CLIENT_SECRET'),

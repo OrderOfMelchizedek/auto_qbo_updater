@@ -36,11 +36,21 @@ A web application to process donation information for Friends of Mwangaza, inclu
    Then edit `.env` with your QuickBooks Online and Gemini API credentials
 7. Run the application:
    ```
-   # Run with Sandbox environment (default)
-   python run.py --env sandbox
-
+   # Run with default settings (Sandbox QBO, Gemini Flash model)
+   python run.py
+   
+   # Run with Gemini Flash model (explicit, using alias)
+   python run.py --model gemini-flash
+   
+   # Run with Gemini Pro model (better quality but slower)
+   python run.py --model gemini-pro
+   
    # Run with Production environment
    python run.py --env production
+   
+   # Full model names can also be used
+   python run.py --model gemini-2.5-flash-preview-04-17
+   python run.py --model gemini-2.5-pro-preview-03-25
    ```
 
 ## QuickBooks Online Integration
