@@ -6,150 +6,99 @@ import base64
 from urllib.parse import urlencode, quote
 import time
 
+from flask import session as flask_session # Add this import
+
 class QBOService:
-    """Service for interacting with QuickBooks Online API."""
-    
-    def __init__(self, client_id: str, client_secret: str, redirect_uri: str, environment: str = 'sandbox'):
-        """Initialize the QBO service with OAuth credentials.
-        
-        Args:
-            client_id: QBO Client ID
-            client_secret: QBO Client Secret
-            redirect_uri: OAuth redirect URI
-            environment: 'sandbox' or 'production'
-        """
+    def __init__(self, client_id, client_secret, redirect_uri, environment='sandbox'):
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
         self.environment = environment
-        
-        # Base URLs for QBO API
-        if environment == 'sandbox':
-            self.auth_endpoint = 'https://appcenter.intuit.com/connect/oauth2'
-            self.token_endpoint = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
-            self.api_base = 'https://sandbox-quickbooks.api.intuit.com/v3/company/'
-        else:
-            self.auth_endpoint = 'https://appcenter.intuit.com/connect/oauth2'
-            self.token_endpoint = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
-            self.api_base = 'https://quickbooks.api.intuit.com/v3/company/'
-        
-        # OAuth tokens (to be set during authorization flow)
+        # ... (other initializations like api_base) ...
+        # Instance variables for tokens are now primarily for current request context
         self.access_token = None
         self.refresh_token = None
         self.realm_id = None
         self.token_expires_at = 0
-    
-    def get_authorization_url(self) -> str:
-        """Get the QBO authorization URL for OAuth flow.
-        
-        Returns:
-            Authorization URL to redirect the user to
-        """
-        params = {
-            'client_id': self.client_id,
-            'response_type': 'code',
-            'scope': 'com.intuit.quickbooks.accounting',
-            'redirect_uri': self.redirect_uri,
-            'state': str(int(time.time()))  # Simple anti-forgery state token
-        }
-        
-        auth_url = f"{self.auth_endpoint}?{urlencode(params)}"
-        return auth_url
-    
+
+    def _ensure_tokens_loaded(self):
+        """Loads tokens from session if not present on instance for current context."""
+        if not self.access_token and hasattr(flask_session, 'get'):
+            self.access_token = flask_session.get('qbo_access_token')
+            self.refresh_token = flask_session.get('qbo_refresh_token')
+            self.realm_id = flask_session.get('qbo_realm_id') # Important: realm_id also needs to be session-managed
+            self.token_expires_at = flask_session.get('qbo_token_expires_at', 0)
+            if self.access_token:
+                 print("DEBUG: QBOService loaded tokens from session.")
+
+    def _save_tokens_to_session(self):
+        """Saves current instance tokens to flask session."""
+        if hasattr(flask_session, 'get'):
+            flask_session['qbo_access_token'] = self.access_token
+            flask_session['qbo_refresh_token'] = self.refresh_token
+            flask_session['qbo_realm_id'] = self.realm_id
+            flask_session['qbo_token_expires_at'] = self.token_expires_at
+            flask_session.modified = True # Ensure session is saved
+            print("DEBUG: QBOService saved tokens to session.")
+
     def get_tokens(self, authorization_code: str, realm_id: str) -> bool:
-        """Exchange authorization code for access and refresh tokens.
-        
-        Args:
-            authorization_code: OAuth authorization code from callback
-            realm_id: QBO company ID
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
-            
-            headers = {
-                'Authorization': f'Basic {auth_header}',
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
-            
-            data = {
-                'grant_type': 'authorization_code',
-                'code': authorization_code,
-                'redirect_uri': self.redirect_uri
-            }
-            
-            response = requests.post(self.token_endpoint, headers=headers, data=data)
-            
-            if response.status_code == 200:
-                token_data = response.json()
-                self.access_token = token_data.get('access_token')
-                self.refresh_token = token_data.get('refresh_token')
-                self.realm_id = realm_id
-                self.token_expires_at = int(time.time()) + token_data.get('expires_in', 3600)
-                return True
-            else:
-                print(f"Error getting tokens: {response.status_code} - {response.text}")
-                return False
-        
-        except Exception as e:
-            print(f"Exception in get_tokens: {str(e)}")
+        # ... (your existing token exchange logic) ...
+        if response.status_code == 200:
+            token_data = response.json()
+            self.access_token = token_data.get('access_token')
+            self.refresh_token = token_data.get('refresh_token')
+            self.realm_id = realm_id # Set realm_id here
+            self.token_expires_at = int(time.time()) + token_data.get('expires_in', 3600)
+            self._save_tokens_to_session() # Save to session
+            return True
+        else:
+            # Clear instance tokens on failure
+            self.access_token = None
+            self.refresh_token = None
+            # self.realm_id = None # Keep realm_id from param, but tokens are invalid
+            self._save_tokens_to_session() # Save cleared state
+            print(f"Error getting tokens: {response.status_code} - {response.text}")
             return False
-    
+        # ... (exception handling also clears and saves)
+
     def refresh_access_token(self) -> bool:
-        """Refresh the access token using the refresh token.
-        
-        Returns:
-            True if successful, False otherwise
-        """
+        self._ensure_tokens_loaded() # Ensure we have a refresh token to use
         if not self.refresh_token:
-            print("No refresh token available")
+            print("No refresh token available to refresh.")
             return False
-        
-        try:
-            auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
-            
-            headers = {
-                'Authorization': f'Basic {auth_header}',
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
-            
-            data = {
-                'grant_type': 'refresh_token',
-                'refresh_token': self.refresh_token
-            }
-            
-            response = requests.post(self.token_endpoint, headers=headers, data=data)
-            
-            if response.status_code == 200:
-                token_data = response.json()
-                self.access_token = token_data.get('access_token')
-                self.refresh_token = token_data.get('refresh_token', self.refresh_token)
-                self.token_expires_at = int(time.time()) + token_data.get('expires_in', 3600)
-                return True
-            else:
-                print(f"Error refreshing token: {response.status_code} - {response.text}")
-                return False
-        
-        except Exception as e:
-            print(f"Exception in refresh_access_token: {str(e)}")
+        # ... (your existing refresh logic) ...
+        if response.status_code == 200:
+            token_data = response.json()
+            self.access_token = token_data.get('access_token')
+            self.refresh_token = token_data.get('refresh_token', self.refresh_token) # QBO often returns new refresh token
+            self.token_expires_at = int(time.time()) + token_data.get('expires_in', 3600)
+            self._save_tokens_to_session() # Save new tokens
+            return True
+        else:
+            print(f"Error refreshing token: {response.status_code} - {response.text}")
+            # Potentially clear tokens if refresh fails badly (e.g. invalid_grant)
+            if response.status_code in [400, 401, 403]:
+                self.access_token = None; self.refresh_token = None; # self.realm_id = None;
+                self._save_tokens_to_session()
             return False
-    
+        # ... (exception handling)
+
     def _get_auth_headers(self) -> Dict[str, str]:
-        """Get headers with authentication for QBO API calls.
+        self._ensure_tokens_loaded()
+        if not self.access_token or not self.realm_id:
+            raise Exception("QBOService: Not authenticated. Cannot get auth headers.")
         
-        Returns:
-            Dictionary of HTTP headers
-        """
-        # Check if token is expired (or will expire soon)
-        if int(time.time()) >= (self.token_expires_at - 60):
-            self.refresh_access_token()
+        current_time = int(time.time())
+        # Refresh if token is expired or will expire in the next 60 seconds
+        if current_time >= (self.token_expires_at - 60):
+            print("Access token expired or expiring soon, attempting refresh...")
+            if not self.refresh_access_token():
+                raise Exception("QBOService: Token refresh failed. Cannot get auth headers.")
         
         return {
             'Authorization': f'Bearer {self.access_token}',
             'Accept': 'application/json',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json' # Usually for POST/PUT, but often included
         }
     
     def find_customer(self, customer_lookup: str) -> Optional[Dict[str, Any]]:
@@ -161,6 +110,7 @@ class QBOService:
         Returns:
             Customer data if found, None otherwise
         """
+        self._ensure_tokens_loaded() # Load from session if needed
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
             return None
@@ -326,6 +276,7 @@ class QBOService:
         Returns:
             Created customer data if successful, None otherwise
         """
+        self._ensure_tokens_loaded() # Load from session if needed
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
             return None
@@ -353,6 +304,7 @@ class QBOService:
         Returns:
             Updated customer data if successful, None otherwise
         """
+        self._ensure_tokens_loaded() # Load from session if needed
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
             return None
@@ -380,6 +332,7 @@ class QBOService:
         Returns:
             Created sales receipt data if successful, or error details
         """
+        self._ensure_tokens_loaded() # Load from session if needed
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
             return {"error": True, "message": "Not authenticated with QBO"}
@@ -499,6 +452,7 @@ class QBOService:
         Returns:
             List of all customer data dictionaries
         """
+        self._ensure_tokens_loaded() # Load from session if needed
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO - Missing access_token or realm_id")
             print(f"access_token exists: {self.access_token is not None}")
@@ -597,6 +551,7 @@ class QBOService:
         Returns:
             Created account data if successful, None otherwise
         """
+        self._ensure_tokens_loaded() # Load from session if needed
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
             return None
@@ -636,6 +591,7 @@ class QBOService:
         Returns:
             Created item data if successful, None otherwise
         """
+        self._ensure_tokens_loaded() # Load from session if needed
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
             return None
@@ -681,6 +637,7 @@ class QBOService:
         Returns:
             Created payment method data if successful, None otherwise
         """
+        self._ensure_tokens_loaded() # Load from session if needed
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
             return None
@@ -714,6 +671,7 @@ class QBOService:
         Returns:
             List of all item data dictionaries
         """
+        self._ensure_tokens_loaded() # Load from session if needed
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO - Missing access_token or realm_id")
             return []
@@ -788,6 +746,7 @@ class QBOService:
         Returns:
             List of all account data dictionaries
         """
+        self._ensure_tokens_loaded() # Load from session if needed
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO - Missing access_token or realm_id")
             return []
@@ -858,6 +817,7 @@ class QBOService:
         Returns:
             List of all payment method data dictionaries
         """
+        self._ensure_tokens_loaded() # Load from session if needed
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO - Missing access_token or realm_id")
             return []

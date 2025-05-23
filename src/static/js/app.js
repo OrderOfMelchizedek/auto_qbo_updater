@@ -1924,7 +1924,7 @@ function uploadAndProcessFiles(files) {
 
 // Helper function to check auth and process files if authenticated
 function checkAuthAndProcessFiles() {
-    fetch('/qbo/auth-status')
+    fetch('/qbo/status')
         .then(response => response.json())
         .then(data => {
             if (data.authenticated) {
@@ -1989,7 +1989,7 @@ function checkQBOAuthStatus() {
         });
     
     // Then check authentication status
-    fetch('/qbo/auth-status')
+    fetch('/qbo/status')
         .then(response => response.json())
         .then(data => {
             const qboBtn = document.getElementById('connectQBOBtn');
@@ -2275,7 +2275,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             // Check QBO auth status
-            fetch('/qbo/auth-status')
+            fetch('/qbo/status')
                 .then(response => response.json())
                 .then(data => {
                     if (data.authenticated) {
@@ -2390,7 +2390,7 @@ document.addEventListener('DOMContentLoaded', function() {
             window.pendingFiles = files;
             
             // First check if QBO is connected
-            fetch('/qbo/auth-status')
+            fetch('/qbo/status')
                 .then(response => response.json())
                 .then(data => {
                     if (!data.authenticated) {

@@ -36,3 +36,5 @@ These fields are REQUIRED and MUST have a value (not null):
 
 Please examine the document thoroughly to find all required information.
 IMPORTANT: Return ONLY the JSON object, with no additional text before or after.
+
+IMPORTANT FOR MULTI-PAGE FILES: If you encounter multiple pages or document types within a given user submission (e.g., a check image, an envelope scan, a donation slip) that clearly relate to a single donation from the same donor for the same amount/check number, you MUST consolidate this information into ONLY ONE JSON object for that donation. Use the check as the primary document and supplement with details from accompanying slips or envelopes. Do not create separate entries for each piece of paper if they represent one gift.
