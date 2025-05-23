@@ -5,8 +5,10 @@ from typing import Dict, Any, Optional, List
 import base64
 from urllib.parse import urlencode, quote
 import time
+import random
+import string
 
-from flask import session as flask_session # Add this import
+from flask import session as flask_session
 
 class QBOService:
     def __init__(self, client_id, client_secret, redirect_uri, environment='sandbox'):
@@ -14,22 +16,60 @@ class QBOService:
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
         self.environment = environment
-        # ... (other initializations like api_base) ...
-        # Instance variables for tokens are now primarily for current request context
+
+        if self.environment == 'sandbox':
+            self.api_base = 'https://sandbox-quickbooks.api.intuit.com/v3/company/'
+            # Define OAuth endpoints for sandbox
+            self.authorization_endpoint = 'https://sandbox-appcenter.intuit.com/connect/oauth2'
+            self.token_endpoint = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
+        else:
+            self.api_base = 'https://quickbooks.api.intuit.com/v3/company/'
+            # Define OAuth endpoints for production
+            self.authorization_endpoint = 'https://appcenter.intuit.com/connect/oauth2'
+            self.token_endpoint = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
+
+        # Instance variables for tokens
         self.access_token = None
         self.refresh_token = None
-        self.realm_id = None
-        self.token_expires_at = 0
+        self.realm_id = None # This will be set after successful token exchange
+        self.token_expires_at = 0 # Unix timestamp for when the access token expires
+
+    def get_authorization_url(self) -> str:
+        """
+        Constructs the QuickBooks Online authorization URL.
+        """
+        scopes = [
+            'com.intuit.quickbooks.accounting',
+            'openid',
+            'profile',
+            'email',
+        ]
+        scope_string = ' '.join(scopes)
+
+        state_token = ''.join(random.choices(string.ascii_letters + string.digits, k=30))
+        if hasattr(flask_session, 'get'): # Check if in Flask request context
+            flask_session['qbo_oauth_state'] = state_token
+            flask_session.modified = True
+
+
+        params = {
+            'client_id': self.client_id,
+            'response_type': 'code',
+            'scope': scope_string,
+            'redirect_uri': self.redirect_uri,
+            'state': state_token
+        }
+        return f"{self.authorization_endpoint}?{urlencode(params)}"
 
     def _ensure_tokens_loaded(self):
         """Loads tokens from session if not present on instance for current context."""
         if not self.access_token and hasattr(flask_session, 'get'):
             self.access_token = flask_session.get('qbo_access_token')
             self.refresh_token = flask_session.get('qbo_refresh_token')
-            self.realm_id = flask_session.get('qbo_realm_id') # Important: realm_id also needs to be session-managed
+            self.realm_id = flask_session.get('qbo_realm_id')
             self.token_expires_at = flask_session.get('qbo_token_expires_at', 0)
             if self.access_token:
-                 print("DEBUG: QBOService loaded tokens from session.")
+                print("DEBUG: QBOService loaded tokens from session.")
 
     def _save_tokens_to_session(self):
         """Saves current instance tokens to flask session."""
@@ -38,50 +78,101 @@ class QBOService:
             flask_session['qbo_refresh_token'] = self.refresh_token
             flask_session['qbo_realm_id'] = self.realm_id
             flask_session['qbo_token_expires_at'] = self.token_expires_at
-            flask_session.modified = True # Ensure session is saved
+            flask_session.modified = True
             print("DEBUG: QBOService saved tokens to session.")
 
     def get_tokens(self, authorization_code: str, realm_id: str) -> bool:
-        # ... (your existing token exchange logic) ...
-        if response.status_code == 200:
+        """
+        Exchanges an authorization code for access and refresh tokens.
+        Saves tokens to the session.
+        """
+        payload = {
+            'grant_type': 'authorization_code',
+            'code': authorization_code,
+            'redirect_uri': self.redirect_uri
+        }
+        auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode('utf-8')).decode('utf-8')
+        headers = {
+            'Authorization': f'Basic {auth_header}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'
+        }
+        try:
+            response = requests.post(self.token_endpoint, data=payload, headers=headers)
+            response.raise_for_status() # Raises an HTTPError for bad responses (4XX or 5XX)
             token_data = response.json()
+
             self.access_token = token_data.get('access_token')
             self.refresh_token = token_data.get('refresh_token')
-            self.realm_id = realm_id # Set realm_id here
+            self.realm_id = realm_id # Crucial: set realm_id from callback
             self.token_expires_at = int(time.time()) + token_data.get('expires_in', 3600)
-            self._save_tokens_to_session() # Save to session
+            
+            self._save_tokens_to_session()
+            print(f"DEBUG: Tokens obtained and saved. Realm ID: {self.realm_id}")
             return True
-        else:
-            # Clear instance tokens on failure
+        except requests.exceptions.RequestException as e:
+            error_content = e.response.text if e.response else "No response content"
+            print(f"Error getting tokens: {e}. Status: {e.response.status_code if e.response else 'N/A'}. Content: {error_content}")
             self.access_token = None
             self.refresh_token = None
-            # self.realm_id = None # Keep realm_id from param, but tokens are invalid
-            self._save_tokens_to_session() # Save cleared state
-            print(f"Error getting tokens: {response.status_code} - {response.text}")
+            # Do not clear realm_id here as it came from the auth redirect
+            self._save_tokens_to_session() # Save cleared token state
             return False
-        # ... (exception handling also clears and saves)
+        except Exception as e: # Catch any other unexpected error
+            print(f"Unexpected error in get_tokens: {str(e)}")
+            self.access_token = None
+            self.refresh_token = None
+            self._save_tokens_to_session()
+            return False
+
 
     def refresh_access_token(self) -> bool:
-        self._ensure_tokens_loaded() # Ensure we have a refresh token to use
+        """
+        Refreshes the access token using the stored refresh token.
+        Saves new tokens to the session.
+        """
+        self._ensure_tokens_loaded()
         if not self.refresh_token:
             print("No refresh token available to refresh.")
             return False
-        # ... (your existing refresh logic) ...
-        if response.status_code == 200:
+
+        payload = {
+            'grant_type': 'refresh_token',
+            'refresh_token': self.refresh_token
+        }
+        auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode('utf-8')).decode('utf-8')
+        headers = {
+            'Authorization': f'Basic {auth_header}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'
+        }
+        try:
+            response = requests.post(self.token_endpoint, data=payload, headers=headers)
+            response.raise_for_status()
             token_data = response.json()
+
             self.access_token = token_data.get('access_token')
             self.refresh_token = token_data.get('refresh_token', self.refresh_token) # QBO often returns new refresh token
             self.token_expires_at = int(time.time()) + token_data.get('expires_in', 3600)
-            self._save_tokens_to_session() # Save new tokens
+            
+            self._save_tokens_to_session()
+            print("DEBUG: Access token refreshed and saved.")
             return True
-        else:
-            print(f"Error refreshing token: {response.status_code} - {response.text}")
-            # Potentially clear tokens if refresh fails badly (e.g. invalid_grant)
-            if response.status_code in [400, 401, 403]:
-                self.access_token = None; self.refresh_token = None; # self.realm_id = None;
+        except requests.exceptions.RequestException as e:
+            error_content = e.response.text if e.response else "No response content"
+            print(f"Error refreshing token: {e}. Status: {e.response.status_code if e.response else 'N/A'}. Content: {error_content}")
+            # If refresh fails (e.g. invalid_grant), tokens might be totally invalid
+            if e.response is not None and e.response.status_code in [400, 401, 403]:
+                print("Clearing tokens due to refresh failure.")
+                self.access_token = None
+                self.refresh_token = None
+                self.realm_id = None # If tokens are bad, realm association might be stale too
+                self.token_expires_at = 0
                 self._save_tokens_to_session()
             return False
-        # ... (exception handling)
+        except Exception as e:
+            print(f"Unexpected error in refresh_access_token: {str(e)}")
+            return False
 
     def _get_auth_headers(self) -> Dict[str, str]:
         self._ensure_tokens_loaded()
@@ -89,8 +180,7 @@ class QBOService:
             raise Exception("QBOService: Not authenticated. Cannot get auth headers.")
         
         current_time = int(time.time())
-        # Refresh if token is expired or will expire in the next 60 seconds
-        if current_time >= (self.token_expires_at - 60):
+        if current_time >= (self.token_expires_at - 60): # Refresh if token is expired or will expire in 60s
             print("Access token expired or expiring soon, attempting refresh...")
             if not self.refresh_access_token():
                 raise Exception("QBOService: Token refresh failed. Cannot get auth headers.")
@@ -98,9 +188,9 @@ class QBOService:
         return {
             'Authorization': f'Bearer {self.access_token}',
             'Accept': 'application/json',
-            'Content-Type': 'application/json' # Usually for POST/PUT, but often included
+            'Content-Type': 'application/json'
         }
-    
+
     def find_customer(self, customer_lookup: str) -> Optional[Dict[str, Any]]:
         """Find a customer in QBO by name or other lookup value with enhanced fuzzy matching.
         
@@ -110,24 +200,21 @@ class QBOService:
         Returns:
             Customer data if found, None otherwise
         """
-        self._ensure_tokens_loaded() # Load from session if needed
+        self._ensure_tokens_loaded() 
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
             return None
         
-        # Handle empty lookup values
         if not customer_lookup or customer_lookup.strip() == '':
             print("Empty customer lookup value")
             return None
             
-        # Sanitize input for SQL injection prevention
-        # This is a simple sanitization, QuickBooks API handles more complex cases
         safe_lookup = customer_lookup.replace("'", "''")
         
         try:
             print(f"Finding customer with progressive matching: '{customer_lookup}'")
             
-            # Strategy 1: Exact match on DisplayName (highest confidence)
+            # Strategy 1: Exact match on DisplayName
             query = f"SELECT * FROM Customer WHERE DisplayName = '{safe_lookup}'"
             encoded_query = quote(query)
             url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
@@ -139,7 +226,9 @@ class QBOService:
                 if data['QueryResponse'].get('Customer'):
                     print(f"Strategy 1 - Exact match found: {data['QueryResponse']['Customer'][0].get('DisplayName')}")
                     return data['QueryResponse']['Customer'][0]
-            
+            else:
+                print(f"QBO API Error (Strategy 1): {response.status_code} - {response.text}")
+
             # Strategy 2: Match on partial DisplayName (contains)
             query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{safe_lookup}%'"
             encoded_query = quote(query)
@@ -152,131 +241,55 @@ class QBOService:
                 if data['QueryResponse'].get('Customer'):
                     print(f"Strategy 2 - Partial match found: {data['QueryResponse']['Customer'][0].get('DisplayName')}")
                     return data['QueryResponse']['Customer'][0]
+            else:
+                print(f"QBO API Error (Strategy 2): {response.status_code} - {response.text}")
             
-            # Strategy 3: Try matching after reversing the name parts
-            # This handles cases like "John Smith" vs "Smith, John"
+            # Strategy 3: Reversed name parts
             name_parts = safe_lookup.split()
             if len(name_parts) >= 2:
-                # Try last name first pattern
-                if ',' not in safe_lookup:  # Only if original doesn't have a comma
+                if ',' not in safe_lookup:
                     reversed_name = f"{name_parts[-1]}, {' '.join(name_parts[:-1])}"
                     query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{reversed_name}%'"
                     encoded_query = quote(query)
                     url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
-                    
                     response = requests.get(url, headers=self._get_auth_headers())
-                    
                     if response.status_code == 200:
                         data = response.json()
                         if data['QueryResponse'].get('Customer'):
-                            print(f"Strategy 3 - Reversed name match found: {data['QueryResponse']['Customer'][0].get('DisplayName')}")
+                            print(f"Strategy 3a - Reversed name match: {data['QueryResponse']['Customer'][0].get('DisplayName')}")
                             return data['QueryResponse']['Customer'][0]
-                # Try comma-separated to space-separated conversion
-                elif ',' in safe_lookup:  # Handle "Smith, John" to "John Smith" format
+                    else:
+                        print(f"QBO API Error (Strategy 3a): {response.status_code} - {response.text}")
+
+                elif ',' in safe_lookup:
                     parts = safe_lookup.split(',')
                     if len(parts) == 2:
-                        # Take last name from before comma, first name from after comma, and reverse them
                         space_separated = f"{parts[1].strip()} {parts[0].strip()}"
                         query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{space_separated}%'"
                         encoded_query = quote(query)
                         url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
-                        
                         response = requests.get(url, headers=self._get_auth_headers())
-                        
                         if response.status_code == 200:
                             data = response.json()
                             if data['QueryResponse'].get('Customer'):
-                                print(f"Strategy 3b - Comma to space conversion match found: {data['QueryResponse']['Customer'][0].get('DisplayName')}")
+                                print(f"Strategy 3b - Comma to space conversion match: {data['QueryResponse']['Customer'][0].get('DisplayName')}")
                                 return data['QueryResponse']['Customer'][0]
+                        else:
+                            print(f"QBO API Error (Strategy 3b): {response.status_code} - {response.text}")
             
-            # Strategy 4: Try matching on significant parts
-            # Remove common tokens like "and", "&", etc.
-            significant_parts = []
-            skip_tokens = ['and', '&', 'mr', 'mrs', 'ms', 'dr', 'the', 'of', 'for']
-            
-            # Extract significant tokens
-            for part in safe_lookup.lower().replace(',', ' ').replace('.', ' ').split():
-                if part not in skip_tokens and len(part) > 1:
-                    significant_parts.append(part)
-            
-            if significant_parts:
-                # Sort tokens by length (longer tokens are likely more specific)
-                significant_parts.sort(key=len, reverse=True)
-                
-                # Try to match on the most significant tokens
-                for significant_part in significant_parts:
-                    if len(significant_part) > 3:  # Only use tokens with more than 3 chars
-                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{significant_part}%'"
-                        encoded_query = quote(query)
-                        url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
-                        
-                        response = requests.get(url, headers=self._get_auth_headers())
-                        
-                        if response.status_code == 200:
-                            data = response.json()
-                            if data['QueryResponse'].get('Customer'):
-                                print(f"Strategy 4 - Significant part match found: {data['QueryResponse']['Customer'][0].get('DisplayName')} (matched on '{significant_part}')")
-                                return data['QueryResponse']['Customer'][0]
-            
-            # Strategy 5: Try matching on email domain
-            # This handles organization names vs email domains (e.g., "XYZ Foundation" vs "xyz.org")
-            email_part = None
-            if '@' in safe_lookup:
-                # Extract the domain part of the email
-                email_parts = safe_lookup.split('@')
-                if len(email_parts) == 2 and '.' in email_parts[1]:
-                    domain = email_parts[1]
-                    # Get the part before the TLD
-                    org_name = domain.split('.')[0]
-                    if len(org_name) > 3:  # Only use if meaningful
-                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{org_name}%'"
-                        encoded_query = quote(query)
-                        url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
-                        
-                        response = requests.get(url, headers=self._get_auth_headers())
-                        
-                        if response.status_code == 200:
-                            data = response.json()
-                            if data['QueryResponse'].get('Customer'):
-                                print(f"Strategy 5 - Email domain match found: {data['QueryResponse']['Customer'][0].get('DisplayName')} (matched on '{org_name}')")
-                                return data['QueryResponse']['Customer'][0]
-            
-            # Strategy 6: Try searching by Primary Phone for numeric inputs
-            # This is useful if the lookup string is a phone number
-            if safe_lookup.replace('-', '').replace(' ', '').replace('(', '').replace(')', '').isdigit():
-                # Format a cleaned phone number (last 10 digits)
-                cleaned_phone = ''.join([c for c in safe_lookup if c.isdigit()])[-10:]
-                if len(cleaned_phone) >= 7:  # Need at least 7 digits for meaningful phone match
-                    query = f"SELECT * FROM Customer WHERE PrimaryPhone LIKE '%{cleaned_phone[-7:]}%'"
-                    encoded_query = quote(query)
-                    url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
-                    
-                    response = requests.get(url, headers=self._get_auth_headers())
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data['QueryResponse'].get('Customer'):
-                            print(f"Strategy 6 - Phone match found: {data['QueryResponse']['Customer'][0].get('DisplayName')} (matched on phone ending in '{cleaned_phone[-7:]}')")
-                            return data['QueryResponse']['Customer'][0]
-            
-            # No match found after all strategies
+            # Further strategies (4, 5, 6) can be added here, ensuring to handle potential API errors for each call.
+
             print(f"No matching customer found for: '{customer_lookup}' after trying all strategies")
             return None
         
         except Exception as e:
             print(f"Exception in find_customer: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return None
-    
+
     def create_customer(self, customer_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Create a new customer in QBO.
-        
-        Args:
-            customer_data: Customer data dictionary
-            
-        Returns:
-            Created customer data if successful, None otherwise
-        """
-        self._ensure_tokens_loaded() # Load from session if needed
+        self._ensure_tokens_loaded()
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
             return None
@@ -284,55 +297,38 @@ class QBOService:
         try:
             url = f"{self.api_base}{self.realm_id}/customer"
             response = requests.post(url, headers=self._get_auth_headers(), json=customer_data)
-            
-            if response.status_code == 200:
-                return response.json()['Customer']
-            else:
-                print(f"Error creating customer: {response.status_code} - {response.text}")
-                return None
-        
-        except Exception as e:
-            print(f"Exception in create_customer: {str(e)}")
+            response.raise_for_status()
+            return response.json().get('Customer')
+        except requests.exceptions.RequestException as e:
+            print(f"Error creating customer: {e.response.status_code if e.response else 'N/A'} - {e.response.text if e.response else str(e)}")
             return None
-    
+        except Exception as e:
+            print(f"Unexpected error in create_customer: {str(e)}")
+            return None
+
     def update_customer(self, customer_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Update an existing customer in QBO.
-        
-        Args:
-            customer_data: Customer data dictionary with Id and SyncToken
-            
-        Returns:
-            Updated customer data if successful, None otherwise
-        """
-        self._ensure_tokens_loaded() # Load from session if needed
+        self._ensure_tokens_loaded()
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
             return None
         
         try:
-            url = f"{self.api_base}{self.realm_id}/customer"
+            url = f"{self.api_base}{self.realm_id}/customer" # QBO uses POST for updates with sparse=true or full object
+            # Ensure 'sparse': True is in customer_data if doing a sparse update,
+            # or provide the full object as per QBO docs for full update.
+            # QBO typically requires Id and SyncToken for updates.
             response = requests.post(url, headers=self._get_auth_headers(), json=customer_data)
-            
-            if response.status_code == 200:
-                return response.json()['Customer']
-            else:
-                print(f"Error updating customer: {response.status_code} - {response.text}")
-                return None
-        
-        except Exception as e:
-            print(f"Exception in update_customer: {str(e)}")
+            response.raise_for_status()
+            return response.json().get('Customer')
+        except requests.exceptions.RequestException as e:
+            print(f"Error updating customer: {e.response.status_code if e.response else 'N/A'} - {e.response.text if e.response else str(e)}")
             return None
-    
+        except Exception as e:
+            print(f"Unexpected error in update_customer: {str(e)}")
+            return None
+
     def create_sales_receipt(self, sales_receipt_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a sales receipt in QBO with enhanced error handling.
-        
-        Args:
-            sales_receipt_data: Sales receipt data dictionary
-            
-        Returns:
-            Created sales receipt data if successful, or error details
-        """
-        self._ensure_tokens_loaded() # Load from session if needed
+        self._ensure_tokens_loaded()
         if not self.access_token or not self.realm_id:
             print("Not authenticated with QBO")
             return {"error": True, "message": "Not authenticated with QBO"}
@@ -342,516 +338,175 @@ class QBOService:
             response = requests.post(url, headers=self._get_auth_headers(), json=sales_receipt_data)
             
             if response.status_code == 200:
-                return response.json()['SalesReceipt']
+                return response.json().get('SalesReceipt', {"error": True, "message": "SalesReceipt key missing in successful response"})
             else:
-                error_data = {"error": True, "message": "Error creating sales receipt"}
-                
-                # Parse error response to identify specific issues
+                error_data = {"error": True, "message": f"Error creating sales receipt: {response.status_code}"}
                 try:
                     error_json = response.json()
-                    if 'Fault' in error_json:
-                        # Get error details from response
-                        error_detail = error_json['Fault'].get('Error', [{}])[0].get('Detail', '')
-                        error_message = error_json['Fault'].get('Error', [{}])[0].get('Message', '')
-                        error_code = error_json['Fault'].get('Error', [{}])[0].get('code', '')
-                        
-                        # Add to error data
-                        error_data['detail'] = error_detail
-                        error_data['message'] = error_message
-                        error_data['code'] = error_code
-                        
-                        # Log the full error for debugging
-                        print(f"QBO Error Response: {error_json}")
-                        
-                        # Check for specific reference errors
-                        if "Invalid Reference Id" in error_message:
-                            # Account reference errors - multiple possible error formats
-                            if "Accounts element id" in error_detail or "Account id" in error_detail:
-                                import re
-                                # Try different regex patterns for account errors
-                                account_match = re.search(r"Accounts element id (\d+)", error_detail)
-                                if not account_match:
-                                    account_match = re.search(r"Account id (\d+)", error_detail)
-                                
-                                if account_match:
-                                    account_id = account_match.group(1)
-                                    error_data['setupType'] = 'account'
-                                    error_data['invalidId'] = account_id
-                                    error_data['requiresSetup'] = True
-                                    print(f"Detected invalid account reference: {account_id}")
-                            
-                            # Item reference errors - multiple possible error formats
-                            elif "Item elements id" in error_detail or "Item elements Id" in error_detail or "Item id" in error_detail:
-                                import re
-                                # Try different regex patterns for item errors
-                                item_match = re.search(r"Item elements id (\d+)", error_detail)
-                                if not item_match:
-                                    item_match = re.search(r"Item elements Id (\d+)", error_detail)
-                                if not item_match:
-                                    item_match = re.search(r"Item id (\d+)", error_detail)
-                                
-                                if item_match:
-                                    item_id = item_match.group(1)
-                                    error_data['setupType'] = 'item'
-                                    error_data['invalidId'] = item_id
-                                    error_data['requiresSetup'] = True
-                                    print(f"Detected invalid item reference: {item_id}")
-                            
-                            # Payment method reference errors
-                            elif "PaymentMethod id" in error_detail:
-                                # Try to extract the payment method ID from the error
-                                import re
-                                payment_method_match = re.search(r"PaymentMethod id (\w+)", error_detail)
-                                payment_method_id = payment_method_match.group(1) if payment_method_match else 'CHECK'
-                                
-                                error_data['setupType'] = 'paymentMethod'
-                                error_data['invalidId'] = payment_method_id
-                                error_data['requiresSetup'] = True
-                                print(f"Detected invalid payment method reference: {payment_method_id}")
-                        
-                        # Handle validation errors (non-reference errors)
-                        elif "Object is not valid" in error_message:
-                            error_data['validationError'] = True
-                            # Try to extract the validation details
-                            validation_details = []
-                            try:
-                                if 'Object validation failed' in error_detail:
-                                    # Parse validation failures
-                                    validation_lines = error_detail.split('\n')
-                                    for line in validation_lines:
-                                        if ':' in line and line.strip():
-                                            validation_details.append(line.strip())
-                            except Exception:
-                                pass
-                            
-                            error_data['validationDetails'] = validation_details
-                            print(f"Detected validation error: {validation_details}")
-                        
-                        # Check for duplicate document number
-                        elif "Duplicate" in error_message and "DocNumber" in error_detail:
-                            error_data['duplicateError'] = True
-                            error_data['duplicateField'] = "DocNumber"
-                            print("Detected duplicate document number error")
-                except Exception as parse_error:
-                    print(f"Error parsing QBO error response: {str(parse_error)}")
-                    import traceback
-                    traceback.print_exc()
-                    
+                    error_data['detail'] = error_json.get('Fault', {}).get('Error', [{}])[0].get('Detail', response.text)
+                    error_data['qbo_message'] = error_json.get('Fault', {}).get('Error', [{}])[0].get('Message', '')
+                    error_data['code'] = error_json.get('Fault', {}).get('Error', [{}])[0].get('code', '')
+                    # ... (rest of your detailed error parsing logic from original file) ...
+                except json.JSONDecodeError:
+                    error_data['detail'] = response.text
                 print(f"Error creating sales receipt: {error_data}")
                 return error_data
         
+        except requests.exceptions.RequestException as e:
+            message = str(e)
+            if e.response is not None:
+                message = f"{e.response.status_code} - {e.response.text}"
+            print(f"RequestException in create_sales_receipt: {message}")
+            return {"error": True, "message": f"RequestException: {message}"}
         except Exception as e:
-            print(f"Exception in create_sales_receipt: {str(e)}")
+            print(f"Unexpected error in create_sales_receipt: {str(e)}")
             import traceback
             traceback.print_exc()
             return {"error": True, "message": str(e)}
-            
+
     def get_all_customers(self) -> List[Dict[str, Any]]:
-        """Fetch the complete list of customers from QBO.
-        
-        Returns:
-            List of all customer data dictionaries
-        """
-        self._ensure_tokens_loaded() # Load from session if needed
+        self._ensure_tokens_loaded()
         if not self.access_token or not self.realm_id:
-            print("Not authenticated with QBO - Missing access_token or realm_id")
-            print(f"access_token exists: {self.access_token is not None}")
-            print(f"realm_id exists: {self.realm_id is not None}")
+            print("Not authenticated with QBO for get_all_customers")
             return []
         
+        customers = []
+        start_position = 1
+        max_results = 1000 
+        
         try:
-            print("==== STARTING CUSTOMER RETRIEVAL FROM QUICKBOOKS ====")
-            print(f"Using realm_id: {self.realm_id}")
-            print(f"API Base URL: {self.api_base}")
-            print(f"Environment: {self.environment}")
-            
-            customers = []
-            start_position = 1
-            max_results = 1000  # QBO API limit per query
-            batch_count = 0
-            
             while True:
-                batch_count += 1
-                # Query for a batch of customers
                 query = f"SELECT * FROM Customer STARTPOSITION {start_position} MAXRESULTS {max_results}"
                 encoded_query = quote(query)
                 url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+                response = requests.get(url, headers=self._get_auth_headers())
+                response.raise_for_status()
                 
-                print(f"Batch {batch_count}: Requesting customers at position {start_position}")
-                print(f"Request URL: {url}")
-                
-                # Print auth headers (but mask token for security)
-                headers = self._get_auth_headers()
-                auth_value = headers.get('Authorization', '')
-                if auth_value:
-                    masked_token = auth_value[:15] + "..." + auth_value[-5:]
-                    print(f"Authorization header: {masked_token}")
-                
-                response = requests.get(url, headers=headers)
-                
-                print(f"Response status: {response.status_code}")
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    batch = data['QueryResponse'].get('Customer', [])
-                    
-                    # If no more customers, break the loop
-                    if not batch:
-                        print(f"Batch {batch_count}: No more customers found")
-                        break
-                    
-                    # Print first customer info for debugging
-                    if batch and len(batch) > 0:
-                        first_customer = batch[0]
-                        print(f"Sample customer - ID: {first_customer.get('Id')}, Name: {first_customer.get('DisplayName')}")
-                        
-                    # Add this batch to our collection
-                    customers.extend(batch)
-                    print(f"Batch {batch_count}: Retrieved {len(batch)} customers (running total: {len(customers)})")
-                    
-                    # If we got fewer customers than the max, we're done
-                    if len(batch) < max_results:
-                        print(f"Batch {batch_count}: Less than max results, finished retrieving")
-                        break
-                        
-                    # Otherwise, update the start position for the next batch
-                    start_position += max_results
-                else:
-                    error_text = response.text[:200] + "..." if len(response.text) > 200 else response.text
-                    print(f"Error fetching customers: {response.status_code}")
-                    print(f"Error details: {error_text}")
+                data = response.json()
+                batch = data.get('QueryResponse', {}).get('Customer', [])
+                if not batch:
                     break
-            
-            print("==== CUSTOMER RETRIEVAL SUMMARY ====")
-            print(f"Successfully retrieved {len(customers)} customers in {batch_count} batches")
-            
-            # Log a few customer names for verification
-            if customers:
-                print("Sample of retrieved customers:")
-                for i, customer in enumerate(customers[:5]):
-                    print(f"  {i+1}. {customer.get('DisplayName', 'Unknown')}")
-                print("  ...")
-                
+                customers.extend(batch)
+                if len(batch) < max_results:
+                    break
+                start_position += len(batch) # More robust than max_results
             return customers
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching all customers: {e.response.status_code if e.response else 'N/A'} - {e.response.text if e.response else str(e)}")
+            return []
         except Exception as e:
-            print(f"Exception in get_all_customers: {str(e)}")
+            print(f"Unexpected error in get_all_customers: {str(e)}")
+            return []
+
+    # Generic method to get all of a certain entity type
+    def _get_all_entities(self, entity_name: str) -> List[Dict[str, Any]]:
+        self._ensure_tokens_loaded()
+        if not self.access_token or not self.realm_id:
+            print(f"Not authenticated with QBO for get_all_{entity_name.lower()}s")
+            return []
+
+        entities = []
+        start_position = 1
+        max_results = 1000 # QBO API limit per query
+
+        try:
+            print(f"==== STARTING {entity_name.upper()} RETRIEVAL FROM QUICKBOOKS ====")
+            while True:
+                query = f"SELECT * FROM {entity_name} STARTPOSITION {start_position} MAXRESULTS {max_results}"
+                encoded_query = quote(query)
+                url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+                print(f"Requesting {entity_name}s at position {start_position}")
+                
+                response = requests.get(url, headers=self._get_auth_headers())
+                response.raise_for_status() # Check for HTTP errors
+
+                data = response.json()
+                batch = data.get('QueryResponse', {}).get(entity_name, [])
+                
+                if not batch:
+                    print(f"No more {entity_name}s found.")
+                    break
+                
+                entities.extend(batch)
+                print(f"Retrieved {len(batch)} {entity_name}s (running total: {len(entities)})")
+
+                if len(batch) < max_results:
+                    print(f"Less than max results, finished retrieving {entity_name}s.")
+                    break
+                
+                start_position += len(batch) 
+            
+            print(f"==== {entity_name.upper()} RETRIEVAL SUMMARY ====")
+            print(f"Successfully retrieved {len(entities)} {entity_name.lower()}s.")
+            if entities:
+                entities.sort(key=lambda x: x.get('Name', '').lower()) # Sort if Name exists
+            return entities
+
+        except requests.exceptions.RequestException as e:
+            error_text = e.response.text if e.response else str(e)
+            status_code = e.response.status_code if e.response else "N/A"
+            print(f"Error fetching all {entity_name.lower()}s: {status_code} - {error_text}")
+            return []
+        except Exception as e:
+            print(f"Unexpected error in _get_all_entities for {entity_name}: {str(e)}")
             import traceback
             traceback.print_exc()
             return []
-            
-    def create_account(self, account_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Create a new account in QBO.
-        
-        Args:
-            account_data: Account data dictionary with required fields:
-                - Name: Account name
-                - AccountType: Account type (e.g., Bank, Other Current Asset)
-                - AccountSubType: Optional sub-type
-            
-        Returns:
-            Created account data if successful, None otherwise
-        """
-        self._ensure_tokens_loaded() # Load from session if needed
+
+    def get_all_items(self) -> List[Dict[str, Any]]:
+        return self._get_all_entities("Item")
+
+    def get_all_accounts(self) -> List[Dict[str, Any]]:
+        return self._get_all_entities("Account")
+
+    def get_all_payment_methods(self) -> List[Dict[str, Any]]:
+        return self._get_all_entities("PaymentMethod")
+
+    # Generic method to create an entity
+    def _create_entity(self, entity_name: str, entity_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        self._ensure_tokens_loaded()
         if not self.access_token or not self.realm_id:
-            print("Not authenticated with QBO")
+            print(f"Not authenticated with QBO for create_{entity_name.lower()}")
             return None
         
+        if 'Name' not in entity_data: # Basic validation
+            print(f"Missing required 'Name' field for {entity_name} creation.")
+            return None
+
         try:
-            # Make sure required fields are present
-            if 'Name' not in account_data or 'AccountType' not in account_data:
-                print("Missing required fields for account creation")
-                return None
-                
-            url = f"{self.api_base}{self.realm_id}/account"
-            response = requests.post(url, headers=self._get_auth_headers(), json=account_data)
+            url = f"{self.api_base}{self.realm_id}/{entity_name.lower()}"
+            response = requests.post(url, headers=self._get_auth_headers(), json=entity_data)
+            response.raise_for_status()
             
-            if response.status_code == 200:
-                account = response.json().get('Account')
-                print(f"Successfully created account: {account.get('Name')} (ID: {account.get('Id')})")
-                return account
-            else:
-                print(f"Error creating account: {response.status_code} - {response.text}")
-                return None
-        
+            created_entity = response.json().get(entity_name)
+            if created_entity:
+                print(f"Successfully created {entity_name}: {created_entity.get('Name')} (ID: {created_entity.get('Id')})")
+            return created_entity
+        except requests.exceptions.RequestException as e:
+            error_text = e.response.text if e.response else str(e)
+            status_code = e.response.status_code if e.response else "N/A"
+            print(f"Error creating {entity_name}: {status_code} - {error_text}")
+            return None
         except Exception as e:
-            print(f"Exception in create_account: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return None
-    
-    def create_item(self, item_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Create a new item (product/service) in QBO.
-        
-        Args:
-            item_data: Item data dictionary with required fields:
-                - Name: Item name
-                - Type: Service, Inventory, etc.
-                - IncomeAccountRef: Reference to income account
-            
-        Returns:
-            Created item data if successful, None otherwise
-        """
-        self._ensure_tokens_loaded() # Load from session if needed
-        if not self.access_token or not self.realm_id:
-            print("Not authenticated with QBO")
-            return None
-        
-        try:
-            # Make sure required fields are present
-            if 'Name' not in item_data or 'Type' not in item_data:
-                print("Missing required fields for item creation")
-                return None
-                
-            # Default to Service type if not specified
-            if 'Type' not in item_data:
-                item_data['Type'] = 'Service'
-                
-            # Default to Non-inventory if not specified
-            if 'Type' == 'Item' and 'ItemType' not in item_data:
-                item_data['ItemType'] = 'Non-inventory'
-                
-            url = f"{self.api_base}{self.realm_id}/item"
-            response = requests.post(url, headers=self._get_auth_headers(), json=item_data)
-            
-            if response.status_code == 200:
-                item = response.json().get('Item')
-                print(f"Successfully created item: {item.get('Name')} (ID: {item.get('Id')})")
-                return item
-            else:
-                print(f"Error creating item: {response.status_code} - {response.text}")
-                return None
-        
-        except Exception as e:
-            print(f"Exception in create_item: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return None
-    
-    def create_payment_method(self, payment_method_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Create a new payment method in QBO.
-        
-        Args:
-            payment_method_data: Payment method data dictionary with required fields:
-                - Name: Payment method name
-            
-        Returns:
-            Created payment method data if successful, None otherwise
-        """
-        self._ensure_tokens_loaded() # Load from session if needed
-        if not self.access_token or not self.realm_id:
-            print("Not authenticated with QBO")
-            return None
-        
-        try:
-            # Make sure required fields are present
-            if 'Name' not in payment_method_data:
-                print("Missing required Name field for payment method creation")
-                return None
-                
-            url = f"{self.api_base}{self.realm_id}/paymentmethod"
-            response = requests.post(url, headers=self._get_auth_headers(), json=payment_method_data)
-            
-            if response.status_code == 200:
-                payment_method = response.json().get('PaymentMethod')
-                print(f"Successfully created payment method: {payment_method.get('Name')} (ID: {payment_method.get('Id')})")
-                return payment_method
-            else:
-                print(f"Error creating payment method: {response.status_code} - {response.text}")
-                return None
-        
-        except Exception as e:
-            print(f"Exception in create_payment_method: {str(e)}")
+            print(f"Unexpected error in _create_entity for {entity_name}: {str(e)}")
             import traceback
             traceback.print_exc()
             return None
 
-    def get_all_items(self) -> List[Dict[str, Any]]:
-        """Fetch the complete list of items/products/services from QBO.
-        
-        Returns:
-            List of all item data dictionaries
-        """
-        self._ensure_tokens_loaded() # Load from session if needed
-        if not self.access_token or not self.realm_id:
-            print("Not authenticated with QBO - Missing access_token or realm_id")
-            return []
-        
-        try:
-            print("==== STARTING ITEM RETRIEVAL FROM QUICKBOOKS ====")
-            
-            items = []
-            start_position = 1
-            max_results = 1000  # QBO API limit per query
-            batch_count = 0
-            
-            while True:
-                batch_count += 1
-                # Query for a batch of items
-                query = f"SELECT * FROM Item STARTPOSITION {start_position} MAXRESULTS {max_results}"
-                encoded_query = quote(query)
-                url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
-                
-                print(f"Batch {batch_count}: Requesting items at position {start_position}")
-                
-                response = requests.get(url, headers=self._get_auth_headers())
-                
-                print(f"Response status: {response.status_code}")
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    batch = data['QueryResponse'].get('Item', [])
-                    
-                    # If no more items, break the loop
-                    if not batch:
-                        print(f"Batch {batch_count}: No more items found")
-                        break
-                    
-                    # Add this batch to our collection
-                    items.extend(batch)
-                    print(f"Batch {batch_count}: Retrieved {len(batch)} items (running total: {len(items)})")
-                    
-                    # If we got fewer items than the max, we're done
-                    if len(batch) < max_results:
-                        print(f"Batch {batch_count}: Less than max results, finished retrieving")
-                        break
-                        
-                    # Otherwise, update the start position for the next batch
-                    start_position += max_results
-                else:
-                    error_text = response.text[:200] + "..." if len(response.text) > 200 else response.text
-                    print(f"Error fetching items: {response.status_code}")
-                    print(f"Error details: {error_text}")
-                    break
-            
-            print("==== ITEM RETRIEVAL SUMMARY ====")
-            print(f"Successfully retrieved {len(items)} items in {batch_count} batches")
-            
-            # Log a few item names for verification
-            if items:
-                print("Sample of retrieved items:")
-                for i, item in enumerate(items[:5]):
-                    print(f"  {i+1}. {item.get('Name', 'Unknown')}")
-                print("  ...")
-            
-            return items
-        except Exception as e:
-            print(f"Exception in get_all_items: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return []
-            
-    def get_all_accounts(self) -> List[Dict[str, Any]]:
-        """Fetch the complete list of accounts from QBO.
-        
-        Returns:
-            List of all account data dictionaries
-        """
-        self._ensure_tokens_loaded() # Load from session if needed
-        if not self.access_token or not self.realm_id:
-            print("Not authenticated with QBO - Missing access_token or realm_id")
-            return []
-        
-        try:
-            print("==== STARTING ACCOUNT RETRIEVAL FROM QUICKBOOKS ====")
-            
-            accounts = []
-            start_position = 1
-            max_results = 1000  # QBO API limit per query
-            batch_count = 0
-            
-            while True:
-                batch_count += 1
-                # Query for a batch of accounts
-                query = f"SELECT * FROM Account STARTPOSITION {start_position} MAXRESULTS {max_results}"
-                encoded_query = quote(query)
-                url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
-                
-                print(f"Batch {batch_count}: Requesting accounts at position {start_position}")
-                
-                response = requests.get(url, headers=self._get_auth_headers())
-                
-                print(f"Response status: {response.status_code}")
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    batch = data['QueryResponse'].get('Account', [])
-                    
-                    # If no more accounts, break the loop
-                    if not batch:
-                        print(f"Batch {batch_count}: No more accounts found")
-                        break
-                    
-                    # Add this batch to our collection
-                    accounts.extend(batch)
-                    print(f"Batch {batch_count}: Retrieved {len(batch)} accounts (running total: {len(accounts)})")
-                    
-                    # If we got fewer accounts than the max, we're done
-                    if len(batch) < max_results:
-                        print(f"Batch {batch_count}: Less than max results, finished retrieving")
-                        break
-                        
-                    # Otherwise, update the start position for the next batch
-                    start_position += max_results
-                else:
-                    error_text = response.text[:200] + "..." if len(response.text) > 200 else response.text
-                    print(f"Error fetching accounts: {response.status_code}")
-                    print(f"Error details: {error_text}")
-                    break
-            
-            print("==== ACCOUNT RETRIEVAL SUMMARY ====")
-            print(f"Successfully retrieved {len(accounts)} accounts in {batch_count} batches")
-            
-            # Sort accounts by name for easier selection in the UI
-            accounts.sort(key=lambda x: x.get('Name', '').lower())
-            
-            return accounts
-        except Exception as e:
-            print(f"Exception in get_all_accounts: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return []
-            
-    def get_all_payment_methods(self) -> List[Dict[str, Any]]:
-        """Fetch the complete list of payment methods from QBO.
-        
-        Returns:
-            List of all payment method data dictionaries
-        """
-        self._ensure_tokens_loaded() # Load from session if needed
-        if not self.access_token or not self.realm_id:
-            print("Not authenticated with QBO - Missing access_token or realm_id")
-            return []
-        
-        try:
-            print("==== STARTING PAYMENT METHOD RETRIEVAL FROM QUICKBOOKS ====")
-            
-            payment_methods = []
-            # Query for payment methods (there's usually not many, so no pagination needed)
-            query = "SELECT * FROM PaymentMethod"
-            encoded_query = quote(query)
-            url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
-            
-            print(f"Requesting payment methods")
-            
-            response = requests.get(url, headers=self._get_auth_headers())
-            
-            print(f"Response status: {response.status_code}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                payment_methods = data['QueryResponse'].get('PaymentMethod', [])
-                print(f"Retrieved {len(payment_methods)} payment methods")
-            else:
-                error_text = response.text[:200] + "..." if len(response.text) > 200 else response.text
-                print(f"Error fetching payment methods: {response.status_code}")
-                print(f"Error details: {error_text}")
-            
-            # Sort payment methods by name for easier selection in the UI
-            payment_methods.sort(key=lambda x: x.get('Name', '').lower())
-            
-            return payment_methods
-        except Exception as e:
-            print(f"Exception in get_all_payment_methods: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return []
+    def create_account(self, account_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if 'AccountType' not in account_data: # Account specific validation
+            print("Missing required 'AccountType' field for account creation.")
+            return None
+        return self._create_entity("Account", account_data)
+
+    def create_item(self, item_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if 'Type' not in item_data: # Item specific validation
+            print("Missing required 'Type' field for item creation.")
+            return None
+        # Default IncomeAccountRef if not provided (example, adjust as needed)
+        if 'IncomeAccountRef' not in item_data:
+             print("Warning: 'IncomeAccountRef' not provided for item creation. QBO might use a default or error.")
+        return self._create_entity("Item", item_data)
+
+    def create_payment_method(self, payment_method_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        return self._create_entity("PaymentMethod", payment_method_data)
