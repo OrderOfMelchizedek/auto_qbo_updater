@@ -108,12 +108,12 @@ Desktop.ini
 *~
 
 # Project specific
-uploads/                                # For temporary file uploads
-qbo api client ID and secret.md       # CRITICAL: Contains secrets
-CLAUDE.md                             # AI guidance, not app runtime
+uploads/ 
+qbo api client ID and secret.md
+CLAUDE.md
 
 # Ignore all CSV files (if you prefer a general rule)
-# *.csv
+*.csv
 
 # Log files
 *.log
