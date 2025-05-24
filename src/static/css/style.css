@@ -157,3 +157,26 @@ td:has(.customer-lookup-input) {
 .customer-lookup-input {
     position: relative;
 }
+
+/* Progress Display Styles */
+#progressDetail {
+    min-height: 2.5em;
+    line-height: 1.25em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+#progressDisplay {
+    transition: opacity 0.3s ease-in-out;
+}
+
+/* Progress Display Animation */
+.progress-fade-enter {
+    opacity: 0;
+    transition: opacity 0.3s ease-in;
+}
+
+.progress-fade-leave {
+    opacity: 1;
+    transition: opacity 2s ease-out;
+}

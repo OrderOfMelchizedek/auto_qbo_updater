@@ -2256,24 +2256,63 @@ function uploadAndProcessFiles(files) {
     uploadButton.disabled = true;
     uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Processing...';
     
-    // Send request to server
-    fetch('/upload', {
-        method: 'POST',
-        body: formData
+    // Show progress display immediately
+    showProgressDisplay();
+    
+    // Store session ID for later use
+    let sessionId = null;
+    
+    // First get a session ID by starting the upload
+    fetch('/upload-start', {
+        method: 'POST'
     })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 413) {
-                    throw new Error("File size too large. Maximum size is 50MB per upload.");
-                }
-                return response.json().then(data => {
-                    throw new Error(data.message || `Server error: ${response.status}`);
-                });
+    .then(response => response.json())
+    .then(startData => {
+        if (startData.sessionId) {
+            sessionId = startData.sessionId;
+            // Start progress stream immediately
+            console.log('Starting progress stream with session ID:', sessionId);
+            startProgressStream(sessionId);
+            
+            // Add session ID to form data
+            formData.append('sessionId', sessionId);
+            
+            // Small delay to ensure SSE connection is established, then upload
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    fetch('/upload', {
+                        method: 'POST',
+                        body: formData
+                    }).then(resolve);
+                }, 100);
+            });
+        } else {
+            // Fallback to original upload
+            return fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            if (response.status === 413) {
+                throw new Error("File size too large. Maximum size is 50MB per upload.");
             }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
+            return response.json().then(data => {
+                throw new Error(data.message || `Server error: ${response.status}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Start progress stream immediately if session ID is provided (fallback)
+        if (data.progressSessionId && !sessionId) {
+            console.log('Starting progress stream with session ID:', data.progressSessionId);
+            startProgressStream(data.progressSessionId);
+        }
+        
+        if (data.success) {
                 // Process the upload response
                 const processedCount = processUploadResponse(data);
                 
@@ -2303,8 +2342,13 @@ function uploadAndProcessFiles(files) {
                 // Clear the file list
                 document.getElementById('fileList').innerHTML = '';
                 document.getElementById('uploadPreview').classList.add('d-none');
+                
+                // Hide progress display after a delay
+                setTimeout(hideProgressDisplay, 2000);
             } else {
                 showToast(data.message || 'Error processing files', 'danger');
+                // Hide progress display on error
+                setTimeout(hideProgressDisplay, 1000);
             }
             
             // Reset upload button
@@ -2322,10 +2366,98 @@ function uploadAndProcessFiles(files) {
             
             showToast(errorMessage, 'danger');
             
+            // Hide progress display on error
+            setTimeout(hideProgressDisplay, 1000);
+            
             // Reset upload button
             uploadButton.disabled = false;
             uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
         });
+}
+
+// Progress display functions
+function showProgressDisplay() {
+    const progressDisplay = document.getElementById('progressDisplay');
+    if (progressDisplay) {
+        progressDisplay.classList.remove('d-none');
+        // Reset to initial state
+        updateProgressDisplay('Preparing to process files...', 'Please wait while we analyze your documents.');
+    }
+}
+
+function hideProgressDisplay() {
+    const progressDisplay = document.getElementById('progressDisplay');
+    if (progressDisplay) {
+        // Fade out effect
+        progressDisplay.style.opacity = '0.5';
+        setTimeout(() => {
+            progressDisplay.classList.add('d-none');
+            progressDisplay.style.opacity = '1';
+        }, 2000);
+    }
+}
+
+function updateProgressDisplay(action, detail) {
+    const progressAction = document.getElementById('progressAction');
+    const progressDetail = document.getElementById('progressDetail');
+    
+    if (progressAction && progressDetail) {
+        progressAction.textContent = action;
+        progressDetail.textContent = detail;
+    }
+}
+
+let currentProgressStream = null;
+
+function startProgressStream(sessionId) {
+    // Close existing stream if any
+    if (currentProgressStream) {
+        currentProgressStream.close();
+    }
+    
+    try {
+        currentProgressStream = new EventSource(`/progress-stream/${sessionId}`);
+        
+        currentProgressStream.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                handleProgressEvent(data);
+            } catch (e) {
+                console.error('Error parsing progress data:', e);
+            }
+        };
+        
+        currentProgressStream.onerror = function(event) {
+            console.error('Progress stream error:', event);
+            currentProgressStream.close();
+            currentProgressStream = null;
+        };
+    } catch (e) {
+        console.error('Error starting progress stream:', e);
+    }
+}
+
+function handleProgressEvent(data) {
+    switch (data.type) {
+        case 'progress':
+            const lines = data.summary.split('\n');
+            const action = lines[0] || 'Processing your files...';
+            const detail = lines[1] || 'Please wait while we complete the process.';
+            updateProgressDisplay(action, detail);
+            break;
+            
+        case 'heartbeat':
+            // Keep connection alive
+            break;
+            
+        case 'error':
+            updateProgressDisplay('An error occurred', data.message);
+            setTimeout(hideProgressDisplay, 3000);
+            break;
+            
+        default:
+            console.log('Unknown progress event:', data);
+    }
 }
 
 // Helper function to check auth and process files if authenticated
@@ -2717,6 +2849,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Check QBO authentication status
     checkQBOAuthStatus();
+    
+    // Set up progress display close button
+    document.getElementById('closeProgress').addEventListener('click', function() {
+        hideProgressDisplay();
+        // Close progress stream if active
+        if (currentProgressStream) {
+            currentProgressStream.close();
+            currentProgressStream = null;
+        }
+    });
     
     // Set up file upload area
     const uploadArea = document.getElementById('uploadArea');

@@ -2,7 +2,7 @@ import os
 import json
 import requests
 import argparse
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, Response
 from werkzeug.utils import secure_filename
 import pandas as pd
 from dotenv import load_dotenv
@@ -13,11 +13,13 @@ try:
     from src.utils.gemini_service import GeminiService
     from src.utils.qbo_service import QBOService
     from src.utils.file_processor import FileProcessor
+    from src.utils.progress_logger import progress_logger, init_progress_logger, log_progress
 except ModuleNotFoundError:
     # Fall back to relative imports if running directly from src directory
     from utils.gemini_service import GeminiService
     from utils.qbo_service import QBOService
     from utils.file_processor import FileProcessor
+    from utils.progress_logger import progress_logger, init_progress_logger, log_progress
 
 # Load environment variables
 load_dotenv()
@@ -300,6 +302,9 @@ qbo_service = QBOService(
 # Pass both services to the file processor for integrated customer matching
 file_processor = FileProcessor(gemini_service, qbo_service)
 
+# Initialize progress logger with Gemini service
+init_progress_logger(gemini_service)
+
 # Routes
 @app.route('/')
 def index():
@@ -320,18 +325,61 @@ def qbo_auth_status():
         'justConnected': just_connected
     })
 
+@app.route('/upload-start', methods=['POST'])
+def upload_start():
+    """Initialize upload session and return session ID for progress tracking."""
+    import uuid
+    session_id = str(uuid.uuid4())
+    
+    # Initialize progress logger session
+    progress_logger.start_session(session_id)
+    
+    # Log initial progress
+    log_progress(f"Initializing upload session {session_id}")
+    log_progress("Preparing to receive files...", force_summary=True)
+    
+    return jsonify({
+        'success': True,
+        'sessionId': session_id
+    })
+
 @app.route('/upload', methods=['POST'])
 def upload_files():
     """Handle file uploads (images, PDFs, CSV)."""
     try:
+        # Get session ID from request or create new one
+        import uuid
+        import time
+        session_id = request.form.get('sessionId')
+        
+        if not session_id:
+            # Create new session if not provided
+            session_id = str(uuid.uuid4())
+            progress_logger.start_session(session_id)
+        
+        # Return session ID immediately for SSE connection
+        response_data = {
+            'progressSessionId': session_id,
+            'processingStarted': True
+        }
+        
+        # Send initial response quickly
+        def process_after_response():
+            time.sleep(0.1)  # Small delay to ensure response is sent
+            log_progress("Starting to process your uploaded files...")
+            log_progress("Preparing to analyze your documents", force_summary=True)
+        
         # Check if QBO is authenticated for customer matching
         qbo_authenticated = qbo_service.access_token is not None and qbo_service.realm_id is not None
         if not qbo_authenticated:
-            print("Warning: QBO is not authenticated - customer matching will be skipped")
+            log_progress("QuickBooks connection not detected - will process files without customer matching")
+        else:
+            log_progress("Connected to QuickBooks - will match customers automatically")
             
         # Check if request has the files part
         if 'files' not in request.files:
-            print("No files part in the request")
+            log_progress("No files were uploaded", force_summary=True)
+            progress_logger.end_session(session_id)
             return jsonify({
                 'success': False,
                 'message': 'No files were selected'
@@ -339,20 +387,25 @@ def upload_files():
         
         files = request.files.getlist('files')
         if not files or len(files) == 0 or all(file.filename == '' for file in files):
-            print("No files selected")
+            log_progress("No valid files found in upload", force_summary=True)
+            progress_logger.end_session(session_id)
             return jsonify({
                 'success': False,
                 'message': 'No files were selected'
             }), 400
             
-        # Log the number of files and their sizes
-        print(f"Received {len(files)} files:")
+        # Log the files being processed
+        log_progress(f"Received {len(files)} file(s) - analyzing content now...")
+        file_info = []
         for file in files:
             if file.filename != '':
                 file.seek(0, os.SEEK_END)
                 file_size = file.tell()
                 file.seek(0)  # Reset file pointer
-                print(f"- {file.filename}: {file_size / 1024 / 1024:.2f} MB")
+                file_info.append(f"{file.filename} ({file_size / 1024 / 1024:.1f} MB)")
+        
+        if file_info:
+            log_progress(f"Processing files: {', '.join(file_info[:3])}" + ("..." if len(file_info) > 3 else ""))
         
         # Placeholder for extracted donation data
         donations = []
@@ -370,16 +423,22 @@ def upload_files():
             try:
                 filename = secure_filename(file.filename)
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                log_progress(f"Saving {filename} to temporary storage...")
                 file.save(file_path)
+                file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+                log_progress(f"File saved: {filename} ({file_size_mb:.1f}MB)")
                 
                 # Process different file types
                 file_ext = os.path.splitext(filename)[1].lower()
                 
                 if file_ext in ['.jpg', '.jpeg', '.png', '.pdf', '.csv']:
                     # Process all files using Gemini
-                    print(f"Processing {file_ext} file: {filename}")
+                    file_type = "spreadsheet" if file_ext == '.csv' else "image" if file_ext in ['.jpg', '.jpeg', '.png'] else "PDF document"
+                    log_progress(f"Reading {file_type}: {filename}")
                     
+                    log_progress(f"Analyzing content of {filename}...")
                     extracted_data = file_processor.process(file_path, file_ext)
+                    log_progress(f"Content analysis complete for {filename}")
                     
                     # Set the data source based on file type
                     data_source = 'CSV' if file_ext == '.csv' else 'LLM'
@@ -388,8 +447,11 @@ def upload_files():
                     if extracted_data:
                         # Check if we have a list of donations or a single donation
                         if isinstance(extracted_data, list):
-                            print(f"Processing multiple donations from {file_ext}: {len(extracted_data)}")
+                            log_progress(f"Found {len(extracted_data)} donation records in {filename}")
+                            log_progress(f"Processing individual donations from {filename}...")
                             for idx, donation in enumerate(extracted_data):
+                                if idx % 5 == 0 and idx > 0:
+                                    log_progress(f"Processed {idx} of {len(extracted_data)} donations from {filename}")
                                 donation['dataSource'] = data_source
                                 donation['internalId'] = f"{source_prefix}_{len(donations) + idx}"
                                 donation['qbSyncStatus'] = 'Pending'
@@ -407,15 +469,20 @@ def upload_files():
                                 extracted_data['qbCustomerStatus'] = 'Unknown'
                             donations.append(extracted_data)
                     else:
-                        print(f"No donation data extracted from {filename}")
+                        log_progress(f"Could not extract donation data from {filename}")
                         errors.append(f"No donation data could be extracted from {filename}")
                 else:
-                    print(f"Unsupported file type: {file_ext}")
+                    log_progress(f"Unsupported file type: {file_ext}")
                     errors.append(f"Unsupported file type: {file_ext}")
             
             except Exception as e:
-                print(f"Error processing {file.filename}: {str(e)}")
+                log_progress(f"Error processing {file.filename}: {str(e)}")
                 errors.append(f"Error processing {file.filename}: {str(e)}")
+        
+        # Process donations
+        if donations:
+            log_progress("Checking for duplicate donations and organizing data...")
+            log_progress(f"Analyzing {len(donations)} new donations for duplicates...")
         
         # Store donations in session for later use with deduplication
         if 'donations' not in session:
@@ -426,6 +493,8 @@ def upload_files():
         new_count = len(donations)
         
         # Apply smart deduplication and data synthesis
+        log_progress("Finalizing donation records...")
+        log_progress(f"Merging with existing {initial_count} donations...")
         session['donations'] = deduplicate_and_synthesize_donations(
             session['donations'], donations
         )
@@ -436,6 +505,9 @@ def upload_files():
         
         # Return appropriate response based on success/errors
         if session['donations']:
+            log_progress(f"Successfully processed {final_count} donation records. Ready for QuickBooks!", force_summary=True)
+            progress_logger.end_session(session_id)
+            
             # Return the deduplicated donations from session
             return jsonify({
                 'success': True,
@@ -444,9 +516,13 @@ def upload_files():
                 'totalCount': final_count,
                 'mergedCount': merged_count,
                 'warnings': (errors + warnings) if (errors or warnings) else None,
-                'qboAuthenticated': qbo_authenticated
+                'qboAuthenticated': qbo_authenticated,
+                'progressSessionId': session_id
             })
         else:
+            log_progress("Could not find any donation data in the uploaded files", force_summary=True)
+            progress_logger.end_session(session_id)
+            
             message = 'No donation data could be extracted. ' + (', '.join(errors) if errors else '')
             if warnings:
                 message += ' ' + (', '.join(warnings))
@@ -454,19 +530,55 @@ def upload_files():
             return jsonify({
                 'success': False,
                 'message': message,
-                'qboAuthenticated': qbo_authenticated
+                'qboAuthenticated': qbo_authenticated,
+                'progressSessionId': session_id
             }), 400
     
     except Exception as e:
         import traceback
+        log_progress(f"An unexpected error occurred: {str(e)}", force_summary=True)
+        progress_logger.end_session(session_id)
         print(f"Unexpected error in upload processing: {str(e)}")
         print("Full traceback:")
         traceback.print_exc()
         
         return jsonify({
             'success': False,
-            'message': f'An unexpected error occurred: {str(e)}'
+            'message': f'An unexpected error occurred: {str(e)}',
+            'progressSessionId': session_id
         }), 500
+
+@app.route('/progress-stream/<session_id>')
+def progress_stream(session_id):
+    """Stream progress updates for a specific session."""
+    print(f"[Flask] Progress stream requested for session: {session_id}")
+    
+    def generate():
+        for progress_data in progress_logger.get_progress_stream(session_id):
+            yield progress_data
+    
+    response = Response(generate(), mimetype="text/event-stream")
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'
+    response.headers['Connection'] = 'keep-alive'
+    return response
+
+@app.route('/test-progress')
+def test_progress():
+    """Test endpoint to verify progress streaming works."""
+    import uuid
+    test_session_id = str(uuid.uuid4())
+    progress_logger.start_session(test_session_id)
+    
+    # Log some test messages
+    log_progress("Test message 1: Starting test")
+    log_progress("Test message 2: Processing data")
+    log_progress("Test message 3: Almost done", force_summary=True)
+    
+    return jsonify({
+        'sessionId': test_session_id,
+        'message': 'Test progress session started. Connect to /progress-stream/' + test_session_id
+    })
 
 @app.route('/donations', methods=['GET'])
 def get_donations():

@@ -56,6 +56,20 @@
                                 </button>
                             </div>
                         </form>
+                        
+                        <!-- Progress Display -->
+                        <div id="progressDisplay" class="alert alert-info mt-3 d-none">
+                            <div class="d-flex align-items-center">
+                                <div class="spinner-border spinner-border-sm me-3" role="status">
+                                    <span class="visually-hidden">Processing...</span>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div id="progressAction" class="fw-semibold">Preparing to process files...</div>
+                                    <div id="progressDetail" class="small text-muted">Please wait while we analyze your documents.</div>
+                                </div>
+                                <button type="button" class="btn-close" id="closeProgress" aria-label="Close"></button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

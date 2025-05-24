@@ -425,3 +425,30 @@ class GeminiService:
         except Exception as e:
             print(f"Error calling Gemini API: {str(e)}")
             return None
+    def generate_text(self, prompt: str) -> Optional[str]:
+        """Generate text response from Gemini for general prompts.
+        
+        Args:
+            prompt: The prompt text to send to Gemini
+            
+        Returns:
+            Generated text response or None if generation failed
+        """
+        try:
+            # Set up model using the configured model name
+            model = genai.GenerativeModel(self.model_name)
+            
+            # Call Gemini API with prompt text
+            response = model.generate_content(
+                contents=[prompt],
+                generation_config=genai.GenerationConfig(
+                    temperature=0.7  # Slightly higher for more natural text
+                )
+            )
+            
+            # Return the generated text
+            return response.text if response and response.text else None
+        
+        except Exception as e:
+            print(f"Error generating text with Gemini: {str(e)}")
+            return None
