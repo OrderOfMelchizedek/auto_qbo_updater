@@ -135,49 +135,151 @@ function renderDonationTable() {
             
             // Set up in-place editing
             td.addEventListener('click', function() {
-                // Create dropdown for customerLookup field
+                // Create searchable autocomplete for customerLookup field
                 if (field === 'customerLookup') {
-                    const select = document.createElement('select');
-                    select.className = 'form-select form-select-sm';
+                    // Create container for input and suggestions
+                    const container = document.createElement('div');
+                    container.style.position = 'relative';
                     
-                    // Add empty option
-                    const emptyOption = document.createElement('option');
-                    emptyOption.value = '';
-                    emptyOption.textContent = '-- Select Customer --';
-                    select.appendChild(emptyOption);
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = donation[field] || '';
+                    input.className = 'form-control form-control-sm';
+                    input.placeholder = 'Start typing to search customers...';
                     
-                    // Add all QBO customers
-                    qboCustomers.forEach(customer => {
-                        const option = document.createElement('option');
-                        option.value = customer.name;
-                        option.textContent = `${customer.name} - ${customer.address}`;
-                        if (donation[field] === customer.name) {
-                            option.selected = true;
-                        }
-                        select.appendChild(option);
-                    });
+                    // Create suggestions dropdown
+                    const suggestions = document.createElement('div');
+                    suggestions.className = 'customer-suggestions';
+                    suggestions.style.cssText = `
+                        position: absolute;
+                        top: 100%;
+                        left: 0;
+                        right: 0;
+                        max-height: 200px;
+                        overflow-y: auto;
+                        background: white;
+                        border: 1px solid #ddd;
+                        border-top: none;
+                        border-radius: 0 0 4px 4px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        z-index: 1000;
+                        display: none;
+                    `;
                     
-                    select.addEventListener('change', function() {
-                        donation[field] = this.value;
-                        td.textContent = this.value;
+                    let selectedIndex = -1;
+                    
+                    // Filter and show suggestions
+                    function showSuggestions(searchTerm) {
+                        suggestions.innerHTML = '';
+                        selectedIndex = -1;
                         
-                        // If a customer is selected, update the matched status
-                        if (this.value) {
-                            const selectedCustomer = qboCustomers.find(c => c.name === this.value);
-                            if (selectedCustomer) {
-                                // Call manual match endpoint
-                                manualMatchCustomer(donation.internalId, selectedCustomer.id);
+                        if (!searchTerm) {
+                            suggestions.style.display = 'none';
+                            return;
+                        }
+                        
+                        const filtered = qboCustomers.filter(customer => 
+                            customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            customer.address.toLowerCase().includes(searchTerm.toLowerCase())
+                        ).slice(0, 10); // Limit to 10 suggestions
+                        
+                        if (filtered.length === 0) {
+                            suggestions.style.display = 'none';
+                            return;
+                        }
+                        
+                        filtered.forEach((customer, index) => {
+                            const item = document.createElement('div');
+                            item.style.cssText = `
+                                padding: 8px 12px;
+                                cursor: pointer;
+                                border-bottom: 1px solid #eee;
+                            `;
+                            item.innerHTML = `
+                                <div style="font-weight: 500;">${customer.name}</div>
+                                <div style="font-size: 0.85em; color: #666;">${customer.address}</div>
+                            `;
+                            
+                            item.addEventListener('mouseenter', () => {
+                                selectedIndex = index;
+                                updateSelection();
+                            });
+                            
+                            item.addEventListener('click', () => {
+                                selectCustomer(customer);
+                            });
+                            
+                            suggestions.appendChild(item);
+                        });
+                        
+                        suggestions.style.display = 'block';
+                    }
+                    
+                    function updateSelection() {
+                        const items = suggestions.querySelectorAll('div');
+                        items.forEach((item, index) => {
+                            if (index === selectedIndex) {
+                                item.style.backgroundColor = '#f0f0f0';
+                            } else {
+                                item.style.backgroundColor = 'white';
                             }
+                        });
+                    }
+                    
+                    function selectCustomer(customer) {
+                        input.value = customer.name;
+                        donation[field] = customer.name;
+                        suggestions.style.display = 'none';
+                        
+                        // Call manual match endpoint
+                        manualMatchCustomer(donation.internalId, customer.id);
+                    }
+                    
+                    // Handle input events
+                    input.addEventListener('input', function() {
+                        showSuggestions(this.value);
+                    });
+                    
+                    input.addEventListener('keydown', function(e) {
+                        const items = suggestions.querySelectorAll('div');
+                        
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+                            updateSelection();
+                        } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            selectedIndex = Math.max(selectedIndex - 1, -1);
+                            updateSelection();
+                        } else if (e.key === 'Enter' && selectedIndex >= 0) {
+                            e.preventDefault();
+                            const filtered = qboCustomers.filter(customer => 
+                                customer.name.toLowerCase().includes(this.value.toLowerCase()) ||
+                                customer.address.toLowerCase().includes(this.value.toLowerCase())
+                            ).slice(0, 10);
+                            if (filtered[selectedIndex]) {
+                                selectCustomer(filtered[selectedIndex]);
+                            }
+                        } else if (e.key === 'Escape') {
+                            suggestions.style.display = 'none';
                         }
                     });
                     
-                    select.addEventListener('blur', function() {
-                        td.textContent = donation[field] || '';
+                    input.addEventListener('blur', function() {
+                        // Delay to allow click on suggestion
+                        setTimeout(() => {
+                            donation[field] = this.value;
+                            td.textContent = this.value;
+                            suggestions.style.display = 'none';
+                        }, 200);
                     });
+                    
+                    container.appendChild(input);
+                    container.appendChild(suggestions);
                     
                     td.innerHTML = '';
-                    td.appendChild(select);
-                    select.focus();
+                    td.appendChild(container);
+                    input.focus();
                 } else {
                     // Regular text input for other fields
                     const input = document.createElement('input');
