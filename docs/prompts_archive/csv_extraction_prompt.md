@@ -13,8 +13,7 @@ VERY IMPORTANT: Return ONLY a valid JSON array containing objects with these fie
     "Donor Name": "string (REQUIRED)",
     "Check No.": "N/A",
     "Gift Amount": "string (REQUIRED)",
-    "Check Date": "string or null",
-    "Gift Date": "string (REQUIRED)",
+    "Check Date": "string (REQUIRED)",
     "Deposit Date": "today's date",
     "Deposit Method": "Online Donation", 
     "Memo": "string or null",
@@ -37,7 +36,7 @@ For Online Donations:
 These fields are REQUIRED and MUST have a value (not null):
 - Donor Name
 - Gift Amount
-- Gift Date
+- Check Date
 - First Name
 - Last Name
 - Address - Line 1

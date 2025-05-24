@@ -88,6 +88,12 @@ class GeminiService:
             if text_response:
                 print(f"Response text: {text_response}")
                 
+                # Debug: Check for date patterns
+                if "2024-06-01" in text_response:
+                    print("WARNING: Found date '2024-06-01' in response - this may be a misread date")
+                if "6/1" in text_response or "6-1" in text_response:
+                    print("WARNING: Found date pattern '6/1' or '6-1' - possible source of June 1st date")
+                
                 # Use the helper method to extract JSON
                 parsed_json = self._extract_json_from_text(text_response)
                 if parsed_json:
@@ -124,7 +130,7 @@ class GeminiService:
             qbo_json = json.dumps(qbo_customer, indent=2)
             
             # Get the verification prompt with placeholders replaced
-            verification_prompt = self.prompt_manager.get_prompt('customer_verification_prompt', {
+            verification_prompt = self.prompt_manager.get_prompt('simplified_customer_verification', {
                 'extracted_data': extracted_json,
                 'qbo_data': qbo_json
             })
@@ -189,8 +195,8 @@ class GeminiService:
             if custom_prompt:
                 extraction_prompt = custom_prompt
             else:
-                # Use prompt manager to combine main prompt and extraction prompt
-                extraction_prompt = self.prompt_manager.combine_prompts(['main_prompt', 'extraction_prompt'])
+                # Use the simplified extraction prompt
+                extraction_prompt = self.prompt_manager.get_prompt('simplified_extraction_prompt')
             
             # Set up model using the configured model name
             model = genai.GenerativeModel(self.model_name)
@@ -252,19 +258,15 @@ class GeminiService:
                         # Add text context only from this batch's pages
                         if batch_text.strip():
                             print(f"Batch {batch_num + 1} contains extractable text - adding as context")
-                            pdf_context = self.prompt_manager.get_prompt('pdf_text_context_prompt', {'pdf_text': batch_text})
+                            pdf_context = self.prompt_manager.get_prompt('simplified_pdf_context', {'pdf_text': batch_text})
                             batch_extraction_prompt += f"\n\n{pdf_context}"
                         
-                        # Add batch processing prompt
-                        batch_prompt = self.prompt_manager.get_prompt('batch_processing_prompt', {
-                            'start_page': str(batch_start + 1),
-                            'end_page': str(batch_end),
-                            'total_pages': str(len(pdf_doc))
-                        })
+                        # Add page info
+                        batch_info = f"\nProcessing pages {batch_start + 1} to {batch_end} of {len(pdf_doc)}."
                         
                         # Create content parts starting with the prompt
                         content_parts = [
-                            batch_extraction_prompt + f"\n\n{batch_prompt}"
+                            batch_extraction_prompt + batch_info
                         ]
                         
                         # Convert all pages in this batch to images and add to content
@@ -369,7 +371,7 @@ class GeminiService:
                     print(f"Read {len(img_bytes)} bytes from image file")
                     # Handle image as raw data
                     # Use prompt manager to get image extraction prompt
-                    image_prompt = self.prompt_manager.get_prompt('image_extraction_prompt')
+                    image_prompt = self.prompt_manager.get_prompt('simplified_image_prompt')
                     content_parts = [
                         extraction_prompt + f"\n\n{image_prompt}"
                     ]
@@ -379,12 +381,7 @@ class GeminiService:
             # Call Gemini API with content
             print(f"Processing {file_ext} file with Gemini: {file_path}")
             
-            # For Gemini API 0.5.4, we need to explicitly request JSON in the prompt
-            # Update the prompt to strongly emphasize structured JSON output
-            if isinstance(content_parts[0], str):
-                # Use prompt manager to get JSON format reminder
-                json_reminder = self.prompt_manager.get_prompt('json_format_reminder')
-                content_parts[0] += f"\n\n{json_reminder}"
+            # JSON format is now built into our simplified prompts
                 
             response = model.generate_content(
                 contents=content_parts,
@@ -400,12 +397,23 @@ class GeminiService:
                 # For clarity in logs
                 print(f"Response text: {text_response}")
                 
+                # Debug: Check for date patterns
+                if "2024-06-01" in text_response:
+                    print("WARNING: Found date '2024-06-01' in response - this may be a misread date")
+                if "6/1" in text_response or "6-1" in text_response:
+                    print("WARNING: Found date pattern '6/1' or '6-1' - possible source of June 1st date")
+                
                 # Use the helper method to extract JSON
                 parsed_json = self._extract_json_from_text(text_response)
                 if parsed_json:
                     # Structure the output consistently - always return a list
                     if isinstance(parsed_json, list):
                         print(f"Found array of {len(parsed_json)} donations, returning all items")
+                        # Debug: Check if all donations have the same date
+                        check_dates = [d.get('Check Date') for d in parsed_json if d.get('Check Date')]
+                        if len(set(check_dates)) == 1 and len(check_dates) > 1:
+                            print(f"WARNING: All {len(check_dates)} donations have the same Check Date: {check_dates[0]}")
+                            print("This suggests Gemini may be incorrectly applying one date to all checks")
                         return parsed_json
                     else:
                         # Wrap single donation in a list for consistency

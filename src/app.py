@@ -885,17 +885,6 @@ def create_sales_receipt(donation_id):
             # Format dates with validation
             today = pd.Timestamp.now().strftime('%Y-%m-%d')
             
-            # Validate Gift Date
-            gift_date = donation.get('Gift Date', '')
-            try:
-                # Check if it's a valid date and format it
-                if gift_date:
-                    pd.to_datetime(gift_date)
-            except:
-                # If invalid date, use today's date
-                print(f"Invalid Gift Date: {gift_date}, using today's date")
-                gift_date = today
-            
             # Validate Check Date
             check_date = donation.get('Check Date', '')
             try:
@@ -903,9 +892,9 @@ def create_sales_receipt(donation_id):
                 if check_date:
                     pd.to_datetime(check_date)
             except:
-                # If invalid date, use gift date or today
-                print(f"Invalid Check Date: {check_date}, using Gift Date or today")
-                check_date = gift_date if gift_date else today
+                # If invalid date, use today's date
+                print(f"Invalid Check Date: {check_date}, using today's date")
+                check_date = today
             
             # Get other fields with validation
             check_no = donation.get('Check No.', 'N/A')
@@ -955,7 +944,7 @@ def create_sales_receipt(donation_id):
                     'value': payment_method_id  # May be custom or default 'CHECK'
                 },
                 'PaymentRefNum': check_no,
-                'TxnDate': gift_date,
+                'TxnDate': check_date,
                 'DepositToAccountRef': {
                     'value': deposit_account_id  # May be custom or default '12000'
                 },
@@ -1091,21 +1080,8 @@ def create_batch_sales_receipts():
             
             # Validate data before sending
             
-            # Validate Gift Date
-            today = pd.Timestamp.now().strftime('%Y-%m-%d')
-            gift_date = donation.get('Gift Date', '')
-            try:
-                # Check if it's a valid date
-                if gift_date:
-                    pd.to_datetime(gift_date)
-                else:
-                    raise ValueError("Empty gift date")
-            except:
-                # If invalid date, use today's date
-                print(f"Invalid Gift Date for donation {donation['internalId']}: {gift_date}, using today's date")
-                gift_date = today
-            
             # Validate Check Date
+            today = pd.Timestamp.now().strftime('%Y-%m-%d')
             check_date = donation.get('Check Date', '')
             try:
                 # Check if it's a valid date
@@ -1114,9 +1090,9 @@ def create_batch_sales_receipts():
                 else:
                     raise ValueError("Empty check date")
             except:
-                # If invalid date, use gift date or today
-                print(f"Invalid Check Date for donation {donation['internalId']}: {check_date}, using Gift Date or today")
-                check_date = gift_date if gift_date else today
+                # If invalid date, use today's date
+                print(f"Invalid Check Date for donation {donation['internalId']}: {check_date}, using today's date")
+                check_date = today
             
             # Validate Gift Amount
             try:
@@ -1145,7 +1121,7 @@ def create_batch_sales_receipts():
             memo = donation.get('Memo', '')
             
             # Format description
-            description = f"{check_no}_{gift_date}_{gift_amount}_{last_name}_{first_name}"
+            description = f"{check_no}_{check_date}_{gift_amount}_{last_name}_{first_name}"
             if memo:
                 description += f"_{memo}"
             
@@ -1177,7 +1153,7 @@ def create_batch_sales_receipts():
                     'value': default_payment_method_id  # Use the parameter from request
                 },
                 'PaymentRefNum': check_no,
-                'TxnDate': gift_date,
+                'TxnDate': check_date,
                 'DepositToAccountRef': {
                     'value': default_account_id  # Use the parameter from request
                 },

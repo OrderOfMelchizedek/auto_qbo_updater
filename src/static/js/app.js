@@ -118,7 +118,7 @@ function renderDonationTable() {
         // Create other cells
         const fields = [
             'customerLookup', 'Donor Name', 'Check No.', 'Gift Amount', 
-            'Gift Date', 'Address - Line 1', 'City', 'State', 'ZIP', 'Memo'
+            'Check Date', 'Address - Line 1', 'City', 'State', 'ZIP', 'Memo'
         ];
         
         fields.forEach(field => {

@@ -74,16 +74,16 @@ class FileProcessor:
         donations_to_reprocess = []
         
         # Critical fields that must be present
-        critical_fields = ['Donor Name', 'Gift Amount', 'Gift Date']
+        critical_fields = ['Donor Name', 'Gift Amount', 'Check Date']
         
         # Nice-to-have fields (we'll try to get these but won't reprocess just for them)
         optional_fields = ['Address - Line 1', 'City', 'State', 'ZIP', 'First Name', 'Last Name']
         
         for donation in donations_list:
-            # If Gift Date is missing but Check Date exists, use Check Date
-            if not donation.get('Gift Date') and donation.get('Check Date'):
-                donation['Gift Date'] = donation['Check Date']
-                print(f"Using Check Date as Gift Date: {donation['Check Date']}")
+            # Warn if Check Date equals Deposit Date (likely extraction error)
+            if donation.get('Check Date') and donation.get('Deposit Date'):
+                if donation['Check Date'] == donation['Deposit Date']:
+                    print(f"WARNING: Check Date equals Deposit Date ({donation['Check Date']}) for {donation.get('Donor Name', 'Unknown')} - this may be incorrect!")
             
             # Check for missing critical fields
             missing_critical = [field for field in critical_fields if not donation.get(field)]
@@ -111,7 +111,7 @@ class FileProcessor:
                 missing_fields = item['missing_fields']
                 
                 # Use prompt manager to get reprocessing prompt with placeholders replaced
-                reprocess_prompt = self.prompt_manager.get_prompt('reprocess_prompt', {
+                reprocess_prompt = self.prompt_manager.get_prompt('simplified_reprocess', {
                     'partial_data': json.dumps(donation, indent=2),
                     'missing_fields': ', '.join(missing_fields)
                 })
@@ -267,7 +267,7 @@ class FileProcessor:
             print(f"CSV content sample: {csv_content[:500]}")
             
             # Use prompt manager to get CSV extraction prompt with placeholder replaced
-            csv_prompt = self.prompt_manager.get_prompt('csv_extraction_prompt', {
+            csv_prompt = self.prompt_manager.get_prompt('simplified_csv_prompt', {
                 'csv_content': csv_content
             })
             

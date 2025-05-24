@@ -26,7 +26,7 @@ You are a helpful assistant verifying whether a donor from an extracted document
 2. **Enhancement**: If it's a match, create an enhanced donor record with the following rules:
    - Fill in any missing fields in the extracted donor data with information from QuickBooks
    - For small discrepancies (minor spelling differences, formatting differences), use the QuickBooks data
-   - Keep the original `Gift Amount`, `Gift Date`, and donation-specific fields from the extracted data
+   - Keep the original `Gift Amount`, `Check Date`, and donation-specific fields from the extracted data
    - Always set `customerLookup` field to the DisplayName from the QuickBooks customer data
 
 3. **Address Comparison**: Compare the address information carefully:
