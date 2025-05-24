@@ -1828,6 +1828,38 @@ function saveChanges() {
         });
 }
 
+function clearAllDonations() {
+    // Show confirmation dialog
+    if (!confirm('Are you sure you want to clear all donations? This action cannot be undone.')) {
+        return;
+    }
+    
+    // Clear local donations array
+    donations = [];
+    
+    // Clear session data on server
+    fetch('/clear-all', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Re-render the empty table
+            renderDonationTable();
+            showToast('All donations cleared successfully', 'success');
+        } else {
+            showToast('Error clearing donations: ' + data.message, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error clearing donations:', error);
+        showToast('Error clearing donations', 'danger');
+    });
+}
+
 function generateReport() {
     fetch('/report/generate')
         .then(response => response.json())
@@ -2632,6 +2664,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Generate report button
     document.getElementById('generateReportBtn').addEventListener('click', function() {
         generateReport();
+    });
+    
+    // Clear All button
+    document.getElementById('clearAllBtn').addEventListener('click', function() {
+        clearAllDonations();
     });
     
     // Download report as CSV button

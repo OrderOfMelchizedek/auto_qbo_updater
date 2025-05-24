@@ -1265,6 +1265,25 @@ def create_batch_sales_receipts():
         'results': results
     })
 
+@app.route('/clear-all', methods=['POST'])
+def clear_all_donations():
+    """Clear all donations from the session."""
+    try:
+        # Clear donations from session
+        session['donations'] = []
+        
+        # Also clear any other related session data
+        if 'upload_summary' in session:
+            del session['upload_summary']
+        
+        # Ensure session is saved
+        session.modified = True
+        
+        return jsonify({'success': True, 'message': 'All donations cleared successfully'})
+    except Exception as e:
+        print(f"Error clearing donations: {str(e)}")
+        return jsonify({'success': False, 'message': 'Error clearing donations'}), 500
+
 @app.route('/report/generate', methods=['GET'])
 def generate_report():
     """Generate a donation report."""
