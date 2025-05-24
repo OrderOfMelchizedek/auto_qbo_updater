@@ -111,6 +111,12 @@ def deduplicate_and_synthesize_donations(existing_donations, new_donations):
         check_no = normalize_check_number(new_donation.get('Check No.', ''))
         amount = normalize_amount(new_donation.get('Gift Amount', ''))
         
+        # Skip suspicious entries (e.g., check numbers that are too short or don't look valid)
+        if check_no and len(check_no) < 3 and check_no.isdigit():
+            # Check numbers like "195" are suspicious - real checks are usually 4+ digits
+            print(f"WARNING: Suspicious check number '{check_no}' - may be a page number or reference")
+            # Still process it but log the warning
+        
         # Create unique key
         if check_no and amount:
             # Check donations use check number + amount as key
@@ -184,8 +190,8 @@ def synthesize_donation_data(existing, new):
         existing_val = existing.get(field)
         new_val = new.get(field)
         
-        # Take new value if existing is empty/null
-        if not existing_val and new_val:
+        # Take new value if existing is empty/null/N/A
+        if (not existing_val or existing_val == 'N/A') and new_val and new_val != 'N/A':
             merged[field] = new_val
             merged_fields.append(field)
         # Take longer/more complete value for text fields
@@ -194,7 +200,11 @@ def synthesize_donation_data(existing, new):
             existing_stripped = existing_val.strip() if existing_val else ''
             new_stripped = new_val.strip() if new_val else ''
             
-            if len(new_stripped) > len(existing_stripped):
+            # Also replace N/A with actual values
+            if existing_val == 'N/A' and new_val != 'N/A':
+                merged[field] = new_val
+                merged_fields.append(field)
+            elif len(new_stripped) > len(existing_stripped) and new_val != 'N/A':
                 merged[field] = new_val
                 merged_fields.append(field)
     

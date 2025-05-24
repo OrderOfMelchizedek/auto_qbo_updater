@@ -10,7 +10,7 @@ Before the user deposits the donations received, the user will scan and upload i
 
 *Envelopes* The user will upload the envelopes that the donations came in. This is critical for verifying donor contact information. First ensure that the return address on the envelope matches the donor's entry in the customer contact list; if it doesn't, it may mean that the donor has moved and the user needs to update the address in the contact list. The return address supersedes all other addresses (including any addresses written on the check). Also note if there is any additional contact information (e.g. phone number, email) that is not in the customer contact list. Finally, note any memo that the donor writes (it may not be written on the check).
 
-*User Record* The user may handwrite a list of donations in the current deposit, typically in four columns. The first column is the number; the second column is the check no.; the third column is the amount, and the fourth column is the donor. The user will also calculate the total  amount deposited. Use this to corroborate your work and ensure that you do not make any errors. 
+*User Record* The user may handwrite a list of donations in the current deposit, typically in four columns: the item number; the check no.; the gift amount, and the donor name. The user will also calculate the total amount deposited. Use this to corroborate your work and ensure that you do not make any errors. The check no. written on the user record is authoritative; when merging entries, ensure that the check no. for each entry is in the user record.
 
 *Online Donations* The user may upload a .csv file containing a list of online donations.
 
@@ -34,14 +34,13 @@ The amount of the donation, found on the check. It will be written as a number a
 The date written on the check.
 
 *Gift Date*
-- Use the postmark on the envelope if
- - The donation is a personal check.
+- Use the postmark on the envelope if the donation is a personal check.
 - Use the check date if  
  - The donation is a printed check (which is usual for donations from organizations or churches)
  - The donation is a personal check where the postmark on the envelope is illegible
 
 *Deposit Date*
-The date that the checks were deposited. Use current date unless another date is specified.
+The date that the checks were deposited. Use current date unless another date is specified on the handwritten summary.
 
 *Deposit Method*
 ATM Deposit

@@ -203,33 +203,17 @@ class GeminiService:
                 import PyPDF2
                 import fitz  # PyMuPDF
                 
-                # Try to extract text from PDF as a fallback
-                pdf_text = ""
-                try:
-                    pdf_reader = PyPDF2.PdfReader(file_path)
-                    for page in pdf_reader.pages:
-                        extracted_text = page.extract_text()
-                        if extracted_text:
-                            pdf_text += extracted_text + "\n\n"
-                except Exception as e:
-                    print(f"Error extracting text with PyPDF2: {str(e)}")
-                
                 # Approach 1: Try to render PDF pages as images
                 try:
                     print("Processing PDF visually by converting to images")
                     pdf_doc = fitz.open(file_path)
                     
-                    # Enhanced prompt
-                    enhanced_extraction_prompt = extraction_prompt
-                    
-                    # If text was successfully extracted, enhance the prompt with it
-                    if pdf_text.strip():
-                        print("PDF contains extractable text - adding as context")
-                        # Use prompt manager to get PDF text context prompt with placeholder replaced
-                        pdf_context = self.prompt_manager.get_prompt('pdf_text_context_prompt', {'pdf_text': pdf_text})
-                        enhanced_extraction_prompt += f"\n\n{pdf_context}"
-                    else:
-                        print("PDF does not contain extractable text")
+                    # We'll extract text page by page as we process
+                    pdf_reader = None
+                    try:
+                        pdf_reader = PyPDF2.PdfReader(file_path)
+                    except Exception as e:
+                        print(f"Error loading PDF for text extraction: {str(e)}")
                     
                     # Process PDF in batches of pages
                     print(f"PDF has {len(pdf_doc)} pages - processing in batches")
@@ -250,7 +234,28 @@ class GeminiService:
                         
                         print(f"Processing batch {batch_num + 1} of {num_batches} (pages {batch_start + 1}-{batch_end})")
                         
-                        # Use prompt manager to get batch processing prompt with placeholders replaced
+                        # Extract text only from the pages in this batch
+                        batch_text = ""
+                        if pdf_reader:
+                            try:
+                                for page_num in range(batch_start, batch_end):
+                                    if page_num < len(pdf_reader.pages):
+                                        page_text = pdf_reader.pages[page_num].extract_text()
+                                        if page_text:
+                                            batch_text += f"\n--- Page {page_num + 1} ---\n{page_text}\n"
+                            except Exception as e:
+                                print(f"Error extracting text from batch pages: {str(e)}")
+                        
+                        # Build prompt for this batch
+                        batch_extraction_prompt = extraction_prompt
+                        
+                        # Add text context only from this batch's pages
+                        if batch_text.strip():
+                            print(f"Batch {batch_num + 1} contains extractable text - adding as context")
+                            pdf_context = self.prompt_manager.get_prompt('pdf_text_context_prompt', {'pdf_text': batch_text})
+                            batch_extraction_prompt += f"\n\n{pdf_context}"
+                        
+                        # Add batch processing prompt
                         batch_prompt = self.prompt_manager.get_prompt('batch_processing_prompt', {
                             'start_page': str(batch_start + 1),
                             'end_page': str(batch_end),
@@ -259,7 +264,7 @@ class GeminiService:
                         
                         # Create content parts starting with the prompt
                         content_parts = [
-                            enhanced_extraction_prompt + f"\n\n{batch_prompt}"
+                            batch_extraction_prompt + f"\n\n{batch_prompt}"
                         ]
                         
                         # Convert all pages in this batch to images and add to content
@@ -296,6 +301,9 @@ class GeminiService:
                                     if batch_json:
                                         # Add to results (could be a single object or array)
                                         if isinstance(batch_json, list):
+                                            print(f"Batch {batch_num + 1} extracted {len(batch_json)} donations")
+                                            for idx, donation in enumerate(batch_json):
+                                                print(f"  - Donation {idx + 1}: {donation.get('Donor Name', 'Unknown')} - Check #{donation.get('Check No.', 'N/A')} - ${donation.get('Gift Amount', '0')}")
                                             all_results.extend(batch_json)
                                             print(f"Added {len(batch_json)} donations from batch {batch_num + 1}")
                                         else:
@@ -318,17 +326,29 @@ class GeminiService:
                         pix = page.get_pixmap()
                         img_data = pix.tobytes("png")
                         image = Image.open(io.BytesIO(img_data))
-                        content_parts = [enhanced_extraction_prompt, image]
+                        content_parts = [extraction_prompt, image]
                     
                 except Exception as e:
                     print(f"Error processing PDF visually: {str(e)}")
                     
-                    # Approach 2: Fall back to text-only if we have extracted text
-                    if pdf_text.strip():
-                        print("Falling back to text-only processing")
+                    # Approach 2: Fall back to text-only processing
+                    # Extract text from first few pages only as fallback
+                    fallback_text = ""
+                    if pdf_reader:
+                        try:
+                            pages_to_extract = min(3, len(pdf_reader.pages))
+                            for i in range(pages_to_extract):
+                                page_text = pdf_reader.pages[i].extract_text()
+                                if page_text:
+                                    fallback_text += f"\n--- Page {i+1} ---\n{page_text}\n"
+                        except Exception as e:
+                            print(f"Error extracting fallback text: {str(e)}")
+                    
+                    if fallback_text.strip():
+                        print("Falling back to text-only processing (first few pages)")
                         
                         # Use prompt manager to get PDF text fallback prompt with placeholder replaced
-                        fallback_content = self.prompt_manager.get_prompt('pdf_text_fallback_prompt', {'pdf_text': pdf_text})
+                        fallback_content = self.prompt_manager.get_prompt('pdf_text_fallback_prompt', {'pdf_text': fallback_text})
                         text_fallback_prompt = f"{extraction_prompt}\n\n{fallback_content}"
                         content_parts = [text_fallback_prompt]
                     else:

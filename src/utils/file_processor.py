@@ -77,9 +77,14 @@ class FileProcessor:
         critical_fields = ['Donor Name', 'Gift Amount', 'Gift Date']
         
         # Nice-to-have fields (we'll try to get these but won't reprocess just for them)
-        optional_fields = ['Address - Line 1', 'City', 'State', 'ZIP', 'Last Name']
+        optional_fields = ['Address - Line 1', 'City', 'State', 'ZIP', 'First Name', 'Last Name']
         
         for donation in donations_list:
+            # If Gift Date is missing but Check Date exists, use Check Date
+            if not donation.get('Gift Date') and donation.get('Check Date'):
+                donation['Gift Date'] = donation['Check Date']
+                print(f"Using Check Date as Gift Date: {donation['Check Date']}")
+            
             # Check for missing critical fields
             missing_critical = [field for field in critical_fields if not donation.get(field)]
             

@@ -2,6 +2,38 @@
 let donations = [];
 let reportModal, customerModal;
 
+// Show merge history for a donation
+function showMergeHistory(donationId) {
+    const donation = donations.find(d => d.internalId === donationId);
+    if (!donation || !donation.mergeHistory) return;
+    
+    let historyHtml = '<h6>Merge History</h6><ul class="list-unstyled">';
+    
+    donation.mergeHistory.forEach((merge, index) => {
+        historyHtml += `
+            <li class="mb-3">
+                <strong>Merge ${index + 1}:</strong><br>
+                <small class="text-muted">Time: ${new Date(merge.timestamp).toLocaleString()}</small><br>
+                <small>Source: Check #${merge.sourceData.checkNo || 'N/A'} - ${merge.sourceData.donor || 'Unknown'} - $${merge.sourceData.amount || '0'}</small><br>
+                <small>Fields merged: <span class="badge bg-secondary">${merge.mergedFields.join('</span> <span class="badge bg-secondary">')}</span></small>
+            </li>
+        `;
+    });
+    
+    historyHtml += '</ul>';
+    
+    // Show in a simple alert for now (could be improved with a modal)
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-info alert-dismissible fade show position-fixed top-50 start-50 translate-middle';
+    alertDiv.style.zIndex = '9999';
+    alertDiv.style.maxWidth = '500px';
+    alertDiv.innerHTML = `
+        ${historyHtml}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(alertDiv);
+}
+
 // Helper functions
 function formatCurrency(amount) {
     // Handle string or number input
@@ -75,7 +107,10 @@ function renderDonationTable() {
         
         // Add merge indicator if present
         if (donation.mergeHistory && donation.mergeHistory.length > 0) {
-            sourceCell.innerHTML += ` <span class="badge bg-info" title="${donation.mergeHistory.length} merge(s)">${donation.mergeHistory.length}</span>`;
+            const mergeDetails = donation.mergeHistory.map(h => 
+                `Merged ${h.mergedFields.join(', ')} from ${h.sourceData.donor || 'Unknown'}`
+            ).join('\n');
+            sourceCell.innerHTML += ` <span class="badge bg-info" style="cursor: pointer;" title="${mergeDetails}" onclick="showMergeHistory('${donation.internalId}')">${donation.mergeHistory.length}</span>`;
         }
         
         tr.appendChild(sourceCell);
