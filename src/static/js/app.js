@@ -58,13 +58,26 @@ function renderDonationTable() {
         const tr = document.createElement('tr');
         tr.dataset.id = donation.internalId;
         
+        // Add class for merged donations
+        if (donation.isMerged) {
+            tr.classList.add('merged-donation');
+        }
+        
         // Create source cell with icon
         const sourceCell = document.createElement('td');
-        if (donation.dataSource === 'LLM') {
+        if (donation.dataSource === 'Mixed') {
+            sourceCell.innerHTML = '<i class="fas fa-code-branch source-mixed" title="Merged from multiple sources"></i>';
+        } else if (donation.dataSource === 'LLM') {
             sourceCell.innerHTML = '<i class="fas fa-file-image source-llm" title="Extracted from Image/PDF"></i>';
         } else if (donation.dataSource === 'CSV') {
             sourceCell.innerHTML = '<i class="fas fa-file-csv source-csv" title="Imported from CSV"></i>';
         }
+        
+        // Add merge indicator if present
+        if (donation.mergeHistory && donation.mergeHistory.length > 0) {
+            sourceCell.innerHTML += ` <span class="badge bg-info" title="${donation.mergeHistory.length} merge(s)">${donation.mergeHistory.length}</span>`;
+        }
+        
         tr.appendChild(sourceCell);
         
         // Create other cells
@@ -1734,63 +1747,31 @@ function downloadReportTXT() {
         });
 }
 
-// Add new donations with strict validation
-function addNewDonations(newDonations) {
-    // Track both valid and invalid donations
-    const validDonations = [];
-    const invalidDonations = [];
+// Process new donations - validation happens on server side
+function processUploadResponse(uploadData) {
+    // The server has already done deduplication and validation
+    // We just need to update our local state with the server's data
     
-    // Apply strict validation rules
-    newDonations.forEach(donation => {
-        // Rule 1: Every donation MUST have a Gift Amount
-        if (!donation['Gift Amount']) {
-            console.log(`Invalid donation from ${donation['Donor Name'] || 'Unknown'}: Missing Gift Amount`);
-            invalidDonations.push(donation);
-            return;
-        }
+    if (uploadData.donations && uploadData.donations.length > 0) {
+        // Replace local donations with server's deduplicated list
+        donations = uploadData.donations;
+        renderDonationTable();
         
-        // Convert Gift Amount to a number for validation
-        let giftAmount;
-        if (typeof donation['Gift Amount'] === 'string') {
-            giftAmount = parseFloat(donation['Gift Amount'].replace(/[$,]/g, ''));
+        // Show appropriate message based on what happened
+        const newCount = uploadData.newCount || uploadData.donations.length;
+        const totalCount = uploadData.totalCount || uploadData.donations.length;
+        const mergedCount = uploadData.mergedCount || 0;
+        
+        if (mergedCount > 0) {
+            showToast(`Processed ${newCount} donation(s), merged ${mergedCount} duplicate(s). Total: ${totalCount} donations`, 'success');
         } else {
-            giftAmount = parseFloat(donation['Gift Amount'] || 0);
+            showToast(`Successfully processed ${newCount} donation(s). Total: ${totalCount} donations`, 'success');
         }
         
-        // Ensure Gift Amount is a valid number greater than zero
-        if (isNaN(giftAmount) || giftAmount <= 0) {
-            console.log(`Invalid donation from ${donation['Donor Name'] || 'Unknown'}: Invalid Gift Amount`);
-            invalidDonations.push(donation);
-            return;
-        }
-        
-        // Rule 2: Non-online donations MUST have a Check No.
-        const isOnlineDonation = donation['Deposit Method'] === 'Online Donation';
-        if (!isOnlineDonation && !donation['Check No.']) {
-            console.log(`Invalid non-online donation from ${donation['Donor Name'] || 'Unknown'}: Missing Check No.`);
-            invalidDonations.push(donation);
-            return;
-        }
-        
-        // All validation rules passed
-        validDonations.push(donation);
-    });
-    
-    // Log how many donations were filtered out
-    if (invalidDonations.length > 0) {
-        console.log(`Found ${invalidDonations.length} invalid donations that will be removed`);
+        return newCount;
     }
     
-    // Add only valid donations to the UI
-    donations = donations.concat(validDonations);
-    renderDonationTable();
-    
-    // If there are invalid donations, remove them from the server session
-    if (invalidDonations.length > 0) {
-        removeInvalidDonationsFromSession(invalidDonations);
-    }
-    
-    return validDonations.length;
+    return 0;
 }
 
 // Remove invalid donations from the server session
@@ -1860,38 +1841,30 @@ function uploadAndProcessFiles(files) {
         })
         .then(data => {
             if (data.success) {
-                // Process new donations with validation
-                if (data.donations && data.donations.length > 0) {
-                    const validCount = addNewDonations(data.donations);
+                // Process the upload response
+                const processedCount = processUploadResponse(data);
+                
+                if (processedCount === 0) {
+                    showToast('No donation data found in the uploaded files', 'warning');
+                }
+                
+                // Check QuickBooks authentication status
+                if (data.qboAuthenticated === false) {
+                    console.warn("QuickBooks authentication warning: Not connected to QBO");
+                    showToast('QuickBooks is not connected. Connect to QuickBooks for automatic customer matching.', 'warning');
                     
-                    if (validCount === data.donations.length) {
-                        showToast(`Successfully processed ${validCount} donation(s)`);
-                    } else if (validCount > 0) {
-                        showToast(`Processed ${validCount} donation(s), skipped ${data.donations.length - validCount} invalid donation(s)`, 'warning');
-                    } else {
-                        showToast('All donations were invalid and skipped. Check console for details.', 'warning');
+                    // Highlight the Connect to QBO button
+                    const qboBtn = document.getElementById('connectQBOBtn');
+                    if (qboBtn) {
+                        qboBtn.classList.add('btn-warning');
+                        qboBtn.classList.remove('btn-primary');
                     }
-                    
-                    // Check QuickBooks authentication status
-                    if (data.qboAuthenticated === false) {
-                        console.warn("QuickBooks authentication warning: Not connected to QBO");
-                        showToast('QuickBooks is not connected. Connect to QuickBooks for automatic customer matching.', 'warning');
-                        
-                        // Highlight the Connect to QBO button
-                        const qboBtn = document.getElementById('connectQBOBtn');
-                        if (qboBtn) {
-                            qboBtn.classList.add('btn-warning');
-                            qboBtn.classList.remove('btn-primary');
-                        }
-                    }
-                    
-                    // Show warnings if any
-                    if (data.warnings && data.warnings.length > 0) {
-                        console.warn("Processing warnings:", data.warnings);
-                        showToast(`Processed with warnings. Check console for details.`, 'warning');
-                    }
-                } else {
-                    showToast('No donation data found in the uploaded files');
+                }
+                
+                // Show warnings if any
+                if (data.warnings && data.warnings.length > 0) {
+                    console.warn("Processing warnings:", data.warnings);
+                    showToast(`Processed with warnings. Check console for details.`, 'warning');
                 }
                 
                 // Clear the file list

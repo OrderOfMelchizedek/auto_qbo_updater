@@ -73,28 +73,30 @@ class FileProcessor:
         complete_donations = []
         donations_to_reprocess = []
         
-        # Required fields (Memo is optional)
-        required_fields = [
-            'Donor Name', 'Gift Amount', 'Gift Date', 'Address - Line 1', 
-            'City', 'State', 'ZIP', 'Last Name'
-        ]
+        # Critical fields that must be present
+        critical_fields = ['Donor Name', 'Gift Amount', 'Gift Date']
+        
+        # Nice-to-have fields (we'll try to get these but won't reprocess just for them)
+        optional_fields = ['Address - Line 1', 'City', 'State', 'ZIP', 'Last Name']
         
         for donation in donations_list:
-            # Check for missing fields (except Memo which is optional)
-            missing_fields = [field for field in required_fields if not donation.get(field)]
+            # Check for missing critical fields
+            missing_critical = [field for field in critical_fields if not donation.get(field)]
             
-            # Gift Amount and Check No (for non-online) are strictly required
-            # and will be checked later in the JavaScript validation
-            
-            if missing_fields:
-                # Non-essential fields are missing - queue for reprocessing
-                print(f"Donation has missing fields: {', '.join(missing_fields)}. Queuing for reprocessing.")
+            if missing_critical:
+                # Critical fields are missing - must reprocess
+                print(f"Donation has missing CRITICAL fields: {', '.join(missing_critical)}. Queuing for reprocessing.")
                 donations_to_reprocess.append({
                     'donation': donation,
-                    'missing_fields': missing_fields
+                    'missing_fields': missing_critical
                 })
             else:
-                # All required fields are present
+                # Check optional fields just for logging
+                missing_optional = [field for field in optional_fields if not donation.get(field)]
+                if missing_optional:
+                    print(f"Donation missing optional fields: {', '.join(missing_optional)}. Skipping reprocessing.")
+                
+                # All critical fields are present - add to complete list
                 complete_donations.append(donation)
                 
         # If we have donations needing reprocessing, send them back to Gemini
@@ -118,9 +120,29 @@ class FileProcessor:
                     reprocessed = self.gemini_service.extract_donation_data(file_path, custom_prompt=reprocess_prompt)
                     
                 if reprocessed:
-                    # If reprocessing returned a list, take the first item
+                    # If reprocessing returned a list, we need to find the matching donation
                     if isinstance(reprocessed, list) and len(reprocessed) > 0:
-                        reprocessed = reprocessed[0]
+                        # Try to match the reprocessed donation with the original
+                        matched_reprocessed = None
+                        donor_name = donation.get('Donor Name', '').lower()
+                        check_no = str(donation.get('Check No.', '')).strip()
+                        
+                        for r in reprocessed:
+                            r_donor = r.get('Donor Name', '').lower()
+                            r_check = str(r.get('Check No.', '')).strip()
+                            
+                            # Match by donor name and/or check number
+                            if (donor_name and donor_name in r_donor or r_donor in donor_name) or \
+                               (check_no and check_no == r_check):
+                                matched_reprocessed = r
+                                break
+                        
+                        # If we found a match, use it. Otherwise, skip reprocessing for this donation
+                        if matched_reprocessed:
+                            reprocessed = matched_reprocessed
+                        else:
+                            print(f"Could not match reprocessed donation to original for {donation.get('Donor Name')}")
+                            reprocessed = None
                         
                     # Only use the reprocessed data if it found the missing fields
                     still_missing = [field for field in missing_fields if not reprocessed.get(field)]

@@ -76,6 +76,19 @@ body {
     color: #fd7e14;
 }
 
+.source-mixed {
+    color: #17a2b8;
+}
+
+/* Highlight merged donations */
+.merged-donation {
+    background-color: #e3f2fd !important;
+}
+
+.merged-donation:hover {
+    background-color: #bbdefb !important;
+}
+
 /* Report styles */
 .report-header {
     margin-bottom: 1.5rem;

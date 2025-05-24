@@ -1,19 +1,15 @@
-I need to extract complete donation information from this document.
+I need you to find and extract information for ONE SPECIFIC donation in this document.
 
-I previously extracted this partial information:
+The donation I'm looking for has these identifying details:
 {{partial_data}}
 
-However, the following fields are missing or incomplete:
+I specifically need to find these missing fields for THIS donation only:
 {{missing_fields}}
 
-Please carefully examine the document again and provide the COMPLETE donation information with special attention to the missing fields.
-Return ONLY a complete JSON object with ALL fields including:
-- Donor Name
-- Gift Amount
-- Gift Date
-- Address - Line 1
-- City
-- State
-- ZIP
-- Last Name
-- Check No. (if this is a check payment)
+IMPORTANT: 
+- Return information for ONLY this single donation
+- Do NOT extract information from other donations in the document
+- Match based on the Check No. and/or Donor Name and Amount
+- If you cannot find the specific missing fields, return the original data unchanged
+
+Return ONLY a JSON object for this single donation with all available fields.

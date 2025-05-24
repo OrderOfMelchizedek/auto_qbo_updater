@@ -22,6 +22,221 @@ except ModuleNotFoundError:
 # Load environment variables
 load_dotenv()
 
+import re
+from datetime import datetime
+import dateutil.parser
+
+def normalize_check_number(check_no):
+    """Normalize check number for comparison."""
+    if not check_no:
+        return ''
+    # Remove leading zeros and spaces
+    normalized = str(check_no).strip().lstrip('0')
+    # If all zeros were removed, ensure at least '0' remains
+    return normalized if normalized else '0'
+
+def normalize_amount(amount):
+    """Normalize amount for comparison."""
+    if not amount:
+        return ''
+    # Remove currency symbols, commas, and spaces
+    amount_str = str(amount).replace('$', '').replace(',', '').strip()
+    try:
+        # Convert to float and format to 2 decimal places
+        return f"{float(amount_str):.2f}"
+    except:
+        return amount_str
+
+def normalize_donor_name(name):
+    """Normalize donor name for comparison."""
+    if not name:
+        return ''
+    # Convert to lowercase, remove punctuation, normalize whitespace
+    name = re.sub(r'[^\w\s]', '', str(name).lower())
+    return ' '.join(name.split())
+
+def normalize_date(date_str):
+    """Normalize date string to consistent format."""
+    if not date_str:
+        return ''
+    try:
+        # Try to parse various date formats
+        parsed_date = dateutil.parser.parse(str(date_str))
+        return parsed_date.strftime('%Y-%m-%d')
+    except:
+        # If parsing fails, return the original string
+        return str(date_str).strip()
+
+def deduplicate_and_synthesize_donations(existing_donations, new_donations):
+    """
+    Strict deduplication using Check No. + Amount as unique key.
+    
+    This ensures NO duplicates can exist with the same check number and amount.
+    All data is merged into the single record for each unique key.
+    """
+    # Convert existing donations list to a dictionary with unique keys
+    unique_donations = {}
+    
+    # First, add all existing donations to the unique dictionary
+    for donation in existing_donations:
+        check_no = normalize_check_number(donation.get('Check No.', ''))
+        amount = normalize_amount(donation.get('Gift Amount', ''))
+        
+        # Create unique key
+        if check_no and amount:
+            # Check donations use check number + amount as key
+            unique_key = f"CHECK_{check_no}_{amount}"
+        else:
+            # Non-check donations use donor name + amount + date as key
+            donor_name = normalize_donor_name(donation.get('Donor Name', ''))
+            gift_date = normalize_date(donation.get('Gift Date', ''))
+            
+            if donor_name and amount:
+                unique_key = f"OTHER_{donor_name}_{amount}_{gift_date}"
+            else:
+                # Skip donations without enough identifying information
+                print(f"Skipping donation without sufficient identifying info: {donation}")
+                continue
+        
+        # Store in dictionary (will overwrite if duplicate key exists)
+        if unique_key in unique_donations:
+            print(f"WARNING: Duplicate key found in existing donations: {unique_key}")
+        unique_donations[unique_key] = donation
+    
+    # Now process new donations
+    merge_count = 0
+    new_count = 0
+    
+    for new_donation in new_donations:
+        check_no = normalize_check_number(new_donation.get('Check No.', ''))
+        amount = normalize_amount(new_donation.get('Gift Amount', ''))
+        
+        # Create unique key
+        if check_no and amount:
+            # Check donations use check number + amount as key
+            unique_key = f"CHECK_{check_no}_{amount}"
+        else:
+            # Non-check donations use donor name + amount + date as key
+            donor_name = normalize_donor_name(new_donation.get('Donor Name', ''))
+            gift_date = normalize_date(new_donation.get('Gift Date', ''))
+            
+            if donor_name and amount:
+                unique_key = f"OTHER_{donor_name}_{amount}_{gift_date}"
+            else:
+                # Skip donations without enough identifying information
+                print(f"Skipping new donation without sufficient identifying info: {new_donation}")
+                continue
+        
+        # Check if this key already exists
+        if unique_key in unique_donations:
+            # Merge with existing donation
+            print(f"Merging donation with key: {unique_key}")
+            unique_donations[unique_key] = synthesize_donation_data(
+                unique_donations[unique_key], new_donation
+            )
+            merge_count += 1
+        else:
+            # Add as new donation
+            print(f"Adding new donation with key: {unique_key}")
+            unique_donations[unique_key] = new_donation
+            new_count += 1
+    
+    # Convert back to list
+    result = list(unique_donations.values())
+    
+    # Ensure internal IDs are unique
+    for i, donation in enumerate(result):
+        if 'internalId' not in donation or not donation['internalId']:
+            donation['internalId'] = f"donation_{i}"
+    
+    print(f"Deduplication complete: {len(result)} unique donations (merged {merge_count}, added {new_count})")
+    
+    return result
+
+def synthesize_donation_data(existing, new):
+    """
+    Intelligently merge two donation records, preserving the most complete information.
+    
+    Priority rules:
+    1. Non-null values override null values
+    2. Longer/more complete values override shorter ones
+    3. Values from images override values from PDFs (generally more accurate)
+    4. Specific fields have custom merge logic
+    """
+    merged = existing.copy()
+    
+    # Initialize merge history if not present
+    if 'mergeHistory' not in merged:
+        merged['mergeHistory'] = []
+    
+    # Track what fields are being merged
+    merged_fields = []
+    
+    # Fields that should be merged by taking non-null or most complete value
+    simple_merge_fields = [
+        'Donor Name', 'First Name', 'Last Name', 'Full Name',
+        'Address - Line 1', 'City', 'State', 'ZIP',
+        'Organization Name', 'Email', 'Phone',
+        'Check Date', 'Deposit Date', 'Deposit Method'
+    ]
+    
+    for field in simple_merge_fields:
+        existing_val = existing.get(field)
+        new_val = new.get(field)
+        
+        # Take new value if existing is empty/null
+        if not existing_val and new_val:
+            merged[field] = new_val
+            merged_fields.append(field)
+        # Take longer/more complete value for text fields
+        elif existing_val and new_val and isinstance(existing_val, str) and isinstance(new_val, str):
+            # Safely strip whitespace
+            existing_stripped = existing_val.strip() if existing_val else ''
+            new_stripped = new_val.strip() if new_val else ''
+            
+            if len(new_stripped) > len(existing_stripped):
+                merged[field] = new_val
+                merged_fields.append(field)
+    
+    # Special handling for memo - concatenate if different
+    existing_memo = existing.get('Memo') or ''
+    new_memo = new.get('Memo') or ''
+    existing_memo = existing_memo.strip() if existing_memo else ''
+    new_memo = new_memo.strip() if new_memo else ''
+    
+    if new_memo and new_memo not in existing_memo:
+        if existing_memo:
+            merged['Memo'] = f"{existing_memo}; {new_memo}"
+        else:
+            merged['Memo'] = new_memo
+    
+    # Preserve QBO-related fields from existing record
+    qbo_fields = ['qboCustomerId', 'qbCustomerStatus', 'qbSyncStatus', 
+                  'matchMethod', 'matchConfidence', 'internalId']
+    for field in qbo_fields:
+        if field in existing:
+            merged[field] = existing[field]
+    
+    # Data source tracking
+    if 'dataSource' in existing and 'dataSource' in new:
+        if existing['dataSource'] != new['dataSource']:
+            merged['dataSource'] = 'Mixed'
+    
+    # Add merge history entry if fields were merged
+    if merged_fields:
+        merged['mergeHistory'].append({
+            'timestamp': datetime.now().isoformat(),
+            'mergedFields': merged_fields,
+            'sourceData': {
+                'checkNo': new.get('Check No.', ''),
+                'amount': new.get('Gift Amount', ''),
+                'donor': new.get('Donor Name', '')
+            }
+        })
+        merged['isMerged'] = True
+    
+    return merged
+
 # Define model aliases
 MODEL_MAPPING = {
     'gemini-flash': 'gemini-2.5-flash-preview-04-17',
@@ -192,17 +407,32 @@ def upload_files():
                 print(f"Error processing {file.filename}: {str(e)}")
                 errors.append(f"Error processing {file.filename}: {str(e)}")
         
-        # Store donations in session for later use
+        # Store donations in session for later use with deduplication
         if 'donations' not in session:
             session['donations'] = []
         
-        session['donations'].extend(donations)
+        # Track counts before deduplication
+        initial_count = len(session['donations'])
+        new_count = len(donations)
+        
+        # Apply smart deduplication and data synthesis
+        session['donations'] = deduplicate_and_synthesize_donations(
+            session['donations'], donations
+        )
+        
+        # Calculate merge statistics
+        final_count = len(session['donations'])
+        merged_count = initial_count + new_count - final_count
         
         # Return appropriate response based on success/errors
-        if donations:
+        if session['donations']:
+            # Return the deduplicated donations from session
             return jsonify({
                 'success': True,
-                'donations': donations,
+                'donations': session['donations'],
+                'newCount': new_count,
+                'totalCount': final_count,
+                'mergedCount': merged_count,
                 'warnings': (errors + warnings) if (errors or warnings) else None,
                 'qboAuthenticated': qbo_authenticated
             })
@@ -218,7 +448,11 @@ def upload_files():
             }), 400
     
     except Exception as e:
+        import traceback
         print(f"Unexpected error in upload processing: {str(e)}")
+        print("Full traceback:")
+        traceback.print_exc()
+        
         return jsonify({
             'success': False,
             'message': f'An unexpected error occurred: {str(e)}'
@@ -1718,6 +1952,54 @@ def create_payment_method():
             'success': False,
             'message': f'Error creating payment method: {str(e)}'
         }), 500
+
+@app.route('/donations/clear', methods=['POST'])
+def clear_donations():
+    """Clear all donations from the session."""
+    session['donations'] = []
+    return jsonify({'success': True, 'message': 'All donations cleared from session'})
+
+@app.route('/donations/debug', methods=['GET'])
+def debug_donations():
+    """Debug endpoint to see donation keys and deduplication info."""
+    donations = session.get('donations', [])
+    
+    debug_info = {
+        'total_count': len(donations),
+        'donations_by_key': {}
+    }
+    
+    # Group donations by their unique keys
+    for donation in donations:
+        check_no = normalize_check_number(donation.get('Check No.', ''))
+        amount = normalize_amount(donation.get('Gift Amount', ''))
+        
+        if check_no and amount:
+            unique_key = f"CHECK_{check_no}_{amount}"
+        else:
+            donor_name = normalize_donor_name(donation.get('Donor Name', ''))
+            gift_date = normalize_date(donation.get('Gift Date', ''))
+            unique_key = f"OTHER_{donor_name}_{amount}_{gift_date}"
+        
+        if unique_key not in debug_info['donations_by_key']:
+            debug_info['donations_by_key'][unique_key] = []
+        
+        debug_info['donations_by_key'][unique_key].append({
+            'internalId': donation.get('internalId'),
+            'donor': donation.get('Donor Name'),
+            'checkNo': donation.get('Check No.'),
+            'amount': donation.get('Gift Amount'),
+            'date': donation.get('Gift Date'),
+            'isMerged': donation.get('isMerged', False),
+            'dataSource': donation.get('dataSource')
+        })
+    
+    # Find any duplicate keys (should not exist)
+    duplicates = {k: v for k, v in debug_info['donations_by_key'].items() if len(v) > 1}
+    debug_info['duplicate_keys'] = duplicates
+    debug_info['duplicate_count'] = sum(len(v) - 1 for v in duplicates.values())
+    
+    return jsonify(debug_info)
 
 if __name__ == '__main__':
     # Display the environment when starting
