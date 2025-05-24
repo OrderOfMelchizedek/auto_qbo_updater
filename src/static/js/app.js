@@ -183,10 +183,33 @@ function renderDonationTable() {
                             customer.address.toLowerCase().includes(searchTerm.toLowerCase())
                         ).slice(0, 10); // Limit to 10 suggestions
                         
-                        if (filtered.length === 0) {
-                            suggestions.style.display = 'none';
-                            return;
-                        }
+                        // Always add 'Create New Customer' option if there's a search term
+                        const createNewItem = document.createElement('div');
+                        createNewItem.style.cssText = `
+                            padding: 8px 12px;
+                            cursor: pointer;
+                            border-bottom: 2px solid #007bff;
+                            background-color: #f8f9fa;
+                        `;
+                        createNewItem.innerHTML = `
+                            <div style="font-weight: 600; color: #007bff;">
+                                <i class="fas fa-plus-circle me-2"></i>Create New Customer
+                            </div>
+                            <div style="font-size: 0.85em; color: #666;">
+                                "${searchTerm}" - Click to add as new customer
+                            </div>
+                        `;
+                        
+                        createNewItem.addEventListener('mouseenter', () => {
+                            selectedIndex = -1; // Special index for create new
+                            updateSelection();
+                        });
+                        
+                        createNewItem.addEventListener('click', () => {
+                            createNewCustomerInline(searchTerm, donation);
+                        });
+                        
+                        suggestions.appendChild(createNewItem);
                         
                         filtered.forEach((customer, index) => {
                             const item = document.createElement('div');
@@ -218,10 +241,14 @@ function renderDonationTable() {
                     function updateSelection() {
                         const items = suggestions.querySelectorAll('div');
                         items.forEach((item, index) => {
-                            if (index === selectedIndex) {
+                            if (index === 0 && selectedIndex === -1) {
+                                // Highlight "Create New Customer" option
+                                item.style.backgroundColor = '#e3f2fd';
+                            } else if (index === selectedIndex + 1) {
+                                // Adjust index because "Create New" is at position 0
                                 item.style.backgroundColor = '#f0f0f0';
                             } else {
-                                item.style.backgroundColor = 'white';
+                                item.style.backgroundColor = index === 0 ? '#f8f9fa' : 'white';
                             }
                         });
                     }
@@ -251,14 +278,19 @@ function renderDonationTable() {
                             e.preventDefault();
                             selectedIndex = Math.max(selectedIndex - 1, -1);
                             updateSelection();
-                        } else if (e.key === 'Enter' && selectedIndex >= 0) {
+                        } else if (e.key === 'Enter' && selectedIndex >= -1) {
                             e.preventDefault();
-                            const filtered = qboCustomers.filter(customer => 
-                                customer.name.toLowerCase().includes(this.value.toLowerCase()) ||
-                                customer.address.toLowerCase().includes(this.value.toLowerCase())
-                            ).slice(0, 10);
-                            if (filtered[selectedIndex]) {
-                                selectCustomer(filtered[selectedIndex]);
+                            if (selectedIndex === -1) {
+                                // Create new customer option selected
+                                createNewCustomerInline(this.value, donation);
+                            } else {
+                                const filtered = qboCustomers.filter(customer => 
+                                    customer.name.toLowerCase().includes(this.value.toLowerCase()) ||
+                                    customer.address.toLowerCase().includes(this.value.toLowerCase())
+                                ).slice(0, 10);
+                                if (filtered[selectedIndex]) {
+                                    selectCustomer(filtered[selectedIndex]);
+                                }
                             }
                         } else if (e.key === 'Escape') {
                             suggestions.style.display = 'none';
@@ -739,6 +771,76 @@ function manualMatchCustomer(donationId, customerId) {
     .catch(error => {
         console.error('Error matching customer:', error);
         showToast('Error matching customer', 'danger');
+    });
+}
+
+function createNewCustomerInline(customerName, donation) {
+    // Close the suggestions
+    const suggestions = document.querySelector('.customer-suggestions');
+    if (suggestions) {
+        suggestions.style.display = 'none';
+    }
+    
+    // Update the donation's customerLookup field first
+    donation.customerLookup = customerName;
+    
+    // Save the updated donation to session before creating customer
+    fetch('/save', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ donations: donations })
+    })
+    .then(response => response.json())
+    .then(saveResult => {
+        if (!saveResult.success) {
+            throw new Error('Failed to save donation data');
+        }
+        
+        // Show loading
+        showToast('Creating new customer...', 'info');
+        
+        // Now create the customer
+        return fetch(`/qbo/customer/create/${donation.internalId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.customer) {
+            // Add the new customer to our local list
+            const newCustomer = {
+                id: data.customer.Id,
+                name: data.customer.DisplayName || customerName,
+                address: 'No address on file'
+            };
+            qboCustomers.push(newCustomer);
+            
+            // Update the donation with the new customer
+            donation.qbCustomerStatus = 'Matched';
+            donation.qboCustomerId = data.customer.Id;
+            
+            // Update the input field
+            const activeCell = document.querySelector('td .form-control');
+            if (activeCell && activeCell.value !== undefined) {
+                activeCell.value = customerName;
+            }
+            
+            // Re-render the table
+            renderDonationTable();
+            
+            showToast(`Customer "${customerName}" created and matched successfully`, 'success');
+        } else {
+            showToast('Error creating customer: ' + (data.message || 'Unknown error'), 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error creating customer:', error);
+        showToast('Error creating customer', 'danger');
     });
 }
 

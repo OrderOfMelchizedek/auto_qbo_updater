@@ -800,6 +800,7 @@ def create_customer(donation_id):
             if result and 'Id' in result:
                 donation['qbCustomerStatus'] = 'Matched'
                 donation['qboCustomerId'] = result['Id']
+                donation['customerLookup'] = result.get('DisplayName', display_name)
                 donations[i] = donation
                 session['donations'] = donations
                 
