@@ -2337,7 +2337,7 @@ function populateCustomerTable(customers) {
         selectBtn.textContent = 'Select';
         selectBtn.dataset.id = customer.id;
         selectBtn.addEventListener('click', function() {
-            manualMatchCustomer(this.dataset.id);
+            manualMatchCustomerFromModal(this.dataset.id);
         });
         actionCell.appendChild(selectBtn);
         tr.appendChild(actionCell);
@@ -2373,7 +2373,8 @@ function filterCustomers(searchTerm) {
     populateCustomerTable(filtered);
 }
 
-function manualMatchCustomer(customerId) {
+// This function is for the manual match modal - renamed to avoid conflict
+function manualMatchCustomerFromModal(customerId) {
     const donationId = document.getElementById('matchDonationId').value;
     
     fetch(`/qbo/customer/manual-match/${donationId}`, {
