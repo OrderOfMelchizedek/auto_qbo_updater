@@ -773,8 +773,15 @@ def create_customer(donation_id):
             if donation['dataSource'] == 'CSV':
                 return jsonify({'success': False, 'message': 'Cannot create customer from CSV data'}), 400
             
+            # Use Donor Name if customerLookup is empty
+            display_name = donation.get('customerLookup') or donation.get('Donor Name', '')
+            
+            # Build customer data with required name fields
             customer_data = {
-                'DisplayName': donation.get('customerLookup', ''),
+                'DisplayName': display_name,
+                'CompanyName': donation.get('Organization Name', ''),
+                'GivenName': donation.get('First Name', ''),
+                'FamilyName': donation.get('Last Name', ''),
                 'PrimaryEmailAddr': {'Address': ''},
                 'BillAddr': {
                     'Line1': donation.get('Address - Line 1', ''),
@@ -783,6 +790,10 @@ def create_customer(donation_id):
                     'PostalCode': donation.get('ZIP', '')
                 }
             }
+            
+            # Ensure at least one name field is populated
+            if not any([display_name, customer_data['GivenName'], customer_data['FamilyName']]):
+                customer_data['DisplayName'] = 'Unknown Donor'
             
             result = qbo_service.create_customer(customer_data)
             
@@ -912,7 +923,7 @@ def create_sales_receipt(donation_id):
             memo = donation.get('Memo', '')
             
             # Format description, limiting to reasonable length
-            description = f"{check_no}_{gift_date}_{gift_amount}_{last_name}_{first_name}"
+            description = f"{check_no}_{check_date}_{gift_amount}_{last_name}_{first_name}"
             if memo:
                 description += f"_{memo}"
             

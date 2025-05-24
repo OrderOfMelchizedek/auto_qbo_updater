@@ -135,37 +135,82 @@ function renderDonationTable() {
             
             // Set up in-place editing
             td.addEventListener('click', function() {
-                // Don't make QBO status or actions editable
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.value = donation[field] || '';
-                input.className = 'form-control form-control-sm';
-                
-                input.addEventListener('blur', function() {
-                    // Save the value back to the donation object
-                    donation[field] = this.value;
+                // Create dropdown for customerLookup field
+                if (field === 'customerLookup') {
+                    const select = document.createElement('select');
+                    select.className = 'form-select form-select-sm';
                     
-                    // If it's Gift Amount, format as currency
-                    if (field === 'Gift Amount') {
-                        td.textContent = formatCurrency(this.value);
-                    } else {
+                    // Add empty option
+                    const emptyOption = document.createElement('option');
+                    emptyOption.value = '';
+                    emptyOption.textContent = '-- Select Customer --';
+                    select.appendChild(emptyOption);
+                    
+                    // Add all QBO customers
+                    qboCustomers.forEach(customer => {
+                        const option = document.createElement('option');
+                        option.value = customer.name;
+                        option.textContent = `${customer.name} - ${customer.address}`;
+                        if (donation[field] === customer.name) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+                    
+                    select.addEventListener('change', function() {
+                        donation[field] = this.value;
                         td.textContent = this.value;
-                    }
+                        
+                        // If a customer is selected, update the matched status
+                        if (this.value) {
+                            const selectedCustomer = qboCustomers.find(c => c.name === this.value);
+                            if (selectedCustomer) {
+                                // Call manual match endpoint
+                                manualMatchCustomer(donation.internalId, selectedCustomer.id);
+                            }
+                        }
+                    });
                     
-                    // Replace input with text
-                    td.innerHTML = td.textContent;
-                });
-                
-                input.addEventListener('keyup', function(e) {
-                    if (e.key === 'Enter') {
-                        this.blur();
-                    }
-                });
-                
-                // Replace text with input
-                td.innerHTML = '';
-                td.appendChild(input);
-                input.focus();
+                    select.addEventListener('blur', function() {
+                        td.textContent = donation[field] || '';
+                    });
+                    
+                    td.innerHTML = '';
+                    td.appendChild(select);
+                    select.focus();
+                } else {
+                    // Regular text input for other fields
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = donation[field] || '';
+                    input.className = 'form-control form-control-sm';
+                    
+                    input.addEventListener('blur', function() {
+                        // Save the value back to the donation object
+                        donation[field] = this.value;
+                        
+                        // If it's Gift Amount, format as currency
+                        if (field === 'Gift Amount') {
+                            td.textContent = formatCurrency(this.value);
+                        } else {
+                            td.textContent = this.value;
+                        }
+                        
+                        // Replace input with text
+                        td.innerHTML = td.textContent;
+                    });
+                    
+                    input.addEventListener('keyup', function(e) {
+                        if (e.key === 'Enter') {
+                            this.blur();
+                        }
+                    });
+                    
+                    td.innerHTML = '';
+                    td.appendChild(input);
+                    input.focus();
+                    input.select();
+                }
             });
             
             tr.appendChild(td);
@@ -457,6 +502,7 @@ function updateCustomer(donationId) {
 let qboItems = [];
 let qboAccounts = [];
 let qboPaymentMethods = [];
+let qboCustomers = [];
 let defaultItemId = '1';
 let defaultAccountId = '12000';
 let defaultPaymentMethodId = 'CHECK';
@@ -544,6 +590,54 @@ function fetchQBOPaymentMethods() {
             console.error("Error fetching QBO payment methods:", error);
             return [];
         });
+}
+
+function fetchQBOCustomers() {
+    return fetch('/qbo/customers/all')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.customers) {
+                qboCustomers = data.customers;
+                console.log(`Loaded ${qboCustomers.length} QBO customers`);
+                return data.customers;
+            } else {
+                console.error("Error fetching QBO customers:", data.message || "Unknown error");
+                return [];
+            }
+        })
+        .catch(error => {
+            console.error("Error fetching QBO customers:", error);
+            return [];
+        });
+}
+
+function manualMatchCustomer(donationId, customerId) {
+    fetch(`/qbo/customer/manual-match/${donationId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ customerId: customerId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the donation with the matched customer info
+            const donation = donations.find(d => d.internalId === donationId);
+            if (donation) {
+                donation.qbCustomerStatus = 'Matched';
+                donation.qboCustomerId = customerId;
+                renderDonationTable();
+                showToast('Customer matched successfully', 'success');
+            }
+        } else {
+            showToast('Error matching customer: ' + data.message, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error matching customer:', error);
+        showToast('Error matching customer', 'danger');
+    });
 }
 
 function populateItemSelects() {
@@ -1346,7 +1440,8 @@ function showSalesReceiptPreview(donationId) {
     Promise.all([
         fetchQBOItems(),
         fetchQBOAccounts(),
-        fetchQBOPaymentMethods()
+        fetchQBOPaymentMethods(),
+        fetchQBOCustomers()
     ])
     .then(() => {
         // Now that data is loaded, populate the selects
@@ -1482,7 +1577,8 @@ function showBatchReceiptModal() {
     Promise.all([
         fetchQBOItems(),
         fetchQBOAccounts(),
-        fetchQBOPaymentMethods()
+        fetchQBOPaymentMethods(),
+        fetchQBOCustomers()
     ])
     .then(() => {
         // Now that we have all the data, populate the dropdowns
@@ -2015,7 +2111,8 @@ function checkQBOAuthStatus() {
                 Promise.all([
                     fetchQBOItems(),
                     fetchQBOAccounts(),
-                    fetchQBOPaymentMethods()
+                    fetchQBOPaymentMethods(),
+                    fetchQBOCustomers()
                 ]).catch(error => {
                     console.error("Error fetching QBO references:", error);
                 });
