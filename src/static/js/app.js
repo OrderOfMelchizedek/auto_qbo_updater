@@ -51,6 +51,59 @@ function formatCurrency(amount) {
     return '$' + value.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
 }
 
+// Convert all caps text to proper case
+function toProperCase(str) {
+    if (!str) return str;
+    
+    // List of words that should remain uppercase
+    const keepUppercase = ['LLC', 'INC', 'II', 'III', 'IV', 'PO', 'USA'];
+    
+    // List of words that should be lowercase (unless at start)
+    const lowercase = ['and', 'or', 'the', 'of', 'in', 'on', 'at', 'to', 'for', 'a', 'an'];
+    
+    // Check if string is all caps (more than 80% uppercase letters)
+    const upperCount = (str.match(/[A-Z]/g) || []).length;
+    const letterCount = (str.match(/[A-Za-z]/g) || []).length;
+    
+    if (letterCount === 0 || upperCount / letterCount < 0.8) {
+        // Not all caps, return as is
+        return str;
+    }
+    
+    // Convert to proper case
+    return str.toLowerCase().replace(/\b\w+/g, (word, index) => {
+        // Keep certain words uppercase
+        if (keepUppercase.includes(word.toUpperCase())) {
+            return word.toUpperCase();
+        }
+        
+        // Keep certain words lowercase (unless first word)
+        if (index > 0 && lowercase.includes(word)) {
+            return word;
+        }
+        
+        // Capitalize first letter
+        return word.charAt(0).toUpperCase() + word.slice(1);
+    });
+}
+
+// Format donation data to fix all caps issues
+function formatDonationData(donation) {
+    // Fields that should be converted from all caps
+    const fieldsToFormat = ['Donor Name', 'customerLookup', 'Address - Line 1', 'City'];
+    
+    fieldsToFormat.forEach(field => {
+        if (donation[field]) {
+            donation[field] = toProperCase(donation[field]);
+        }
+    });
+    
+    // State should always be uppercase (already is)
+    // Memo can remain as original (per requirements)
+    
+    return donation;
+}
+
 function showToast(message, type = 'success') {
     // Create toast container if it doesn't exist
     if (!document.querySelector('.toast-container')) {
@@ -301,8 +354,12 @@ function renderDonationTable() {
                         // Delay to allow click on suggestion
                         setTimeout(() => {
                             donation[field] = this.value;
-                            td.textContent = this.value;
+                            // Apply formatting to fix all caps
+                            donation = formatDonationData(donation);
+                            td.textContent = donation[field];
                             suggestions.style.display = 'none';
+                            // Save changes to backend
+                            saveChanges();
                         }, 200);
                     });
                     
@@ -323,15 +380,23 @@ function renderDonationTable() {
                         // Save the value back to the donation object
                         donation[field] = this.value;
                         
+                        // Apply formatting to fix all caps (except for Memo and State)
+                        if (field !== 'Memo' && field !== 'State') {
+                            donation = formatDonationData(donation);
+                        }
+                        
                         // If it's Gift Amount, format as currency
                         if (field === 'Gift Amount') {
-                            td.textContent = formatCurrency(this.value);
+                            td.textContent = formatCurrency(donation[field]);
                         } else {
-                            td.textContent = this.value;
+                            td.textContent = donation[field] || this.value;
                         }
                         
                         // Replace input with text
                         td.innerHTML = td.textContent;
+                        
+                        // Save changes to backend
+                        saveChanges();
                     });
                     
                     input.addEventListener('keyup', function(e) {
@@ -2121,7 +2186,8 @@ function processUploadResponse(uploadData) {
     
     if (uploadData.donations && uploadData.donations.length > 0) {
         // Replace local donations with server's deduplicated list
-        donations = uploadData.donations;
+        // Apply formatting to fix all caps issues
+        donations = uploadData.donations.map(donation => formatDonationData(donation));
         renderDonationTable();
         
         // Show appropriate message based on what happened
@@ -2788,7 +2854,8 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data && data.length > 0) {
-                donations = data;
+                // Apply formatting to fix all caps issues
+                donations = data.map(donation => formatDonationData(donation));
                 renderDonationTable();
             }
         })
