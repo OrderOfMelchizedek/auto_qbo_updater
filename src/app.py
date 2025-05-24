@@ -896,15 +896,21 @@ def create_sales_receipt(donation_id):
             # Format dates with validation
             today = pd.Timestamp.now().strftime('%Y-%m-%d')
             
-            # Validate Check Date
+            # Validate and format Check Date
             check_date = donation.get('Check Date', '')
             try:
-                # Check if it's a valid date and format it
+                # Parse and format the date to YYYY-MM-DD format
                 if check_date:
-                    pd.to_datetime(check_date)
-            except:
+                    parsed_date = pd.to_datetime(check_date)
+                    check_date = parsed_date.strftime('%Y-%m-%d')
+                    print(f"Using Check Date: {check_date} for sales receipt")
+                else:
+                    # If no check date, use today's date
+                    print(f"No Check Date provided, using today's date: {today}")
+                    check_date = today
+            except Exception as e:
                 # If invalid date, use today's date
-                print(f"Invalid Check Date: {check_date}, using today's date")
+                print(f"Invalid Check Date: {check_date}, error: {str(e)}, using today's date")
                 check_date = today
             
             # Get other fields with validation
@@ -1091,18 +1097,20 @@ def create_batch_sales_receipts():
             
             # Validate data before sending
             
-            # Validate Check Date
+            # Validate and format Check Date
             today = pd.Timestamp.now().strftime('%Y-%m-%d')
             check_date = donation.get('Check Date', '')
             try:
-                # Check if it's a valid date
+                # Parse and format the date to YYYY-MM-DD format
                 if check_date:
-                    pd.to_datetime(check_date)
+                    parsed_date = pd.to_datetime(check_date)
+                    check_date = parsed_date.strftime('%Y-%m-%d')
+                    print(f"Using Check Date: {check_date} for donation {donation['internalId']}")
                 else:
                     raise ValueError("Empty check date")
-            except:
+            except Exception as e:
                 # If invalid date, use today's date
-                print(f"Invalid Check Date for donation {donation['internalId']}: {check_date}, using today's date")
+                print(f"Invalid Check Date for donation {donation['internalId']}: {check_date}, error: {str(e)}, using today's date")
                 check_date = today
             
             # Validate Gift Amount
