@@ -14,3 +14,4 @@ python-multipart==0.0.6
 pandas
 gunicorn==21.2.0
 PyMuPDF==1.23.7
+python-magic==0.4.27

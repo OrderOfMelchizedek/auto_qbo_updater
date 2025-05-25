@@ -28,9 +28,79 @@ except ModuleNotFoundError:
 import re
 from datetime import datetime
 import dateutil.parser
+import uuid
+import mimetypes
+try:
+    import magic  # python-magic for file content validation
+except ImportError:
+    # On macOS, might need python-magic-bin
+    magic = None
 
 # Load environment variables
 load_dotenv()
+
+# File upload security configuration
+ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.pdf', '.csv'}
+ALLOWED_MIME_TYPES = {
+    'image/jpeg': ['.jpg', '.jpeg'],
+    'image/png': ['.png'],
+    'application/pdf': ['.pdf'],
+    'text/csv': ['.csv'],
+    'text/plain': ['.csv'],  # Some CSV files are detected as text/plain
+}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB per file
+
+def generate_secure_filename(original_filename):
+    """Generate a secure filename with UUID to prevent conflicts and path traversal."""
+    # Get file extension
+    _, ext = os.path.splitext(original_filename)
+    ext = ext.lower()
+    
+    # Generate unique filename
+    unique_id = str(uuid.uuid4())
+    secure_name = f"{unique_id}{ext}"
+    
+    return secure_name
+
+def validate_file_content(file_path):
+    """Validate file content matches its extension using python-magic."""
+    try:
+        # Get file extension
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+        
+        if magic is None:
+            # Fallback: just check extension is allowed
+            if ext in ALLOWED_EXTENSIONS:
+                return True, None
+            else:
+                return False, f"File extension {ext} is not allowed"
+        
+        # Get MIME type from file content
+        mime = magic.Magic(mime=True)
+        detected_type = mime.from_file(file_path)
+        
+        # Check if MIME type is allowed and matches extension
+        if detected_type in ALLOWED_MIME_TYPES:
+            allowed_exts = ALLOWED_MIME_TYPES[detected_type]
+            if ext in allowed_exts:
+                return True, None
+            else:
+                return False, f"File extension {ext} doesn't match content type {detected_type}"
+        else:
+            return False, f"File type {detected_type} is not allowed"
+            
+    except Exception as e:
+        return False, f"Error validating file: {str(e)}"
+
+def cleanup_uploaded_file(file_path):
+    """Safely remove uploaded file."""
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"Cleaned up file: {file_path}")
+    except Exception as e:
+        print(f"Error cleaning up file {file_path}: {str(e)}")
 
 # Validate required environment variables
 def validate_environment():
@@ -538,6 +608,7 @@ def upload_files():
         donations = []
         errors = []
         warnings = []
+        uploaded_files = []  # Track files for cleanup
         
         # If QBO is not authenticated, add a warning
         if not qbo_authenticated:
@@ -548,24 +619,57 @@ def upload_files():
                 continue
             
             try:
-                filename = secure_filename(file.filename)
-                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                log_progress(f"Saving {filename} to temporary storage...")
+                # Validate file extension first
+                original_filename = file.filename
+                _, ext = os.path.splitext(original_filename)
+                ext = ext.lower()
+                
+                if ext not in ALLOWED_EXTENSIONS:
+                    errors.append(f"File type not allowed: {original_filename}")
+                    log_progress(f"Skipping {original_filename} - file type not allowed")
+                    continue
+                
+                # Check file size before saving
+                file.seek(0, os.SEEK_END)
+                file_size = file.tell()
+                file.seek(0)  # Reset file pointer
+                
+                if file_size > MAX_FILE_SIZE:
+                    errors.append(f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB, max {MAX_FILE_SIZE / 1024 / 1024}MB)")
+                    log_progress(f"Skipping {original_filename} - file too large")
+                    continue
+                
+                # Generate secure filename
+                secure_name = generate_secure_filename(original_filename)
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+                
+                log_progress(f"Saving {original_filename} securely...")
                 file.save(file_path)
-                file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-                log_progress(f"File saved: {filename} ({file_size_mb:.1f}MB)")
+                uploaded_files.append(file_path)  # Track for cleanup
+                
+                # Validate file content
+                is_valid, error_msg = validate_file_content(file_path)
+                if not is_valid:
+                    errors.append(f"Invalid file content: {original_filename} - {error_msg}")
+                    log_progress(f"Skipping {original_filename} - {error_msg}")
+                    cleanup_uploaded_file(file_path)
+                    uploaded_files.remove(file_path)
+                    continue
+                
+                file_size_mb = file_size / (1024 * 1024)
+                log_progress(f"File validated: {original_filename} ({file_size_mb:.1f}MB)")
                 
                 # Process different file types
-                file_ext = os.path.splitext(filename)[1].lower()
+                file_ext = ext  # We already have the extension
                 
                 if file_ext in ['.jpg', '.jpeg', '.png', '.pdf', '.csv']:
                     # Process all files using Gemini
                     file_type = "spreadsheet" if file_ext == '.csv' else "image" if file_ext in ['.jpg', '.jpeg', '.png'] else "PDF document"
-                    log_progress(f"Reading {file_type}: {filename}")
+                    log_progress(f"Reading {file_type}: {original_filename}")
                     
-                    log_progress(f"Analyzing content of {filename}...")
+                    log_progress(f"Analyzing content of {original_filename}...")
                     extracted_data = file_processor.process(file_path, file_ext)
-                    log_progress(f"Content analysis complete for {filename}")
+                    log_progress(f"Content analysis complete for {original_filename}")
                     
                     # Set the data source based on file type
                     data_source = 'CSV' if file_ext == '.csv' else 'LLM'
@@ -635,6 +739,10 @@ def upload_files():
             log_progress(f"Successfully processed {final_count} donation records. Ready for QuickBooks!", force_summary=True)
             progress_logger.end_session(session_id)
             
+            # Clean up files before returning
+            for file_path in uploaded_files:
+                cleanup_uploaded_file(file_path)
+            
             # Return the deduplicated donations from session
             return jsonify({
                 'success': True,
@@ -649,6 +757,10 @@ def upload_files():
         else:
             log_progress("Could not find any donation data in the uploaded files", force_summary=True)
             progress_logger.end_session(session_id)
+            
+            # Clean up files before returning
+            for file_path in uploaded_files:
+                cleanup_uploaded_file(file_path)
             
             message = 'No donation data could be extracted. ' + (', '.join(errors) if errors else '')
             if warnings:
@@ -674,6 +786,11 @@ def upload_files():
             'message': f'An unexpected error occurred: {str(e)}',
             'progressSessionId': session_id
         }), 500
+    
+    finally:
+        # Clean up all uploaded files
+        for file_path in uploaded_files:
+            cleanup_uploaded_file(file_path)
 
 @app.route('/progress-stream/<session_id>')
 def progress_stream(session_id):
