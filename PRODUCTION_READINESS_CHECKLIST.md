@@ -49,11 +49,14 @@ if not app.secret_key:
 - [x] Generate a strong secret key for production - **COMPLETED** (64-character hex key)
 - [x] Add `FLASK_SECRET_KEY` to `.env.example` - **COMPLETED** (with generation instructions)
 
-### 3. ❌ Consolidate OAuth Implementation
-- [ ] Review both `QBOOAuthService` (using intuitlib) and `QBOService` (custom implementation)
-- [ ] Choose one approach and remove the redundant code
-- [ ] Update all references to use the chosen implementation
-- [ ] Test OAuth flow thoroughly
+### 3. ✅ Consolidate OAuth Implementation
+- [x] Review both `QBOOAuthService` (using intuitlib) and `QBOService` (custom implementation) - **COMPLETED**
+- [x] Choose one approach and remove the redundant code - **KEPT QBOService, REMOVED QBOOAuthService**
+- [x] Update all references to use the chosen implementation - **NO UPDATES NEEDED** (QBOOAuthService was unused)
+- [x] Test OAuth flow thoroughly - **VERIFIED** imports and basic functionality
+- [x] Remove vendored oauth-pythonclient library - **REMOVED**
+- [x] Remove setup scripts (setup_oauth_lib.py, fix_oauth.py) - **REMOVED**
+- [x] Add token validation methods to QBOService - **ADDED**
 
 ### 4. ❌ Add Environment Variable Validation
 - [ ] Add startup validation for all required environment variables

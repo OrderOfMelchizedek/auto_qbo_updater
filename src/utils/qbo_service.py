@@ -38,6 +38,9 @@ class QBOService:
         self.refresh_token = None
         self.realm_id = None
         self.token_expires_at = 0
+        
+        # Token persistence (for future implementation)
+        # TODO: Implement token storage (database or secure file storage)
     
     def get_authorization_url(self) -> str:
         """Get the QBO authorization URL for OAuth flow.
@@ -135,6 +138,33 @@ class QBOService:
         except Exception as e:
             print(f"Exception in refresh_access_token: {str(e)}")
             return False
+    
+    def is_token_valid(self) -> bool:
+        """Check if the current access token is valid.
+        
+        Returns:
+            True if token exists and not expired, False otherwise
+        """
+        if not self.access_token:
+            return False
+        
+        # Check if token is expired (with 60 second buffer)
+        return int(time.time()) < (self.token_expires_at - 60)
+    
+    def get_token_info(self) -> Dict[str, Any]:
+        """Get information about current token status.
+        
+        Returns:
+            Dictionary with token status information
+        """
+        return {
+            'has_access_token': bool(self.access_token),
+            'has_refresh_token': bool(self.refresh_token),
+            'realm_id': self.realm_id,
+            'expires_at': self.token_expires_at,
+            'expires_in_seconds': max(0, self.token_expires_at - int(time.time())),
+            'is_valid': self.is_token_valid()
+        }
     
     def _get_auth_headers(self) -> Dict[str, str]:
         """Get headers with authentication for QBO API calls.
