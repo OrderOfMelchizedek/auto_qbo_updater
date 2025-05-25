@@ -4,6 +4,7 @@ import requests
 import argparse
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, Response
 from flask_session import Session
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.utils import secure_filename
 import pandas as pd
 from dotenv import load_dotenv
@@ -333,6 +334,11 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB upload limit
+
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
+# Configure CSRF to accept tokens in X-CSRFToken header (for AJAX requests)
+app.config['WTF_CSRF_HEADERS'] = ['X-CSRFToken']
 
 # Configure server-side session storage
 def configure_session(app):
@@ -806,6 +812,7 @@ def authorize_qbo():
     return redirect(authorization_url)
 
 @app.route('/qbo/callback')
+@csrf.exempt
 def qbo_callback():
     """Handle QBO OAuth callback."""
     code = request.args.get('code')

@@ -2,6 +2,19 @@
 let donations = [];
 let reportModal, customerModal;
 
+// Get CSRF token from meta tag
+function getCSRFToken() {
+    const token = document.querySelector('meta[name="csrf-token"]');
+    return token ? token.getAttribute('content') : '';
+}
+
+// Helper function to add CSRF token to fetch headers
+function fetchWithCSRF(url, options = {}) {
+    options.headers = options.headers || {};
+    options.headers['X-CSRFToken'] = getCSRFToken();
+    return fetch(url, options);
+}
+
 // Show merge history for a donation
 function showMergeHistory(donationId) {
     const donation = donations.find(d => d.internalId === donationId);
@@ -577,7 +590,7 @@ function showCustomerModal(donationId, mode) {
 
 // API interaction functions
 function checkCustomer(donationId) {
-    fetch(`/qbo/customer/${donationId}`)
+    fetchWithCSRF(`/qbo/customer/${donationId}`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -619,7 +632,7 @@ function createCustomer(donationId) {
     };
     
     // Send request to create customer
-    fetch(`/qbo/customer/create/${donationId}`, {
+    fetchWithCSRF(`/qbo/customer/create/${donationId}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -664,7 +677,7 @@ function updateCustomer(donationId) {
     };
     
     // Send request to update customer
-    fetch(`/qbo/customer/update/${donationId}`, {
+    fetchWithCSRF(`/qbo/customer/update/${donationId}`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json'
@@ -707,7 +720,7 @@ let defaultAccountId = '12000';
 let defaultPaymentMethodId = 'CHECK';
 
 function fetchQBOItems() {
-    return fetch('/qbo/items/all')
+    return fetchWithCSRF('/qbo/items/all')
         .then(response => response.json())
         .then(data => {
             if (data.success && data.items) {
@@ -734,7 +747,7 @@ function fetchQBOItems() {
 }
 
 function fetchQBOAccounts() {
-    return fetch('/qbo/accounts/all')
+    return fetchWithCSRF('/qbo/accounts/all')
         .then(response => response.json())
         .then(data => {
             if (data.success && data.accounts) {
@@ -765,7 +778,7 @@ function fetchQBOAccounts() {
 }
 
 function fetchQBOPaymentMethods() {
-    return fetch('/qbo/payment-methods/all')
+    return fetchWithCSRF('/qbo/payment-methods/all')
         .then(response => response.json())
         .then(data => {
             if (data.success && data.paymentMethods) {
@@ -792,7 +805,7 @@ function fetchQBOPaymentMethods() {
 }
 
 function fetchQBOCustomers() {
-    return fetch('/qbo/customers/all')
+    return fetchWithCSRF('/qbo/customers/all')
         .then(response => response.json())
         .then(data => {
             if (data.success && data.customers) {
@@ -811,7 +824,7 @@ function fetchQBOCustomers() {
 }
 
 function manualMatchCustomer(donationId, customerId) {
-    fetch(`/qbo/customer/manual-match/${donationId}`, {
+    fetchWithCSRF(`/qbo/customer/manual-match/${donationId}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -850,7 +863,7 @@ function createNewCustomerInline(customerName, donation) {
     donation.customerLookup = customerName;
     
     // Save the updated donation to session before creating customer
-    fetch('/save', {
+    fetchWithCSRF('/save', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -867,7 +880,7 @@ function createNewCustomerInline(customerName, donation) {
         showToast('Creating new customer...', 'info');
         
         // Now create the customer
-        return fetch(`/qbo/customer/create/${donation.internalId}`, {
+        return fetchWithCSRF(`/qbo/customer/create/${donation.internalId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -1282,7 +1295,7 @@ function showQboSetupModal(type, invalidId, message, detail, donationId) {
 }
 
 function fetchQBOAccounts() {
-    fetch('/qbo/accounts/all')
+    fetchWithCSRF('/qbo/accounts/all')
         .then(response => response.json())
         .then(data => {
             if (data.success && data.accounts) {
@@ -1375,7 +1388,7 @@ function createQBOAccount() {
     if (accountDescription) accountData.description = accountDescription;
     
     // Send request
-    fetch('/qbo/account/create', {
+    fetchWithCSRF('/qbo/account/create', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -1451,7 +1464,7 @@ function createQBOItem() {
     if (itemPrice) itemData.unitPrice = parseFloat(itemPrice);
     
     // Send request
-    fetch('/qbo/item/create', {
+    fetchWithCSRF('/qbo/item/create', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -1515,7 +1528,7 @@ function createQBOPaymentMethod() {
     };
     
     // Send request
-    fetch('/qbo/payment-method/create', {
+    fetchWithCSRF('/qbo/payment-method/create', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -1557,7 +1570,7 @@ function createQBOPaymentMethod() {
 }
 
 function fetchQBOPaymentMethods() {
-    fetch('/qbo/payment-methods/all')
+    fetchWithCSRF('/qbo/payment-methods/all')
         .then(response => response.json())
         .then(data => {
             if (data.success && data.paymentMethods) {
@@ -1645,7 +1658,7 @@ function trySendWithAlternative(donationId, customFields) {
     console.log(`Sending sales receipt with alternative settings: ${JSON.stringify(customFields)}`);
     
     // Send the request with custom fields
-    fetch(`/qbo/sales-receipt/${donationId}`, {
+    fetchWithCSRF(`/qbo/sales-receipt/${donationId}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -1756,7 +1769,7 @@ function showSalesReceiptPreview(donationId) {
         }
     
         // Fetch preview data
-        fetch(`/qbo/sales-receipt/preview/${donationId}`, {
+        fetchWithCSRF(`/qbo/sales-receipt/preview/${donationId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -1911,7 +1924,7 @@ function sendAllToQBO() {
     // Show processing toast
     showToast('Processing sales receipts batch...', 'info');
     
-    fetch('/qbo/sales-receipt/batch', {
+    fetchWithCSRF('/qbo/sales-receipt/batch', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -1984,7 +1997,7 @@ function deleteDonation(donationId) {
 }
 
 function saveChanges() {
-    fetch('/save', {
+    fetchWithCSRF('/save', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -2015,7 +2028,7 @@ function clearAllDonations() {
     donations = [];
     
     // Clear session data on server
-    fetch('/clear-all', {
+    fetchWithCSRF('/clear-all', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -2038,7 +2051,7 @@ function clearAllDonations() {
 }
 
 function generateReport() {
-    fetch('/report/generate')
+    fetchWithCSRF('/report/generate')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -2088,7 +2101,7 @@ function generateReport() {
 
 // Download report as CSV
 function downloadReportCSV() {
-    fetch('/report/generate')
+    fetchWithCSRF('/report/generate')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -2154,7 +2167,7 @@ function downloadReportCSV() {
 
 // Download report as text file
 function downloadReportTXT() {
-    fetch('/report/generate')
+    fetchWithCSRF('/report/generate')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -2231,7 +2244,7 @@ function removeInvalidDonationsFromSession(invalidDonations) {
     console.log(`Removing ${invalidIds.length} invalid donations from server session:`, invalidIds);
     
     // Call server to remove these donations
-    fetch('/donations/remove-invalid', {
+    fetchWithCSRF('/donations/remove-invalid', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -2273,7 +2286,7 @@ function uploadAndProcessFiles(files) {
     let sessionId = null;
     
     // First get a session ID by starting the upload
-    fetch('/upload-start', {
+    fetchWithCSRF('/upload-start', {
         method: 'POST'
     })
     .then(response => response.json())
@@ -2290,7 +2303,7 @@ function uploadAndProcessFiles(files) {
             // Small delay to ensure SSE connection is established, then upload
             return new Promise((resolve) => {
                 setTimeout(() => {
-                    fetch('/upload', {
+                    fetchWithCSRF('/upload', {
                         method: 'POST',
                         body: formData
                     }).then(resolve);
@@ -2298,7 +2311,7 @@ function uploadAndProcessFiles(files) {
             });
         } else {
             // Fallback to original upload
-            return fetch('/upload', {
+            return fetchWithCSRF('/upload', {
                 method: 'POST',
                 body: formData
             });
@@ -2472,7 +2485,7 @@ function handleProgressEvent(data) {
 
 // Helper function to check auth and process files if authenticated
 function checkAuthAndProcessFiles() {
-    fetch('/qbo/auth-status')
+    fetchWithCSRF('/qbo/auth-status')
         .then(response => response.json())
         .then(data => {
             if (data.authenticated) {
@@ -2497,7 +2510,7 @@ function checkQBOAuthStatus() {
     const cacheBuster = new Date().getTime();
     
     // First fetch environment info
-    fetch(`/qbo/environment?_=${cacheBuster}`)
+    fetchWithCSRF(`/qbo/environment?_=${cacheBuster}`)
         .then(response => response.json())
         .then(envData => {
             console.log("Environment data received:", envData);
@@ -2537,7 +2550,7 @@ function checkQBOAuthStatus() {
         });
     
     // Then check authentication status
-    fetch('/qbo/auth-status')
+    fetchWithCSRF('/qbo/auth-status')
         .then(response => response.json())
         .then(data => {
             const qboBtn = document.getElementById('connectQBOBtn');
@@ -2614,7 +2627,7 @@ function showManualMatchModal(donationId) {
 }
 
 function fetchAllCustomers() {
-    fetch('/qbo/customers/all')
+    fetchWithCSRF('/qbo/customers/all')
         .then(response => response.json())
         .then(data => {
             // Hide loading indicator
@@ -2719,7 +2732,7 @@ function filterCustomers(searchTerm) {
 function manualMatchCustomerFromModal(customerId) {
     const donationId = document.getElementById('matchDonationId').value;
     
-    fetch(`/qbo/customer/manual-match/${donationId}`, {
+    fetchWithCSRF(`/qbo/customer/manual-match/${donationId}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -2825,7 +2838,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             // Check QBO auth status
-            fetch('/qbo/auth-status')
+            fetchWithCSRF('/qbo/auth-status')
                 .then(response => response.json())
                 .then(data => {
                     if (data.authenticated) {
@@ -2950,7 +2963,7 @@ document.addEventListener('DOMContentLoaded', function() {
             window.pendingFiles = files;
             
             // First check if QBO is connected
-            fetch('/qbo/auth-status')
+            fetchWithCSRF('/qbo/auth-status')
                 .then(response => response.json())
                 .then(data => {
                     if (!data.authenticated) {
@@ -3002,7 +3015,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Load existing donations from server on page load
-    fetch('/donations')
+    fetchWithCSRF('/donations')
         .then(response => response.json())
         .then(data => {
             if (data && data.length > 0) {
