@@ -181,11 +181,21 @@ if not app.secret_key:
   - Rate limiting enforced before each API call
 - [x] Update `requirements.txt` - **COMPLETED** (Flask-Limiter==3.12)
 
-### 13. ❌ Implement Proper Logging
-- [ ] Set up Python logging configuration
-- [ ] Add log rotation
-- [ ] Configure different log levels for development/production
-- [ ] Ensure no sensitive data is logged
+### 13. ✅ Implement Proper Logging
+- [x] Set up Python logging configuration - **COMPLETED**
+  - Comprehensive logging with multiple handlers
+  - Console, application, error, and audit log files
+  - Log rotation with size limits (10MB app, 5MB error/audit)
+- [x] Add log rotation - **COMPLETED** (RotatingFileHandler with 5-10 backups)
+- [x] Configure different log levels for development/production - **COMPLETED**
+  - Production: WARNING+ to console, INFO+ to files
+  - Development: INFO+ to console with detailed format
+  - Configurable via LOG_LEVEL environment variable
+- [x] Ensure no sensitive data is logged - **COMPLETED**
+  - Created sanitize_for_logging() function
+  - Redacts passwords, tokens, keys, SSNs, etc.
+  - Audit logging with sanitized data
+  - Added audit events for OAuth, uploads, sales receipts
 
 ### 14. ❌ Add Health Check Endpoints
 - [ ] Create `/health` endpoint for basic health check

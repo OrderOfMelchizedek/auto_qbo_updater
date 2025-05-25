@@ -52,36 +52,151 @@ load_dotenv()
 # Configure logging
 import logging
 from logging.handlers import RotatingFileHandler
+import sys
 
-# Create logs directory if it doesn't exist
-if not os.path.exists('logs'):
-    os.makedirs('logs')
+def configure_logging():
+    """Configure comprehensive logging for development and production."""
+    # Determine log level based on environment
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    is_production = os.getenv('FLASK_ENV', 'development') == 'production'
+    
+    # Create logs directory if it doesn't exist
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+    
+    # Enhanced format with more context
+    detailed_format = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+    )
+    simple_format = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s'
+    )
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, log_level, logging.INFO))
+    
+    # Clear existing handlers
+    root_logger.handlers.clear()
+    
+    # Console handler configuration
+    console_handler = logging.StreamHandler(sys.stdout)
+    if is_production:
+        console_handler.setLevel(logging.WARNING)
+        console_handler.setFormatter(simple_format)
+    else:
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(detailed_format)
+    root_logger.addHandler(console_handler)
+    
+    # File handlers
+    # General application log
+    app_handler = RotatingFileHandler(
+        'logs/fom_qbo.log',
+        maxBytes=10485760,  # 10MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    app_handler.setLevel(logging.INFO)
+    app_handler.setFormatter(detailed_format)
+    root_logger.addHandler(app_handler)
+    
+    # Error-only log for monitoring
+    error_handler = RotatingFileHandler(
+        'logs/errors.log',
+        maxBytes=5242880,  # 5MB
+        backupCount=3,
+        encoding='utf-8'
+    )
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(detailed_format)
+    root_logger.addHandler(error_handler)
+    
+    # Audit log for security events
+    audit_handler = RotatingFileHandler(
+        'logs/audit.log',
+        maxBytes=5242880,  # 5MB
+        backupCount=10,
+        encoding='utf-8'
+    )
+    audit_handler.setLevel(logging.INFO)
+    audit_formatter = logging.Formatter(
+        '%(asctime)s - AUDIT - %(levelname)s - %(message)s'
+    )
+    audit_handler.setFormatter(audit_formatter)
+    # Create separate audit logger
+    audit_logger = logging.getLogger('audit')
+    audit_logger.addHandler(audit_handler)
+    audit_logger.setLevel(logging.INFO)
+    audit_logger.propagate = False
+    
+    # Reduce noise from external libraries
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    logging.getLogger('google').setLevel(logging.WARNING)
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+    logging.getLogger('requests').setLevel(logging.WARNING)
+    
+    return logging.getLogger(__name__)
 
-# Configure root logger
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        # Console handler - only warnings and above
-        logging.StreamHandler(),
-        # File handler with rotation
-        RotatingFileHandler(
-            'logs/fom_qbo.log',
-            maxBytes=10485760,  # 10MB
-            backupCount=5
-        )
-    ]
-)
+# Initialize logging
+logger = configure_logging()
+audit_logger = logging.getLogger('audit')
 
-# Set different levels for console and file
-console_handler = logging.getLogger().handlers[0]
-console_handler.setLevel(logging.WARNING)
+def sanitize_for_logging(data):
+    """Remove sensitive information from data before logging.
+    
+    Args:
+        data: Dictionary or string to sanitize
+    
+    Returns:
+        Sanitized version of the data
+    """
+    if isinstance(data, dict):
+        sanitized = {}
+        for key, value in data.items():
+            key_lower = key.lower()
+            # Sensitive field patterns
+            if any(pattern in key_lower for pattern in [
+                'password', 'secret', 'token', 'key', 'auth', 'credential',
+                'ssn', 'social', 'tax', 'account_number', 'routing', 'bank'
+            ]):
+                sanitized[key] = '[REDACTED]'
+            elif isinstance(value, dict):
+                sanitized[key] = sanitize_for_logging(value)
+            elif isinstance(value, list):
+                sanitized[key] = [sanitize_for_logging(item) if isinstance(item, dict) else item for item in value]
+            else:
+                sanitized[key] = value
+        return sanitized
+    elif isinstance(data, str):
+        # Basic pattern matching for sensitive data in strings
+        import re
+        # Redact potential tokens/keys (long alphanumeric strings)
+        data = re.sub(r'\b[A-Za-z0-9]{32,}\b', '[REDACTED_TOKEN]', data)
+        # Redact potential SSNs
+        data = re.sub(r'\b\d{3}-\d{2}-\d{4}\b', '[REDACTED_SSN]', data)
+        return data
+    else:
+        return data
 
-# Reduce noise from external libraries
-logging.getLogger('urllib3').setLevel(logging.WARNING)
-logging.getLogger('google').setLevel(logging.WARNING)
-
-logger = logging.getLogger(__name__)
+def log_audit_event(event_type, user_id=None, details=None, request_ip=None):
+    """Log security and audit events.
+    
+    Args:
+        event_type: Type of event (e.g., 'login', 'upload', 'qbo_auth')
+        user_id: User identifier (if available)
+        details: Additional event details
+        request_ip: Client IP address
+    """
+    event_data = {
+        'event_type': event_type,
+        'user_id': user_id or 'anonymous',
+        'ip_address': request_ip or 'unknown',
+        'details': sanitize_for_logging(details) if details else {},
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    audit_logger.info(json.dumps(event_data))
 
 # File upload security configuration
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.pdf', '.csv'}
@@ -692,18 +807,35 @@ def upload_files():
                 'message': 'No files were selected'
             }), 400
             
-        # Log the files being processed
-        log_progress(f"Received {len(files)} file(s) - analyzing content now...")
+        # Log audit event for file upload
         file_info = []
         for file in files:
             if file.filename != '':
                 file.seek(0, os.SEEK_END)
                 file_size = file.tell()
                 file.seek(0)  # Reset file pointer
-                file_info.append(f"{file.filename} ({file_size / 1024 / 1024:.1f} MB)")
+                file_info.append({
+                    'filename': file.filename,
+                    'size_mb': round(file_size / 1024 / 1024, 1),
+                    'content_type': file.content_type
+                })
         
+        log_audit_event(
+            'file_upload',
+            request_ip=request.remote_addr,
+            details={
+                'session_id': session_id,
+                'file_count': len(files),
+                'files': file_info,
+                'qbo_authenticated': qbo_authenticated
+            }
+        )
+        
+        # Log the files being processed
+        log_progress(f"Received {len(files)} file(s) - analyzing content now...")
         if file_info:
-            log_progress(f"Processing files: {', '.join(file_info[:3])}" + ("..." if len(file_info) > 3 else ""))
+            file_display = [f"{f['filename']} ({f['size_mb']} MB)" for f in file_info]
+            log_progress(f"Processing files: {', '.join(file_display[:3])}" + ("..." if len(file_display) > 3 else ""))
         
         # Placeholder for extracted donation data
         donations = []
@@ -1042,6 +1174,11 @@ def qbo_callback():
     # Handle OAuth errors
     if error:
         logger.warning(f"QBO OAuth error: {error}")
+        log_audit_event(
+            'qbo_auth_failed',
+            request_ip=request.remote_addr,
+            details={'error': error, 'error_description': request.args.get('error_description')}
+        )
         error_desc = request.args.get('error_description', 'Unknown error')
         flash(f'QuickBooks authorization failed: {error_desc}', 'error')
         return redirect(url_for('index'))
@@ -1056,6 +1193,13 @@ def qbo_callback():
         success = qbo_service.get_tokens(code, realmId)
         
         if success:
+            # Log successful authentication
+            log_audit_event(
+                'qbo_auth_success',
+                request_ip=request.remote_addr,
+                details={'realm_id': sanitize_for_logging(realmId), 'environment': qbo_service.environment}
+            )
+            
             # Pre-fetch customers for future matching to populate cache
             try:
                 customers = qbo_service.get_all_customers()
@@ -1536,6 +1680,19 @@ def create_sales_receipt(donation_id):
                     'value': f"auto import on {today}"
                 }
             }
+            
+            # Log audit event before creating sales receipt
+            log_audit_event(
+                'sales_receipt_create',
+                request_ip=request.remote_addr,
+                details={
+                    'donation_id': donation_id,
+                    'customer_id': donation['qboCustomerId'],
+                    'amount': gift_amount,
+                    'check_no': check_no,
+                    'check_date': check_date
+                }
+            )
             
             result = qbo_service.create_sales_receipt(sales_receipt_data)
             
