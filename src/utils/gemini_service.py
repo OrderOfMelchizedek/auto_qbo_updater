@@ -6,6 +6,19 @@ from PIL import Image
 import google.generativeai as genai
 from typing import Dict, Any, Optional, List, Union
 from .prompt_manager import PromptManager
+import logging
+
+# Import custom exceptions and retry logic
+try:
+    from .exceptions import GeminiAPIException, RetryableException
+    from .retry import retry_on_failure
+except ImportError:
+    # For standalone testing
+    from exceptions import GeminiAPIException, RetryableException
+    from retry import retry_on_failure
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 class GeminiService:
     """Service for interacting with Google's Gemini API."""

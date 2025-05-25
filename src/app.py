@@ -18,12 +18,20 @@ try:
     from src.utils.qbo_service import QBOService
     from src.utils.file_processor import FileProcessor
     from src.utils.progress_logger import progress_logger, init_progress_logger, log_progress
+    from src.utils.exceptions import (
+        FOMQBOException, QBOAPIException, GeminiAPIException, 
+        FileProcessingException, ValidationException
+    )
 except ModuleNotFoundError:
     # Fall back to relative imports if running directly from src directory
     from utils.gemini_service import GeminiService
     from utils.qbo_service import QBOService
     from utils.file_processor import FileProcessor
     from utils.progress_logger import progress_logger, init_progress_logger, log_progress
+    from utils.exceptions import (
+        FOMQBOException, QBOAPIException, GeminiAPIException,
+        FileProcessingException, ValidationException
+    )
 
 import re
 from datetime import datetime
@@ -38,6 +46,40 @@ except ImportError:
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Create logs directory if it doesn't exist
+if not os.path.exists('logs'):
+    os.makedirs('logs')
+
+# Configure root logger
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        # Console handler - only warnings and above
+        logging.StreamHandler(),
+        # File handler with rotation
+        RotatingFileHandler(
+            'logs/fom_qbo.log',
+            maxBytes=10485760,  # 10MB
+            backupCount=5
+        )
+    ]
+)
+
+# Set different levels for console and file
+console_handler = logging.getLogger().handlers[0]
+console_handler.setLevel(logging.WARNING)
+
+# Reduce noise from external libraries
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('google').setLevel(logging.WARNING)
+
+logger = logging.getLogger(__name__)
 
 # File upload security configuration
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.pdf', '.csv'}
@@ -981,23 +1023,48 @@ def qbo_callback():
     """Handle QBO OAuth callback."""
     code = request.args.get('code')
     realmId = request.args.get('realmId')
+    error = request.args.get('error')
     
-    if code and realmId:
-        qbo_service.get_tokens(code, realmId)
+    # Handle OAuth errors
+    if error:
+        logger.warning(f"QBO OAuth error: {error}")
+        error_desc = request.args.get('error_description', 'Unknown error')
+        flash(f'QuickBooks authorization failed: {error_desc}', 'error')
+        return redirect(url_for('index'))
+    
+    if not code or not realmId:
+        logger.warning("QBO callback missing code or realmId")
+        flash('QuickBooks authorization failed: Missing required parameters', 'error')
+        return redirect(url_for('index'))
+    
+    try:
+        # Exchange code for tokens
+        success = qbo_service.get_tokens(code, realmId)
         
-        # Pre-fetch customers for future matching to populate cache
-        try:
-            customers = qbo_service.get_all_customers()
-            customer_count = len(customers)
-            print(f"Pre-fetched {customer_count} customers for future matching")
+        if success:
+            # Pre-fetch customers for future matching to populate cache
+            try:
+                customers = qbo_service.get_all_customers()
+                customer_count = len(customers)
+                logger.info(f"Pre-fetched {customer_count} customers for future matching")
+                
+                # Store success message including customer count
+                flash(f'Successfully connected to QuickBooks Online. Retrieved {customer_count} customers.', 'success')
+            except QBOAPIException as e:
+                logger.error(f"Error pre-fetching customers: {str(e)}")
+                flash('Connected to QuickBooks Online, but had trouble retrieving customers.', 'warning')
+            except Exception as e:
+                logger.error(f"Unexpected error pre-fetching customers: {str(e)}")
+                flash('Connected to QuickBooks Online.', 'success')
+        else:
+            flash('Failed to complete QuickBooks authorization', 'error')
             
-            # Store success message including customer count
-            flash(f'Successfully connected to QuickBooks Online. Retrieved {customer_count} customers.', 'success')
-        except Exception as e:
-            print(f"Error pre-fetching customers: {str(e)}")
-            flash('Connected to QuickBooks Online, but had trouble retrieving customers.', 'warning')
-    else:
-        flash('Failed to connect to QuickBooks Online. Please try again.', 'error')
+    except QBOAPIException as e:
+        logger.error(f"QBO API error during callback: {str(e)}")
+        flash(e.user_message, 'error')
+    except Exception as e:
+        logger.error(f"Unexpected error in QBO callback: {str(e)}")
+        flash('An unexpected error occurred. Please try connecting again.', 'error')
     
     # Add a script to update the UI
     session['qbo_connected'] = True

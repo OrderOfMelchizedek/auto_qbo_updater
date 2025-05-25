@@ -5,6 +5,19 @@ from typing import Dict, Any, Optional, List
 import base64
 from urllib.parse import urlencode, quote
 import time
+import logging
+
+# Import custom exceptions and retry logic
+try:
+    from .exceptions import QBOAPIException, RetryableException
+    from .retry import retry_on_failure, exponential_backoff
+except ImportError:
+    # For standalone testing
+    from exceptions import QBOAPIException, RetryableException
+    from retry import retry_on_failure, exponential_backoff
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 class QBOService:
     """Service for interacting with QuickBooks Online API."""
@@ -59,6 +72,7 @@ class QBOService:
         auth_url = f"{self.auth_endpoint}?{urlencode(params)}"
         return auth_url
     
+    @retry_on_failure(max_attempts=3, exceptions=(requests.RequestException, QBOAPIException))
     def get_tokens(self, authorization_code: str, realm_id: str) -> bool:
         """Exchange authorization code for access and refresh tokens.
         
@@ -83,7 +97,7 @@ class QBOService:
                 'redirect_uri': self.redirect_uri
             }
             
-            response = requests.post(self.token_endpoint, headers=headers, data=data)
+            response = requests.post(self.token_endpoint, headers=headers, data=data, timeout=30)
             
             if response.status_code == 200:
                 token_data = response.json()
@@ -91,14 +105,32 @@ class QBOService:
                 self.refresh_token = token_data.get('refresh_token')
                 self.realm_id = realm_id
                 self.token_expires_at = int(time.time()) + token_data.get('expires_in', 3600)
+                logger.info("Successfully obtained QBO access tokens")
                 return True
             else:
-                print(f"Error getting tokens: {response.status_code} - {response.text}")
-                return False
+                logger.error(f"Failed to get QBO tokens: {response.status_code} - {response.text}")
+                raise QBOAPIException(
+                    f"Failed to exchange authorization code",
+                    status_code=response.status_code,
+                    response_text=response.text
+                )
         
+        except requests.RequestException as e:
+            logger.error(f"Network error getting QBO tokens: {str(e)}")
+            raise QBOAPIException(
+                f"Network error while getting tokens: {str(e)}",
+                status_code=None,
+                response_text=None,
+                user_message="Unable to connect to QuickBooks. Please check your internet connection."
+            )
+        except QBOAPIException:
+            raise
         except Exception as e:
-            print(f"Exception in get_tokens: {str(e)}")
-            return False
+            logger.error(f"Unexpected error in get_tokens: {str(e)}")
+            raise QBOAPIException(
+                f"Unexpected error: {str(e)}",
+                user_message="An unexpected error occurred. Please try again."
+            )
     
     def refresh_access_token(self) -> bool:
         """Refresh the access token using the refresh token.

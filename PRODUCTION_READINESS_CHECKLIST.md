@@ -149,11 +149,23 @@ if not app.secret_key:
   - Configurable via environment variables
   - Added to .env.example with documentation
 
-### 11. ❌ Enhance Error Handling
-- [ ] Wrap all external API calls in proper try-except blocks
-- [ ] Create custom exception classes
-- [ ] Log errors internally, show generic messages to users
-- [ ] Add retry logic for transient failures
+### 11. ✅ Enhance Error Handling
+- [x] Wrap all external API calls in proper try-except blocks - **COMPLETED**
+  - Updated QBO service methods with proper exception handling
+  - Added timeout parameters to all requests
+- [x] Create custom exception classes - **COMPLETED**
+  - Created `exceptions.py` with hierarchy of custom exceptions
+  - `FOMQBOException` base class with user messages
+  - Specific exceptions for QBO, Gemini, file processing, validation
+- [x] Log errors internally, show generic messages to users - **COMPLETED**
+  - Configured logging with rotation (10MB files, 5 backups)
+  - Console shows warnings only, file logs everything
+  - User messages are generic, detailed errors logged internally
+- [x] Add retry logic for transient failures - **COMPLETED**
+  - Created `retry.py` with exponential backoff
+  - Automatic retry for 429, 5xx errors
+  - Configurable retry attempts and delays
+  - Connection errors are automatically retried
 
 ### 12. ❌ Add Rate Limiting
 - [ ] Install Flask-Limiter: `pip install Flask-Limiter`
