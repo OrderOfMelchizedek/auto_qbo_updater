@@ -1158,6 +1158,15 @@ def create_sales_receipt(donation_id):
                 item_ref = '1'  # Default fallback
             print(f"Using item_ref: {item_ref} for donation {donation_id}")
             
+            # Check if sales receipt already exists
+            if donation.get('qboSalesReceiptId'):
+                print(f"Sales receipt already exists for donation {donation_id} with ID: {donation['qboSalesReceiptId']}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Sales receipt already created for this donation',
+                    'salesReceiptId': donation['qboSalesReceiptId']
+                }), 400
+            
             # Format dates with validation
             today = pd.Timestamp.now().strftime('%Y-%m-%d')
             
@@ -1216,6 +1225,25 @@ def create_sales_receipt(donation_id):
                 print(f"Using custom deposit account ID: {deposit_account_id}")
             if request.json.get('paymentMethodId'):
                 print(f"Using custom payment method ID: {payment_method_id}")
+            
+            # Check for existing sales receipt in QBO before creating a new one
+            print(f"Checking for existing sales receipt with check_no: {check_no}, date: {check_date}, customer: {donation['qboCustomerId']}")
+            existing_receipt = qbo_service.find_sales_receipt(check_no, check_date, donation['qboCustomerId'])
+            
+            if existing_receipt:
+                print(f"Found existing sales receipt with ID: {existing_receipt.get('Id')}")
+                # Update donation record with existing receipt ID
+                donation['qbSyncStatus'] = 'Sent'
+                donation['qboSalesReceiptId'] = existing_receipt.get('Id')
+                donations[i] = donation
+                session['donations'] = donations
+                
+                return jsonify({
+                    'success': True,
+                    'duplicate': True,
+                    'message': 'Sales receipt already exists in QuickBooks',
+                    'salesReceipt': existing_receipt
+                })
                 
             # Prepare sales receipt data
             sales_receipt_data = {
@@ -1334,6 +1362,15 @@ def create_batch_sales_receipts():
                     'message': 'Excluded from batch processing'
                 })
                 failure_count += 1
+                continue
+            
+            # Skip if sales receipt already exists
+            if donation.get('qboSalesReceiptId'):
+                results.append({
+                    'internalId': donation['internalId'],
+                    'success': False,
+                    'message': 'Sales receipt already exists'
+                })
                 continue
             
             if not donation.get('qboCustomerId'):
@@ -1459,6 +1496,24 @@ def create_batch_sales_receipts():
                     'value': f"auto import on {today}"
                 }
             }
+            
+            # Check for existing sales receipt before creating
+            existing_receipt = qbo_service.find_sales_receipt(check_no, check_date, donation['qboCustomerId'])
+            
+            if existing_receipt:
+                # Sales receipt already exists - update donation and continue
+                donation['qbSyncStatus'] = 'Sent'
+                donation['qboSalesReceiptId'] = existing_receipt.get('Id')
+                donations[i] = donation
+                
+                results.append({
+                    'internalId': donation['internalId'],
+                    'success': True,
+                    'salesReceiptId': existing_receipt.get('Id'),
+                    'message': 'Sales receipt already exists'
+                })
+                success_count += 1
+                continue
             
             result = qbo_service.create_sales_receipt(sales_receipt_data)
             

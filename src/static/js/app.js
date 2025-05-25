@@ -1669,7 +1669,12 @@ function trySendWithAlternative(donationId, customFields) {
                     // Hide the setup modal
                     qboSetupModal.hide();
                     
-                    showToast('Sales receipt created successfully in QBO');
+                    // Show appropriate message based on whether it was a duplicate
+                    if (data.duplicate) {
+                        showToast('Sales receipt already exists in QuickBooks - linked to donation', 'warning');
+                    } else {
+                        showToast('Sales receipt created successfully in QBO');
+                    }
                 }
             } else if (data.requiresSetup) {
                 // Another setup issue was encountered
@@ -1681,7 +1686,12 @@ function trySendWithAlternative(donationId, customFields) {
                     donationId
                 );
             } else {
-                showToast(data.message || 'Error creating sales receipt in QBO', 'danger');
+                // Check if it's a duplicate error (sales receipt already exists)
+                if (data.salesReceiptId) {
+                    showToast(data.message || 'Sales receipt already exists for this donation', 'warning');
+                } else {
+                    showToast(data.message || 'Error creating sales receipt in QBO', 'danger');
+                }
             }
         })
         .catch(error => {

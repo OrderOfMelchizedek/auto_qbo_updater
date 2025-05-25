@@ -401,6 +401,44 @@ class QBOService:
             print(f"Exception in update_customer: {str(e)}")
             return None
     
+    def find_sales_receipt(self, check_no: str, check_date: str, customer_id: str) -> Optional[Dict[str, Any]]:
+        """Find existing sales receipt by check number, date, and customer.
+        
+        Args:
+            check_no: Check number to search for
+            check_date: Check date (YYYY-MM-DD format)
+            customer_id: QBO Customer ID
+            
+        Returns:
+            Sales receipt data if found, None otherwise
+        """
+        if not self.access_token or not self.realm_id:
+            print("Not authenticated with QBO")
+            return None
+        
+        try:
+            # Query for sales receipts matching the criteria
+            # Using PaymentRefNum for check number and CustomerRef for customer
+            query = f"SELECT * FROM SalesReceipt WHERE PaymentRefNum = '{check_no}' AND TxnDate = '{check_date}' AND CustomerRef = '{customer_id}'"
+            encoded_query = quote(query)
+            url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
+            
+            response = requests.get(url, headers=self._get_auth_headers())
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data['QueryResponse'].get('SalesReceipt'):
+                    receipts = data['QueryResponse']['SalesReceipt']
+                    print(f"Found {len(receipts)} matching sales receipt(s)")
+                    return receipts[0] if receipts else None
+            else:
+                print(f"Error querying sales receipts: {response.status_code} - {response.text}")
+                return None
+        
+        except Exception as e:
+            print(f"Exception in find_sales_receipt: {str(e)}")
+            return None
+    
     def create_sales_receipt(self, sales_receipt_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a sales receipt in QBO with enhanced error handling.
         

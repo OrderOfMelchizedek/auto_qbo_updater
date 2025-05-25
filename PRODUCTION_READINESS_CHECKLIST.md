@@ -81,10 +81,16 @@ if not app.secret_key:
 - [x] Added `/session-info` endpoint to monitor session size - **COMPLETED**
 - [x] Updated health check to show session storage type - **COMPLETED**
 
-### 6. ❌ Add Duplicate Sales Receipt Prevention
-- [ ] Check for existing `qboSalesReceiptId` before creating new receipts
-- [ ] Add logic to prevent duplicate submissions
-- [ ] Handle edge cases (network timeouts, retries)
+### 6. ✅ Add Duplicate Sales Receipt Prevention
+- [x] Check for existing `qboSalesReceiptId` before creating new receipts - **COMPLETED**
+- [x] Add logic to prevent duplicate submissions - **COMPLETED**
+  - Added `find_sales_receipt()` method to QBOService to query existing receipts
+  - Single receipt creation checks local record and QBO for duplicates
+  - Batch processing skips donations with existing receipts
+  - Links to existing QBO receipts when found instead of creating duplicates
+- [x] Handle edge cases (network timeouts, retries) - **COMPLETED**
+  - UI properly handles duplicate responses with warning messages
+  - Existing receipt IDs are preserved in session data
 
 ### 7. ❌ Fix SQL Injection Vulnerability
 - [ ] Replace string concatenation in QBO queries (qbo_service.py:175)
