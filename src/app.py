@@ -5,6 +5,8 @@ import argparse
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, Response
 from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.utils import secure_filename
 import pandas as pd
 from dotenv import load_dotenv
@@ -499,6 +501,15 @@ csrf = CSRFProtect(app)
 # Configure CSRF to accept tokens in X-CSRFToken header (for AJAX requests)
 app.config['WTF_CSRF_HEADERS'] = ['X-CSRFToken']
 
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per hour", "50 per minute"],
+    storage_uri=os.environ.get('REDIS_URL') or "memory://",
+    storage_options={"socket_connect_timeout": 30} if os.environ.get('REDIS_URL') else {}
+)
+
 # Configure server-side session storage
 def configure_session(app):
     """Configure server-side session storage with Redis or filesystem fallback."""
@@ -630,6 +641,7 @@ def upload_start():
     })
 
 @app.route('/upload', methods=['POST'])
+@limiter.limit("10 per hour")
 def upload_files():
     """Handle file uploads (images, PDFs, CSV)."""
     try:
@@ -1012,6 +1024,7 @@ def qbo_status():
     })
 
 @app.route('/qbo/authorize')
+@limiter.limit("20 per hour")
 def authorize_qbo():
     """Start QBO OAuth flow."""
     authorization_url = qbo_service.get_authorization_url()
@@ -1019,6 +1032,7 @@ def authorize_qbo():
 
 @app.route('/qbo/callback')
 @csrf.exempt
+@limiter.limit("20 per hour")
 def qbo_callback():
     """Handle QBO OAuth callback."""
     code = request.args.get('code')
@@ -1266,6 +1280,7 @@ def manual_match_customer(donation_id):
         }), 500
 
 @app.route('/qbo/customer/create/<donation_id>', methods=['POST'])
+@limiter.limit("50 per hour")
 def create_customer(donation_id):
     """Create a new QBO customer from donation information."""
     donations = session.get('donations', [])
@@ -1362,6 +1377,7 @@ def update_customer(donation_id):
     return jsonify({'success': False, 'message': 'Donation not found'}), 404
 
 @app.route('/qbo/sales-receipt/<donation_id>', methods=['POST'])
+@limiter.limit("100 per hour")
 def create_sales_receipt(donation_id):
     """Create a QBO sales receipt for a donation."""
     donations = session.get('donations', [])
@@ -1575,6 +1591,7 @@ def create_sales_receipt(donation_id):
     return jsonify({'success': False, 'message': 'Donation not found'}), 404
 
 @app.route('/qbo/sales-receipt/batch', methods=['POST'])
+@limiter.limit("20 per hour")
 def create_batch_sales_receipts():
     """Create QBO sales receipts for all eligible donations."""
     donations = session.get('donations', [])

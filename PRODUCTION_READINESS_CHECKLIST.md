@@ -167,11 +167,19 @@ if not app.secret_key:
   - Configurable retry attempts and delays
   - Connection errors are automatically retried
 
-### 12. ❌ Add Rate Limiting
-- [ ] Install Flask-Limiter: `pip install Flask-Limiter`
-- [ ] Configure rate limits for API endpoints
-- [ ] Add specific limits for Gemini API calls
-- [ ] Update `requirements.txt`
+### 12. ✅ Add Rate Limiting
+- [x] Install Flask-Limiter: `pip install Flask-Limiter` - **COMPLETED**
+- [x] Configure rate limits for API endpoints - **COMPLETED**
+  - Global limits: 200/hour, 50/minute
+  - Upload endpoint: 10/hour
+  - OAuth endpoints: 20/hour
+  - Sales receipt creation: 100/hour (single), 20/hour (batch)
+  - Customer creation: 50/hour
+- [x] Add specific limits for Gemini API calls - **COMPLETED**
+  - Configurable via GEMINI_RATE_LIMIT_PER_MINUTE (default: 60)
+  - Configurable via GEMINI_RATE_LIMIT_PER_HOUR (default: 1500)
+  - Rate limiting enforced before each API call
+- [x] Update `requirements.txt` - **COMPLETED** (Flask-Limiter==3.12)
 
 ### 13. ❌ Implement Proper Logging
 - [ ] Set up Python logging configuration

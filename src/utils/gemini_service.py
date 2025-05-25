@@ -7,6 +7,9 @@ import google.generativeai as genai
 from typing import Dict, Any, Optional, List, Union
 from .prompt_manager import PromptManager
 import logging
+import time
+from datetime import datetime, timedelta
+import threading
 
 # Import custom exceptions and retry logic
 try:
@@ -23,6 +26,10 @@ logger = logging.getLogger(__name__)
 class GeminiService:
     """Service for interacting with Google's Gemini API."""
     
+    # Rate limiting configuration
+    RATE_LIMIT_PER_MINUTE = int(os.environ.get('GEMINI_RATE_LIMIT_PER_MINUTE', '60'))
+    RATE_LIMIT_PER_HOUR = int(os.environ.get('GEMINI_RATE_LIMIT_PER_HOUR', '1500'))
+    
     def __init__(self, api_key: str, model_name: str = 'gemini-2.5-flash-preview-04-17'):
         """Initialize the Gemini service with API key and model name.
         
@@ -35,6 +42,48 @@ class GeminiService:
         genai.configure(api_key=api_key)
         self.prompt_manager = PromptManager(prompt_dir='docs/prompts_archive')
         print(f"Initialized Gemini service with model: {self.model_name}")
+        
+        # Rate limiting state
+        self._minute_calls = []
+        self._hour_calls = []
+        self._rate_limit_lock = threading.Lock()
+    
+    def _check_rate_limit(self):
+        """Check and enforce rate limits for Gemini API calls.
+        
+        Raises:
+            GeminiAPIException: If rate limit would be exceeded
+        """
+        with self._rate_limit_lock:
+            now = datetime.now()
+            
+            # Clean up old entries
+            minute_ago = now - timedelta(minutes=1)
+            hour_ago = now - timedelta(hours=1)
+            
+            self._minute_calls = [t for t in self._minute_calls if t > minute_ago]
+            self._hour_calls = [t for t in self._hour_calls if t > hour_ago]
+            
+            # Check limits
+            if len(self._minute_calls) >= self.RATE_LIMIT_PER_MINUTE:
+                wait_time = (self._minute_calls[0] - minute_ago).total_seconds()
+                raise GeminiAPIException(
+                    f"Rate limit exceeded: {self.RATE_LIMIT_PER_MINUTE} calls per minute. "
+                    f"Please wait {wait_time:.1f} seconds.",
+                    is_user_error=True
+                )
+            
+            if len(self._hour_calls) >= self.RATE_LIMIT_PER_HOUR:
+                wait_time = (self._hour_calls[0] - hour_ago).total_seconds() / 60
+                raise GeminiAPIException(
+                    f"Rate limit exceeded: {self.RATE_LIMIT_PER_HOUR} calls per hour. "
+                    f"Please wait {wait_time:.1f} minutes.",
+                    is_user_error=True
+                )
+            
+            # Record this call
+            self._minute_calls.append(now)
+            self._hour_calls.append(now)
         
     def _extract_json_from_text(self, text: str) -> Any:
         """Extract JSON from text, handling various response formats.
@@ -83,6 +132,9 @@ class GeminiService:
             Dictionary or list of dictionaries containing extracted data or None if extraction failed
         """
         try:
+            # Check rate limit before making API call
+            self._check_rate_limit()
+            
             # Set up model using the configured model name
             model = genai.GenerativeModel(self.model_name)
             
@@ -152,6 +204,9 @@ class GeminiService:
                 'extracted_data': extracted_json,
                 'qbo_data': qbo_json
             })
+            
+            # Check rate limit before making API call
+            self._check_rate_limit()
             
             # Set up the model using the configured model name
             model = genai.GenerativeModel(self.model_name)
@@ -303,6 +358,9 @@ class GeminiService:
                         
                         # Call Gemini API for this batch of pages
                         try:
+                            # Check rate limit before making API call
+                            self._check_rate_limit()
+                            
                             print(f"Sending batch of {len(content_parts) - 1} pages to Gemini")
                             batch_response = model.generate_content(
                                 contents=content_parts,
@@ -399,6 +457,9 @@ class GeminiService:
             # Call Gemini API with content
             print(f"Processing {file_ext} file with Gemini: {file_path}")
             
+            # Check rate limit before making API call
+            self._check_rate_limit()
+            
             # JSON format is now built into our simplified prompts
                 
             response = model.generate_content(
@@ -458,6 +519,9 @@ class GeminiService:
             Generated text response or None if generation failed
         """
         try:
+            # Check rate limit before making API call
+            self._check_rate_limit()
+            
             # Set up model using the configured model name
             model = genai.GenerativeModel(self.model_name)
             
