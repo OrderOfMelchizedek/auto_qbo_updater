@@ -606,6 +606,10 @@ print(f"Using Gemini model: {gemini_model}")
 
 app = Flask(__name__)
 
+# Track application start time for uptime monitoring
+import time
+app.start_time = time.time()
+
 # Set Flask secret key from environment variable (already validated)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY')
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -697,9 +701,14 @@ def index():
 
 @app.route('/health')
 def health_check():
-    """Health check endpoint for monitoring."""
+    """Basic health check endpoint - does not test external services."""
+    import psutil
+    import time
+    
     health_status = {
         'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'uptime_seconds': time.time() - app.start_time,
         'environment': {
             'flask_configured': bool(app.secret_key),
             'gemini_configured': bool(gemini_service.api_key),
@@ -708,20 +717,185 @@ def health_check():
             'session_type': app.config.get('SESSION_TYPE', 'unknown'),
             'session_storage': 'Redis' if app.config.get('SESSION_TYPE') == 'redis' else 'Filesystem'
         },
-        'services': {
+        'system': {
+            'memory_usage_mb': round(psutil.Process().memory_info().rss / 1024 / 1024, 1),
+            'cpu_percent': psutil.Process().cpu_percent(),
+            'disk_free_gb': round(psutil.disk_usage('/').free / 1024**3, 1)
+        },
+        'auth': {
             'qbo_authenticated': qbo_service.is_token_valid(),
-            'qbo_token_info': qbo_service.get_token_info() if qbo_service.access_token else None,
-            'redis_connected': app.config.get('SESSION_TYPE') == 'redis' if os.environ.get('REDIS_URL') else None
+            'qbo_token_expires_at': qbo_service.token_expires_at if qbo_service.access_token else None,
+            'qbo_token_expires_in_hours': None
         }
     }
     
+    # Calculate token expiration time
+    if qbo_service.token_expires_at:
+        try:
+            expires_at = datetime.fromisoformat(qbo_service.token_expires_at.replace('Z', '+00:00'))
+            time_diff = expires_at - datetime.now().replace(tzinfo=expires_at.tzinfo)
+            health_status['auth']['qbo_token_expires_in_hours'] = round(time_diff.total_seconds() / 3600, 1)
+        except Exception as e:
+            logger.warning(f"Error calculating token expiration: {e}")
+    
     # Determine overall health
-    if not all([health_status['environment']['flask_configured'],
-                health_status['environment']['gemini_configured'],
-                health_status['environment']['qbo_configured']]):
+    critical_issues = []
+    if not health_status['environment']['flask_configured']:
+        critical_issues.append('Flask not configured')
+    if not health_status['environment']['gemini_configured']:
+        critical_issues.append('Gemini not configured')
+    if not health_status['environment']['qbo_configured']:
+        critical_issues.append('QBO not configured')
+    
+    if critical_issues:
         health_status['status'] = 'unhealthy'
+        health_status['issues'] = critical_issues
         
     return jsonify(health_status)
+
+@app.route('/ready')
+def readiness_check():
+    """Readiness check endpoint - tests external service connectivity."""
+    import requests
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import time
+    
+    readiness_status = {
+        'status': 'ready',
+        'timestamp': datetime.now().isoformat(),
+        'services': {},
+        'checks_performed': []
+    }
+    
+    def check_qbo_connectivity():
+        """Test QBO API connectivity."""
+        try:
+            if not qbo_service.access_token:
+                return {
+                    'service': 'quickbooks',
+                    'status': 'not_authenticated',
+                    'message': 'No access token available',
+                    'response_time_ms': 0
+                }
+            
+            start_time = time.time()
+            # Test with a simple API call
+            customers = qbo_service.get_all_customers()
+            response_time = round((time.time() - start_time) * 1000, 1)
+            
+            if isinstance(customers, list):
+                return {
+                    'service': 'quickbooks',
+                    'status': 'healthy',
+                    'message': f'Successfully retrieved {len(customers)} customers',
+                    'response_time_ms': response_time
+                }
+            else:
+                return {
+                    'service': 'quickbooks',
+                    'status': 'unhealthy',
+                    'message': 'Invalid response from QBO API',
+                    'response_time_ms': response_time
+                }
+                
+        except Exception as e:
+            return {
+                'service': 'quickbooks',
+                'status': 'unhealthy',
+                'message': f'QBO connectivity error: {str(e)}',
+                'response_time_ms': 0
+            }
+    
+    def check_gemini_connectivity():
+        """Test Gemini API connectivity."""
+        try:
+            start_time = time.time()
+            # Simple test prompt
+            result = gemini_service.generate_text("Test connectivity. Respond with 'OK'.")
+            response_time = round((time.time() - start_time) * 1000, 1)
+            
+            if result and 'OK' in result.upper():
+                return {
+                    'service': 'gemini',
+                    'status': 'healthy',
+                    'message': 'Successfully connected to Gemini API',
+                    'response_time_ms': response_time
+                }
+            else:
+                return {
+                    'service': 'gemini',
+                    'status': 'unhealthy',
+                    'message': 'Unexpected response from Gemini API',
+                    'response_time_ms': response_time
+                }
+                
+        except Exception as e:
+            return {
+                'service': 'gemini',
+                'status': 'unhealthy',
+                'message': f'Gemini connectivity error: {str(e)}',
+                'response_time_ms': 0
+            }
+    
+    def check_redis_connectivity():
+        """Test Redis connectivity if configured."""
+        if not os.environ.get('REDIS_URL'):
+            return {
+                'service': 'redis',
+                'status': 'not_configured',
+                'message': 'Redis not configured',
+                'response_time_ms': 0
+            }
+        
+        try:
+            start_time = time.time()
+            import redis
+            r = redis.from_url(os.environ.get('REDIS_URL'))
+            r.ping()
+            response_time = round((time.time() - start_time) * 1000, 1)
+            
+            return {
+                'service': 'redis',
+                'status': 'healthy',
+                'message': 'Redis connection successful',
+                'response_time_ms': response_time
+            }
+            
+        except Exception as e:
+            return {
+                'service': 'redis',
+                'status': 'unhealthy',
+                'message': f'Redis connectivity error: {str(e)}',
+                'response_time_ms': 0
+            }
+    
+    # Run checks in parallel for faster response
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {
+            executor.submit(check_qbo_connectivity): 'qbo',
+            executor.submit(check_gemini_connectivity): 'gemini',
+            executor.submit(check_redis_connectivity): 'redis'
+        }
+        
+        for future in as_completed(futures):
+            try:
+                result = future.result(timeout=10)  # 10 second timeout per check
+                service_name = result['service']
+                readiness_status['services'][service_name] = result
+                readiness_status['checks_performed'].append(service_name)
+                
+                # If any critical service is unhealthy, mark as not ready
+                if service_name in ['quickbooks', 'gemini'] and result['status'] == 'unhealthy':
+                    readiness_status['status'] = 'not_ready'
+                    
+            except Exception as e:
+                logger.error(f"Readiness check failed: {e}")
+                readiness_status['status'] = 'not_ready'
+                readiness_status['error'] = str(e)
+    
+    # Return appropriate HTTP status code
+    status_code = 200 if readiness_status['status'] == 'ready' else 503
+    return jsonify(readiness_status), status_code
     
 @app.route('/qbo/auth-status')
 def qbo_auth_status():

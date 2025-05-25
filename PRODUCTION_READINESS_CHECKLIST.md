@@ -197,10 +197,21 @@ if not app.secret_key:
   - Audit logging with sanitized data
   - Added audit events for OAuth, uploads, sales receipts
 
-### 14. ❌ Add Health Check Endpoints
-- [ ] Create `/health` endpoint for basic health check
-- [ ] Create `/ready` endpoint to check external service connectivity
-- [ ] Add monitoring for QBO token expiration
+### 14. ✅ Add Health Check Endpoints
+- [x] Create `/health` endpoint for basic health check - **COMPLETED**
+  - Basic health status without external service calls
+  - System metrics (memory, CPU, disk usage)
+  - Configuration validation
+  - Application uptime tracking
+- [x] Create `/ready` endpoint to check external service connectivity - **COMPLETED**
+  - Parallel connectivity tests for QBO, Gemini, Redis
+  - Response time monitoring
+  - Returns 503 if critical services unavailable
+  - Timeout protection (10s per check)
+- [x] Add monitoring for QBO token expiration - **COMPLETED**
+  - Token expiration time in hours
+  - Token validity checking
+  - Included in both health and auth-status endpoints
 
 ## 💡 **GOOD PRACTICES & DOCUMENTATION**
 
