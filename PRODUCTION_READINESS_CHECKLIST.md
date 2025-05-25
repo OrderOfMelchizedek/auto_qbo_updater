@@ -135,10 +135,19 @@ if not app.secret_key:
 
 ## 📊 **MEDIUM PRIORITY IMPROVEMENTS**
 
-### 10. ❌ Update Date Validation
-- [ ] Remove hardcoded "2024-06-01" check in gemini_service.py
-- [ ] Implement dynamic date validation relative to current date
-- [ ] Add configurable date range limits
+### 10. ✅ Update Date Validation
+- [x] Remove hardcoded "2024-06-01" check in gemini_service.py - **COMPLETED**
+  - Updated to use current year dynamically
+  - Debug warnings now check for current year's June 1st
+- [x] Implement dynamic date validation relative to current date - **COMPLETED**
+  - Created `validate_donation_date()` function
+  - Validates dates are within reasonable bounds
+  - Returns validation status, warnings, and parsed date
+- [x] Add configurable date range limits - **COMPLETED**
+  - `DATE_WARNING_DAYS` (default: 365) - Warn for donations older than this
+  - `FUTURE_DATE_LIMIT_DAYS` (default: 7) - Reject future dates beyond this
+  - Configurable via environment variables
+  - Added to .env.example with documentation
 
 ### 11. ❌ Enhance Error Handling
 - [ ] Wrap all external API calls in proper try-except blocks

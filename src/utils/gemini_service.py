@@ -88,9 +88,14 @@ class GeminiService:
             if text_response:
                 print(f"Response text: {text_response}")
                 
-                # Debug: Check for date patterns
-                if "2024-06-01" in text_response:
-                    print("WARNING: Found date '2024-06-01' in response - this may be a misread date")
+                # Debug: Check for suspicious date patterns
+                # Common misread patterns: 6/1 might be misread as June 1st of current year
+                import datetime
+                current_year = datetime.datetime.now().year
+                suspicious_date = f"{current_year}-06-01"
+                
+                if suspicious_date in text_response:
+                    print(f"WARNING: Found date '{suspicious_date}' in response - this may be a misread date")
                 if "6/1" in text_response or "6-1" in text_response:
                     print("WARNING: Found date pattern '6/1' or '6-1' - possible source of June 1st date")
                 
@@ -397,9 +402,14 @@ class GeminiService:
                 # For clarity in logs
                 print(f"Response text: {text_response}")
                 
-                # Debug: Check for date patterns
-                if "2024-06-01" in text_response:
-                    print("WARNING: Found date '2024-06-01' in response - this may be a misread date")
+                # Debug: Check for suspicious date patterns
+                # Common misread patterns: 6/1 might be misread as June 1st of current year
+                import datetime
+                current_year = datetime.datetime.now().year
+                suspicious_date = f"{current_year}-06-01"
+                
+                if suspicious_date in text_response:
+                    print(f"WARNING: Found date '{suspicious_date}' in response - this may be a misread date")
                 if "6/1" in text_response or "6-1" in text_response:
                     print("WARNING: Found date pattern '6/1' or '6-1' - possible source of June 1st date")
                 

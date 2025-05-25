@@ -50,6 +50,12 @@ ALLOWED_MIME_TYPES = {
 }
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB per file
 
+# Date validation configuration
+# Donations older than this many days are flagged as potentially incorrect
+DATE_WARNING_DAYS = int(os.getenv('DATE_WARNING_DAYS', '365'))  # Default: 1 year
+# Donations with future dates more than this many days are rejected
+FUTURE_DATE_LIMIT_DAYS = int(os.getenv('FUTURE_DATE_LIMIT_DAYS', '7'))  # Default: 1 week
+
 def generate_secure_filename(original_filename):
     """Generate a secure filename with UUID to prevent conflicts and path traversal."""
     # Get file extension
@@ -101,6 +107,47 @@ def cleanup_uploaded_file(file_path):
             print(f"Cleaned up file: {file_path}")
     except Exception as e:
         print(f"Error cleaning up file {file_path}: {str(e)}")
+
+def validate_donation_date(date_str, field_name="date"):
+    """Validate a donation date is within reasonable bounds.
+    
+    Args:
+        date_str: Date string to validate
+        field_name: Name of the field for error messages
+        
+    Returns:
+        Tuple of (is_valid, warning_message, parsed_date)
+        - is_valid: True if date is acceptable, False if should be rejected
+        - warning_message: Warning message if date is suspicious but acceptable
+        - parsed_date: The parsed date object or None if invalid
+    """
+    if not date_str:
+        return True, None, None
+    
+    try:
+        # Parse the date
+        parsed_date = pd.to_datetime(date_str)
+        today = pd.Timestamp.now()
+        
+        # Check if date is in the future
+        if parsed_date > today:
+            days_future = (parsed_date - today).days
+            if days_future > FUTURE_DATE_LIMIT_DAYS:
+                return False, f"{field_name} is {days_future} days in the future (max allowed: {FUTURE_DATE_LIMIT_DAYS} days)", None
+            elif days_future > 0:
+                return True, f"{field_name} is {days_future} days in the future", parsed_date
+        
+        # Check if date is too old
+        days_old = (today - parsed_date).days
+        if days_old > DATE_WARNING_DAYS:
+            years_old = days_old // 365
+            return True, f"{field_name} is {years_old:.1f} years old - please verify", parsed_date
+        
+        # Date is within normal range
+        return True, None, parsed_date
+        
+    except Exception as e:
+        return False, f"Invalid {field_name} format: {str(e)}", None
 
 # Validate required environment variables
 def validate_environment():
@@ -678,11 +725,11 @@ def upload_files():
                     if extracted_data:
                         # Check if we have a list of donations or a single donation
                         if isinstance(extracted_data, list):
-                            log_progress(f"Found {len(extracted_data)} donation records in {filename}")
-                            log_progress(f"Processing individual donations from {filename}...")
+                            log_progress(f"Found {len(extracted_data)} donation records in {original_filename}")
+                            log_progress(f"Processing individual donations from {original_filename}...")
                             for idx, donation in enumerate(extracted_data):
                                 if idx % 5 == 0 and idx > 0:
-                                    log_progress(f"Processed {idx} of {len(extracted_data)} donations from {filename}")
+                                    log_progress(f"Processed {idx} of {len(extracted_data)} donations from {original_filename}")
                                 donation['dataSource'] = data_source
                                 donation['internalId'] = f"{source_prefix}_{len(donations) + idx}"
                                 donation['qbSyncStatus'] = 'Pending'
@@ -700,15 +747,15 @@ def upload_files():
                                 extracted_data['qbCustomerStatus'] = 'Unknown'
                             donations.append(extracted_data)
                     else:
-                        log_progress(f"Could not extract donation data from {filename}")
-                        errors.append(f"No donation data could be extracted from {filename}")
+                        log_progress(f"Could not extract donation data from {original_filename}")
+                        errors.append(f"No donation data could be extracted from {original_filename}")
                 else:
                     log_progress(f"Unsupported file type: {file_ext}")
                     errors.append(f"Unsupported file type: {file_ext}")
             
             except Exception as e:
-                log_progress(f"Error processing {file.filename}: {str(e)}")
-                errors.append(f"Error processing {file.filename}: {str(e)}")
+                log_progress(f"Error processing {original_filename}: {str(e)}")
+                errors.append(f"Error processing {original_filename}: {str(e)}")
         
         # Process donations
         if donations:
@@ -1296,19 +1343,25 @@ def create_sales_receipt(donation_id):
             
             # Validate and format Check Date
             check_date = donation.get('Check Date', '')
-            try:
-                # Parse and format the date to YYYY-MM-DD format
-                if check_date:
-                    parsed_date = pd.to_datetime(check_date)
-                    check_date = parsed_date.strftime('%Y-%m-%d')
-                    print(f"Using Check Date: {check_date} for sales receipt")
-                else:
-                    # If no check date, use today's date
-                    print(f"No Check Date provided, using today's date: {today}")
-                    check_date = today
-            except Exception as e:
-                # If invalid date, use today's date
-                print(f"Invalid Check Date: {check_date}, error: {str(e)}, using today's date")
+            
+            # Validate the date
+            is_valid, warning_msg, parsed_date = validate_donation_date(check_date, "Check Date")
+            
+            if not is_valid:
+                return jsonify({
+                    'success': False,
+                    'message': warning_msg
+                }), 400
+            
+            if warning_msg:
+                print(f"Date validation warning: {warning_msg}")
+            
+            if parsed_date:
+                check_date = parsed_date.strftime('%Y-%m-%d')
+                print(f"Using Check Date: {check_date} for sales receipt")
+            else:
+                # If no check date, use today's date
+                print(f"No Check Date provided, using today's date: {today}")
                 check_date = today
             
             # Get other fields with validation
@@ -1526,17 +1579,25 @@ def create_batch_sales_receipts():
             # Validate and format Check Date
             today = pd.Timestamp.now().strftime('%Y-%m-%d')
             check_date = donation.get('Check Date', '')
-            try:
-                # Parse and format the date to YYYY-MM-DD format
-                if check_date:
-                    parsed_date = pd.to_datetime(check_date)
-                    check_date = parsed_date.strftime('%Y-%m-%d')
-                    print(f"Using Check Date: {check_date} for donation {donation['internalId']}")
-                else:
-                    raise ValueError("Empty check date")
-            except Exception as e:
-                # If invalid date, use today's date
-                print(f"Invalid Check Date for donation {donation['internalId']}: {check_date}, error: {str(e)}, using today's date")
+            # Validate the date
+            is_valid, warning_msg, parsed_date = validate_donation_date(check_date, "Check Date")
+            
+            if not is_valid:
+                results.append({
+                    'internalId': donation['internalId'],
+                    'success': False,
+                    'message': warning_msg
+                })
+                failure_count += 1
+                continue
+            
+            if warning_msg:
+                print(f"Date validation warning for donation {donation['internalId']}: {warning_msg}")
+            
+            if parsed_date:
+                check_date = parsed_date.strftime('%Y-%m-%d')
+                print(f"Using Check Date: {check_date} for donation {donation['internalId']}")
+            else:
                 check_date = today
             
             # Validate Gift Amount
