@@ -58,21 +58,15 @@ if not app.secret_key:
 - [x] Remove setup scripts (setup_oauth_lib.py, fix_oauth.py) - **REMOVED**
 - [x] Add token validation methods to QBOService - **ADDED**
 
-### 4. ❌ Add Environment Variable Validation
-- [ ] Add startup validation for all required environment variables
-```python
-# Add to src/app.py after imports:
-required_env_vars = [
-    'FLASK_SECRET_KEY',
-    'GEMINI_API_KEY', 
-    'QBO_CLIENT_ID',
-    'QBO_CLIENT_SECRET',
-    'QBO_REDIRECT_URI'
-]
-missing_vars = [var for var in required_env_vars if not os.environ.get(var)]
-if missing_vars:
-    raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
-```
+### 4. ✅ Add Environment Variable Validation
+- [x] Add startup validation for all required environment variables - **COMPLETED**
+- [x] Created comprehensive `validate_environment()` function with:
+  - Required variable checking with descriptive error messages
+  - Optional variable warnings
+  - Value validation (QBO_ENVIRONMENT must be sandbox/production)
+  - URL format validation for redirect URI
+- [x] Added `/health` endpoint for runtime monitoring - **COMPLETED**
+- [x] Tested validation catches missing variables correctly - **VERIFIED**
 
 ## ⚠️ **HIGH PRIORITY SECURITY FIXES**
 

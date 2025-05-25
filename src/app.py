@@ -21,12 +21,56 @@ except ModuleNotFoundError:
     from utils.file_processor import FileProcessor
     from utils.progress_logger import progress_logger, init_progress_logger, log_progress
 
-# Load environment variables
-load_dotenv()
-
 import re
 from datetime import datetime
 import dateutil.parser
+
+# Load environment variables
+load_dotenv()
+
+# Validate required environment variables
+def validate_environment():
+    """Validate that all required environment variables are set."""
+    required_vars = {
+        'FLASK_SECRET_KEY': 'Flask secret key for session management',
+        'GEMINI_API_KEY': 'Google Gemini API key for AI processing',
+        'QBO_CLIENT_ID': 'QuickBooks OAuth Client ID',
+        'QBO_CLIENT_SECRET': 'QuickBooks OAuth Client Secret',
+        'QBO_REDIRECT_URI': 'QuickBooks OAuth redirect URI'
+    }
+    
+    missing_vars = []
+    for var_name, description in required_vars.items():
+        if not os.environ.get(var_name):
+            missing_vars.append(f"  - {var_name}: {description}")
+    
+    if missing_vars:
+        error_msg = "Missing required environment variables:\n" + "\n".join(missing_vars)
+        error_msg += "\n\nPlease set these in your .env file. See .env.example for reference."
+        raise ValueError(error_msg)
+    
+    # Validate optional but recommended variables
+    optional_vars = {
+        'QBO_ENVIRONMENT': ('sandbox', 'QuickBooks environment (sandbox/production)')
+    }
+    
+    for var_name, (default, description) in optional_vars.items():
+        if not os.environ.get(var_name):
+            print(f"Warning: {var_name} not set. Using default: {default}")
+            print(f"         {description}")
+    
+    # Validate QBO_ENVIRONMENT value if set
+    qbo_env = os.environ.get('QBO_ENVIRONMENT')
+    if qbo_env and qbo_env not in ['sandbox', 'production']:
+        raise ValueError(f"Invalid QBO_ENVIRONMENT: '{qbo_env}'. Must be 'sandbox' or 'production'.")
+    
+    # Validate URL format for redirect URI
+    redirect_uri = os.environ.get('QBO_REDIRECT_URI')
+    if redirect_uri and not (redirect_uri.startswith('http://') or redirect_uri.startswith('https://')):
+        raise ValueError(f"Invalid QBO_REDIRECT_URI: '{redirect_uri}'. Must start with http:// or https://")
+
+# Run validation before any other initialization
+validate_environment()
 
 def normalize_check_number(check_no):
     """Normalize check number for comparison."""
@@ -282,10 +326,8 @@ print(f"Using Gemini model: {gemini_model}")
 
 app = Flask(__name__)
 
-# Set Flask secret key from environment variable
+# Set Flask secret key from environment variable (already validated)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY')
-if not app.secret_key:
-    raise ValueError("FLASK_SECRET_KEY environment variable is required. Generate one with: python -c 'import secrets; print(secrets.token_hex(32))'")
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB upload limit
 
@@ -314,6 +356,31 @@ init_progress_logger(gemini_service)
 def index():
     """Render the main application page."""
     return render_template('index.html')
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for monitoring."""
+    health_status = {
+        'status': 'healthy',
+        'environment': {
+            'flask_configured': bool(app.secret_key),
+            'gemini_configured': bool(gemini_service.api_key),
+            'qbo_configured': all([qbo_service.client_id, qbo_service.client_secret]),
+            'qbo_environment': qbo_service.environment
+        },
+        'services': {
+            'qbo_authenticated': qbo_service.is_token_valid(),
+            'qbo_token_info': qbo_service.get_token_info() if qbo_service.access_token else None
+        }
+    }
+    
+    # Determine overall health
+    if not all([health_status['environment']['flask_configured'],
+                health_status['environment']['gemini_configured'],
+                health_status['environment']['qbo_configured']]):
+        health_status['status'] = 'unhealthy'
+        
+    return jsonify(health_status)
     
 @app.route('/qbo/auth-status')
 def qbo_auth_status():
