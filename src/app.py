@@ -281,7 +281,11 @@ print(f"Starting application with QBO environment: {qbo_environment}")
 print(f"Using Gemini model: {gemini_model}")
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)  # For session management
+
+# Set Flask secret key from environment variable
+app.secret_key = os.environ.get('FLASK_SECRET_KEY')
+if not app.secret_key:
+    raise ValueError("FLASK_SECRET_KEY environment variable is required. Generate one with: python -c 'import secrets; print(secrets.token_hex(32))'")
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB upload limit
 
