@@ -3,10 +3,13 @@ import json
 import requests
 import argparse
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, Response
+from flask_session import Session
 from werkzeug.utils import secure_filename
 import pandas as pd
 from dotenv import load_dotenv
 from urllib.parse import quote
+import redis
+import tempfile
 
 # Try importing from the src package first
 try:
@@ -331,6 +334,50 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB upload limit
 
+# Configure server-side session storage
+def configure_session(app):
+    """Configure server-side session storage with Redis or filesystem fallback."""
+    redis_url = os.environ.get('REDIS_URL')
+    
+    if redis_url:
+        # Use Redis for production
+        try:
+            # Parse Redis URL (handles various formats including Heroku's)
+            if redis_url.startswith('redis://'):
+                app.config['SESSION_TYPE'] = 'redis'
+                app.config['SESSION_REDIS'] = redis.from_url(redis_url)
+                print("Using Redis for session storage")
+            else:
+                raise ValueError("Invalid REDIS_URL format")
+        except Exception as e:
+            print(f"Failed to connect to Redis: {e}")
+            print("Falling back to filesystem session storage")
+            configure_filesystem_sessions(app)
+    else:
+        # Use filesystem for development
+        print("No REDIS_URL found. Using filesystem for session storage (development mode)")
+        configure_filesystem_sessions(app)
+    
+    # Common session configuration
+    app.config['SESSION_PERMANENT'] = False
+    app.config['SESSION_USE_SIGNER'] = True
+    app.config['SESSION_KEY_PREFIX'] = 'fom_qbo:'
+    app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
+    
+    # Initialize Flask-Session
+    Session(app)
+
+def configure_filesystem_sessions(app):
+    """Configure filesystem-based sessions for development."""
+    session_dir = os.path.join(tempfile.gettempdir(), 'fom_qbo_sessions')
+    os.makedirs(session_dir, exist_ok=True)
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_FILE_DIR'] = session_dir
+    app.config['SESSION_FILE_THRESHOLD'] = 100  # Max number of sessions
+
+# Configure session storage
+configure_session(app)
+
 # Create necessary directories
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -366,11 +413,14 @@ def health_check():
             'flask_configured': bool(app.secret_key),
             'gemini_configured': bool(gemini_service.api_key),
             'qbo_configured': all([qbo_service.client_id, qbo_service.client_secret]),
-            'qbo_environment': qbo_service.environment
+            'qbo_environment': qbo_service.environment,
+            'session_type': app.config.get('SESSION_TYPE', 'unknown'),
+            'session_storage': 'Redis' if app.config.get('SESSION_TYPE') == 'redis' else 'Filesystem'
         },
         'services': {
             'qbo_authenticated': qbo_service.is_token_valid(),
-            'qbo_token_info': qbo_service.get_token_info() if qbo_service.access_token else None
+            'qbo_token_info': qbo_service.get_token_info() if qbo_service.access_token else None,
+            'redis_connected': app.config.get('SESSION_TYPE') == 'redis' if os.environ.get('REDIS_URL') else None
         }
     }
     
@@ -656,6 +706,37 @@ def get_donations():
     """Return all donations currently in the session."""
     donations = session.get('donations', [])
     return jsonify(donations)
+
+@app.route('/session-info')
+def session_info():
+    """Get information about current session size and storage."""
+    import sys
+    
+    donations = session.get('donations', [])
+    
+    # Calculate approximate session size
+    session_data = {
+        'donations': donations,
+        'qbo_connected': session.get('qbo_connected', False),
+        'qbo_just_connected': session.get('qbo_just_connected', False)
+    }
+    
+    # Serialize to estimate size
+    try:
+        session_json = json.dumps(session_data)
+        session_size = len(session_json.encode('utf-8'))
+    except:
+        session_size = 0
+    
+    return jsonify({
+        'storage_type': app.config.get('SESSION_TYPE', 'unknown'),
+        'donation_count': len(donations),
+        'session_size_bytes': session_size,
+        'session_size_kb': round(session_size / 1024, 2),
+        'client_side_limit_kb': 4,  # Flask's cookie session limit
+        'would_exceed_cookie_limit': session_size > (4 * 1024),
+        'recommendation': 'Using server-side storage' if app.config.get('SESSION_TYPE') in ['redis', 'filesystem'] else 'Consider server-side storage'
+    })
 
 @app.route('/donations/<donation_id>', methods=['PUT'])
 def update_donation(donation_id):
