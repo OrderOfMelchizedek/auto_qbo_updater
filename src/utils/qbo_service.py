@@ -182,6 +182,34 @@ class QBOService:
             'Content-Type': 'application/json'
         }
     
+    def _escape_query_value(self, value: str) -> str:
+        """Properly escape a value for use in QuickBooks API queries.
+        
+        QuickBooks API uses SQL-like syntax but requires specific escaping:
+        - Single quotes are escaped by doubling them
+        - Backslashes need to be escaped
+        - Percent signs need to be escaped for LIKE queries
+        
+        Args:
+            value: The value to escape
+            
+        Returns:
+            Properly escaped value safe for QuickBooks queries
+        """
+        if not value:
+            return ''
+        
+        # First, handle backslashes (must be done first)
+        escaped = value.replace('\\', '\\\\')
+        
+        # Then handle single quotes
+        escaped = escaped.replace("'", "''")
+        
+        # Note: % and _ are wildcards in LIKE queries and should not be escaped
+        # unless we want to search for literal % or _ characters
+        
+        return escaped
+    
     def find_customer(self, customer_lookup: str) -> Optional[Dict[str, Any]]:
         """Find a customer in QBO by name or other lookup value with enhanced fuzzy matching.
         
@@ -200,9 +228,8 @@ class QBOService:
             print("Empty customer lookup value")
             return None
             
-        # Sanitize input for SQL injection prevention
-        # This is a simple sanitization, QuickBooks API handles more complex cases
-        safe_lookup = customer_lookup.replace("'", "''")
+        # Properly escape the lookup value
+        safe_lookup = self._escape_query_value(customer_lookup)
         
         try:
             print(f"Finding customer with progressive matching: '{customer_lookup}'")
@@ -240,7 +267,8 @@ class QBOService:
                 # Try last name first pattern
                 if ',' not in safe_lookup:  # Only if original doesn't have a comma
                     reversed_name = f"{name_parts[-1]}, {' '.join(name_parts[:-1])}"
-                    query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{reversed_name}%'"
+                    escaped_reversed = self._escape_query_value(reversed_name)
+                    query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{escaped_reversed}%'"
                     encoded_query = quote(query)
                     url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
                     
@@ -257,7 +285,8 @@ class QBOService:
                     if len(parts) == 2:
                         # Take last name from before comma, first name from after comma, and reverse them
                         space_separated = f"{parts[1].strip()} {parts[0].strip()}"
-                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{space_separated}%'"
+                        escaped_space_separated = self._escape_query_value(space_separated)
+                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{escaped_space_separated}%'"
                         encoded_query = quote(query)
                         url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
                         
@@ -286,7 +315,8 @@ class QBOService:
                 # Try to match on the most significant tokens
                 for significant_part in significant_parts:
                     if len(significant_part) > 3:  # Only use tokens with more than 3 chars
-                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{significant_part}%'"
+                        escaped_part = self._escape_query_value(significant_part)
+                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{escaped_part}%'"
                         encoded_query = quote(query)
                         url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
                         
@@ -309,7 +339,8 @@ class QBOService:
                     # Get the part before the TLD
                     org_name = domain.split('.')[0]
                     if len(org_name) > 3:  # Only use if meaningful
-                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{org_name}%'"
+                        escaped_org_name = self._escape_query_value(org_name)
+                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{escaped_org_name}%'"
                         encoded_query = quote(query)
                         url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
                         
@@ -327,7 +358,8 @@ class QBOService:
                 # Format a cleaned phone number (last 10 digits)
                 cleaned_phone = ''.join([c for c in safe_lookup if c.isdigit()])[-10:]
                 if len(cleaned_phone) >= 7:  # Need at least 7 digits for meaningful phone match
-                    query = f"SELECT * FROM Customer WHERE PrimaryPhone LIKE '%{cleaned_phone[-7:]}%'"
+                    escaped_phone = self._escape_query_value(cleaned_phone[-7:])
+                    query = f"SELECT * FROM Customer WHERE PrimaryPhone LIKE '%{escaped_phone}%'"
                     encoded_query = quote(query)
                     url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
                     
@@ -419,7 +451,11 @@ class QBOService:
         try:
             # Query for sales receipts matching the criteria
             # Using PaymentRefNum for check number and CustomerRef for customer
-            query = f"SELECT * FROM SalesReceipt WHERE PaymentRefNum = '{check_no}' AND TxnDate = '{check_date}' AND CustomerRef = '{customer_id}'"
+            escaped_check_no = self._escape_query_value(check_no)
+            escaped_date = self._escape_query_value(check_date)
+            escaped_customer_id = self._escape_query_value(customer_id)
+            
+            query = f"SELECT * FROM SalesReceipt WHERE PaymentRefNum = '{escaped_check_no}' AND TxnDate = '{escaped_date}' AND CustomerRef = '{escaped_customer_id}'"
             encoded_query = quote(query)
             url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
             

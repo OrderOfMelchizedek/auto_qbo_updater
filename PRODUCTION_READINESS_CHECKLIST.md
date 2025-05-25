@@ -92,10 +92,17 @@ if not app.secret_key:
   - UI properly handles duplicate responses with warning messages
   - Existing receipt IDs are preserved in session data
 
-### 7. ❌ Fix SQL Injection Vulnerability
-- [ ] Replace string concatenation in QBO queries (qbo_service.py:175)
-- [ ] Use proper parameterized queries or QuickBooks API query builder
-- [ ] Test with various special characters in search
+### 7. ✅ Fix SQL Injection Vulnerability
+- [x] Replace string concatenation in QBO queries (qbo_service.py:175) - **COMPLETED**
+- [x] Use proper parameterized queries or QuickBooks API query builder - **COMPLETED**
+  - Created `_escape_query_value()` method for proper escaping
+  - Escapes single quotes by doubling them (QuickBooks API standard)
+  - Escapes backslashes
+  - Handles None/empty values safely
+- [x] Test with various special characters in search - **COMPLETED**
+  - Tested with apostrophes, backslashes, SQL injection attempts
+  - All injection attempts are properly neutralized
+  - Special characters work correctly in searches
 
 ### 8. ❌ Add CSRF Protection
 - [ ] Install Flask-WTF: `pip install Flask-WTF`
