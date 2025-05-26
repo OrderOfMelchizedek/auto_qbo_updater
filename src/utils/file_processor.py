@@ -176,7 +176,7 @@ class FileProcessor:
         # Match donations with QuickBooks customers if QBO service is available
         if self.qbo_service:
             print("Performing QBO customer matching for all donations...")
-            complete_donations = self.match_donations_with_qbo_customers(complete_donations)
+            complete_donations = self.match_donations_with_qbo_customers_batch(complete_donations)
                         
         # Return in the same format as the original data
         if isinstance(donation_data, list):
@@ -283,7 +283,7 @@ class FileProcessor:
             
             # Match each donation with QuickBooks customers
             if donation_data and self.qbo_service:
-                donation_data = self.match_donations_with_qbo_customers(donation_data)
+                donation_data = self.match_donations_with_qbo_customers_batch(donation_data)
                 
             return donation_data
             
@@ -293,6 +293,153 @@ class FileProcessor:
             
     # We no longer need to get all customers, as we're using direct QBO API lookups
         
+    def match_donations_with_qbo_customers_batch(self, donations):
+        """Match donations with existing QBO customers using batch processing for performance.
+        
+        Args:
+            donations: List of donation dictionaries or single donation dictionary
+            
+        Returns:
+            Enhanced donations with customer matching information
+        """
+        if not self.qbo_service:
+            print("QBO service not available - customer matching skipped")
+            return donations
+        
+        # Handle both single donation and list of donations
+        is_single = not isinstance(donations, list)
+        donations_list = [donations] if is_single else donations
+        
+        print(f"Batch matching {len(donations_list)} donation(s) with QBO API")
+        
+        # Step 1: Pre-load QBO customer cache for better performance
+        try:
+            self.qbo_service.get_all_customers(use_cache=True)
+            print("Customer cache preloaded successfully")
+        except Exception as e:
+            print(f"Warning: Could not preload customer cache: {e}")
+        
+        # Step 2: Collect all unique lookup values
+        all_lookups = set()
+        donation_to_lookups = {}
+        
+        for i, donation in enumerate(donations_list):
+            if not donation.get('Donor Name'):
+                donation_to_lookups[i] = []
+                continue
+            
+            # Collect lookup strategies for this donation
+            lookups = []
+            lookup_strategies = [
+                'customerLookup', 'Donor Name', 'Email', 'Phone'
+            ]
+            
+            for field in lookup_strategies:
+                value = donation.get(field)
+                if value and str(value).strip():
+                    clean_value = str(value).strip()
+                    lookups.append(clean_value)
+                    all_lookups.add(clean_value)
+            
+            donation_to_lookups[i] = lookups
+        
+        # Step 3: Batch lookup all unique customer names
+        print(f"Looking up {len(all_lookups)} unique customer values")
+        customer_results = self.qbo_service.find_customers_batch(list(all_lookups))
+        
+        # Step 4: Process each donation with pre-fetched results
+        matched_donations = []
+        
+        for i, donation in enumerate(donations_list):
+            if not donation.get('Donor Name'):
+                print("Donation missing donor name - skipping customer matching")
+                matched_donations.append(donation)
+                continue
+            
+            try:
+                # Find the first successful match from the batch results
+                customer = None
+                match_method = None
+                
+                for lookup_value in donation_to_lookups[i]:
+                    potential_customer = customer_results.get(lookup_value)
+                    if potential_customer:
+                        customer = potential_customer
+                        # Determine match method
+                        if lookup_value == donation.get('customerLookup'):
+                            match_method = 'explicit customerLookup field'
+                        elif lookup_value == donation.get('Donor Name'):
+                            match_method = 'donor name'
+                        elif lookup_value == donation.get('Email'):
+                            match_method = 'email address'
+                        elif lookup_value == donation.get('Phone'):
+                            match_method = 'phone number'
+                        else:
+                            match_method = 'unknown field'
+                        
+                        print(f"Customer found using {match_method}: {customer.get('DisplayName')}")
+                        break
+                
+                if customer:
+                    print(f"Verifying match between {donation.get('Donor Name')} and {customer.get('DisplayName')}")
+                    
+                    # Use Gemini to verify the match and enhance the data
+                    verification_result = self.gemini_service.verify_customer_match(donation, customer)
+                    
+                    # Process verification result (same logic as before)
+                    if verification_result.get('validMatch', False):
+                        print(f"Valid match confirmed with {verification_result.get('matchConfidence', 'unknown')} confidence")
+                        
+                        donation['customerLookup'] = customer.get('DisplayName', '')
+                        donation['qboCustomerId'] = customer.get('Id')
+                        donation['matchMethod'] = match_method
+                        donation['matchConfidence'] = verification_result.get('matchConfidence')
+                        
+                        if verification_result.get('addressMateriallyDifferent', False):
+                            print("Address is materially different - will need user confirmation")
+                            donation['qbCustomerStatus'] = 'Matched-AddressNeedsReview'
+                            donation['addressMateriallyDifferent'] = True
+                            
+                            if 'BillAddr' in customer:
+                                bill_addr = customer.get('BillAddr', {})
+                                donation['qboAddress'] = {
+                                    'Line1': bill_addr.get('Line1', ''),
+                                    'City': bill_addr.get('City', ''),
+                                    'State': bill_addr.get('CountrySubDivisionCode', ''),
+                                    'ZIP': bill_addr.get('PostalCode', '')
+                                }
+                        else:
+                            donation['qbCustomerStatus'] = 'Matched'
+                            
+                            if 'enhancedData' in verification_result:
+                                preserved_fields = ['Gift Amount', 'Gift Date', 'Check No', 'Memo']
+                                preserved_values = {field: donation.get(field) for field in preserved_fields if field in donation}
+                                
+                                enhanced_data = verification_result['enhancedData']
+                                for key, value in enhanced_data.items():
+                                    donation[key] = value
+                                    
+                                for field, value in preserved_values.items():
+                                    donation[field] = value
+                                    
+                                donation['customerLookup'] = customer.get('DisplayName', '')
+                    else:
+                        mismatch_reason = verification_result.get('mismatchReason', 'No specific reason provided')
+                        print(f"Not a valid match: {mismatch_reason}")
+                        donation['qbCustomerStatus'] = 'New'
+                        donation['matchRejectionReason'] = mismatch_reason
+                else:
+                    print(f"No customer found for donation from: {donation.get('Donor Name')}")
+                    donation['qbCustomerStatus'] = 'New'
+                
+                matched_donations.append(donation)
+                
+            except Exception as e:
+                print(f"Error matching donation: {str(e)}")
+                matched_donations.append(donation)
+        
+        return matched_donations[0] if is_single else matched_donations
+
     def match_donations_with_qbo_customers(self, donations):
         """Match extracted donations with QuickBooks customers using direct QBO API.
         
@@ -463,7 +610,7 @@ class FileProcessor:
                 # Match with QBO customers
                 if self.qbo_service and deduplicated:
                     print(f"Matching {len(deduplicated)} donations with QBO customers")
-                    deduplicated = self.match_donations_with_qbo_customers(deduplicated)
+                    deduplicated = self.match_donations_with_qbo_customers_batch(deduplicated)
                 
                 return deduplicated, all_errors
             

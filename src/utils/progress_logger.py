@@ -88,12 +88,9 @@ class ProgressLogger:
             log_messages = [log['message'] for log in self.logs[-10:]]  # Last 10 messages
             print(f"[ProgressLogger] Summarizing {len(log_messages)} messages")
             
-            if self.gemini_service:
-                summary = self._summarize_with_gemini(log_messages)
-            else:
-                # Fallback: simple concatenation
-                print("[ProgressLogger] No Gemini service, using simple summary")
-                summary = self._create_simple_summary(log_messages)
+            # Use simple summary to avoid Gemini API overhead
+            print("[ProgressLogger] Using simple summary for performance")
+            summary = self._create_simple_summary(log_messages)
             
             print(f"[ProgressLogger] Summary created: {summary[:100]}...")
             

@@ -9,6 +9,7 @@ import logging
 import threading
 from functools import lru_cache
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import custom exceptions and retry logic
 try:
@@ -280,6 +281,68 @@ class QBOService:
         
         return escaped
     
+    def find_customers_batch(self, customer_lookups: List[str]) -> Dict[str, Optional[Dict[str, Any]]]:
+        """Find multiple customers in QBO using batch processing for better performance.
+        
+        Args:
+            customer_lookups: List of customer names or lookup values
+            
+        Returns:
+            Dictionary mapping lookup values to customer data (or None if not found)
+        """
+        if not self.access_token or not self.realm_id:
+            print("Not authenticated with QBO")
+            return {lookup: None for lookup in customer_lookups}
+        
+        # Remove duplicates and empty values
+        unique_lookups = list(set([lookup.strip() for lookup in customer_lookups if lookup and lookup.strip()]))
+        
+        if not unique_lookups:
+            return {lookup: None for lookup in customer_lookups}
+        
+        results = {}
+        
+        # Check cache first
+        uncached_lookups = []
+        for lookup in unique_lookups:
+            cached_customer = self.get_cached_customer(lookup)
+            if cached_customer:
+                results[lookup] = cached_customer
+            else:
+                uncached_lookups.append(lookup)
+        
+        print(f"Batch customer lookup: {len(unique_lookups)} total, {len(uncached_lookups)} not in cache")
+        
+        # Process uncached lookups with parallel processing
+        if uncached_lookups:
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                future_to_lookup = {
+                    executor.submit(self.find_customer, lookup): lookup 
+                    for lookup in uncached_lookups
+                }
+                
+                for future in as_completed(future_to_lookup):
+                    lookup = future_to_lookup[future]
+                    try:
+                        customer = future.result()
+                        results[lookup] = customer
+                        
+                        # Cache the result for future use
+                        if customer:
+                            with self._cache_lock:
+                                self._customer_cache[lookup.lower()] = customer
+                    except Exception as e:
+                        print(f"Error finding customer '{lookup}': {str(e)}")
+                        results[lookup] = None
+        
+        # Map original input lookups to results (including duplicates)
+        final_results = {}
+        for original_lookup in customer_lookups:
+            clean_lookup = original_lookup.strip() if original_lookup else ''
+            final_results[original_lookup] = results.get(clean_lookup)
+        
+        return final_results
+
     def find_customer(self, customer_lookup: str) -> Optional[Dict[str, Any]]:
         """Find a customer in QBO by name or other lookup value with enhanced fuzzy matching.
         
@@ -454,6 +517,25 @@ class QBOService:
         except Exception as e:
             print(f"Exception in find_customer: {str(e)}")
             return None
+    
+    def get_customer_cache_stats(self) -> Dict[str, Any]:
+        """Get statistics about the customer cache.
+        
+        Returns:
+            Dictionary with cache statistics
+        """
+        with self._cache_lock:
+            cache_size = len([k for k in self._customer_cache.keys() if not k.startswith('id_')])
+            cache_age_seconds = 0
+            if self._cache_timestamp:
+                cache_age_seconds = datetime.now().timestamp() - self._cache_timestamp
+            
+            return {
+                'cache_size': cache_size,
+                'cache_age_seconds': cache_age_seconds,
+                'cache_valid': self._is_cache_valid(),
+                'cache_ttl': self._cache_ttl
+            }
     
     def create_customer(self, customer_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Create a new customer in QBO.

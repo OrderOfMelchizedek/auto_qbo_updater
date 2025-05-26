@@ -28,7 +28,7 @@ class BatchProcessor:
     """Handles concurrent batch processing of files."""
     
     # Configuration
-    PDF_BATCH_SIZE = 2  # Pages per PDF batch
+    PDF_BATCH_SIZE = 10  # Pages per PDF batch
     MAX_CONCURRENT_BATCHES = 10  # Maximum concurrent API calls
     
     def __init__(self, gemini_service: GeminiService, progress_logger: Optional[ProgressLogger] = None):
@@ -95,7 +95,7 @@ class BatchProcessor:
             pdf_doc = fitz.open(pdf_path)
             total_pages = len(pdf_doc)
             
-            # Create batches of 2 pages each
+            # Create batches of 10 pages each
             for batch_start in range(0, total_pages, self.PDF_BATCH_SIZE):
                 batch_end = min(batch_start + self.PDF_BATCH_SIZE, total_pages)
                 page_numbers = list(range(batch_start, batch_end))
