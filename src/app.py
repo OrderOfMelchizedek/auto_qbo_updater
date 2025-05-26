@@ -784,7 +784,7 @@ qbo_service = QBOService(
     environment=qbo_environment  # Use the command-line specified environment
 )
 # Pass both services to the file processor for integrated customer matching
-file_processor = FileProcessor(gemini_service, qbo_service)
+file_processor = FileProcessor(gemini_service, qbo_service, progress_logger)
 
 # Initialize progress logger with Gemini service
 init_progress_logger(gemini_service)
@@ -1117,101 +1117,206 @@ def upload_files():
         if not qbo_authenticated:
             warnings.append("QuickBooks is not connected. Customer matching will be skipped. Please connect to QuickBooks to enable automatic customer matching.")
         
-        for file in files:
-            if file.filename == '':
-                continue
+        # Check if we should use concurrent processing
+        use_concurrent = len(files) > 1 or any(file.filename.lower().endswith('.pdf') for file in files if file.filename)
+        
+        if use_concurrent:
+            # Prepare files for concurrent processing
+            log_progress(f"Preparing {len(files)} files for concurrent processing...")
+            files_to_process = []
             
-            try:
-                # Validate file extension first
-                original_filename = file.filename
-                _, ext = os.path.splitext(original_filename)
-                ext = ext.lower()
-                
-                if ext not in ALLOWED_EXTENSIONS:
-                    errors.append(f"File type not allowed: {original_filename}")
-                    log_progress(f"Skipping {original_filename} - file type not allowed")
+            # First, save and validate all files
+            for file in files:
+                if file.filename == '':
                     continue
                 
-                # Check file size before saving
-                file.seek(0, os.SEEK_END)
-                file_size = file.tell()
-                file.seek(0)  # Reset file pointer
-                
-                if file_size > MAX_FILE_SIZE:
-                    errors.append(f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB, max {MAX_FILE_SIZE / 1024 / 1024}MB)")
-                    log_progress(f"Skipping {original_filename} - file too large")
-                    continue
-                
-                # Generate secure filename
-                secure_name = generate_secure_filename(original_filename)
-                file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
-                
-                log_progress(f"Saving {original_filename} securely...")
-                file.save(file_path)
-                uploaded_files.append(file_path)  # Track for cleanup
-                
-                # Validate file content
-                is_valid, error_msg = validate_file_content(file_path)
-                if not is_valid:
-                    errors.append(f"Invalid file content: {original_filename} - {error_msg}")
-                    log_progress(f"Skipping {original_filename} - {error_msg}")
-                    cleanup_uploaded_file(file_path)
-                    uploaded_files.remove(file_path)
-                    continue
-                
-                file_size_mb = file_size / (1024 * 1024)
-                log_progress(f"File validated: {original_filename} ({file_size_mb:.1f}MB)")
-                
-                # Process different file types
-                file_ext = ext  # We already have the extension
-                
-                if file_ext in ['.jpg', '.jpeg', '.png', '.pdf', '.csv']:
-                    # Process all files using Gemini
-                    file_type = "spreadsheet" if file_ext == '.csv' else "image" if file_ext in ['.jpg', '.jpeg', '.png'] else "PDF document"
-                    log_progress(f"Reading {file_type}: {original_filename}")
+                try:
+                    # Validate file extension first
+                    original_filename = file.filename
+                    _, ext = os.path.splitext(original_filename)
+                    ext = ext.lower()
                     
-                    log_progress(f"Analyzing content of {original_filename}...")
-                    extracted_data = file_processor.process(file_path, file_ext)
-                    log_progress(f"Content analysis complete for {original_filename}")
+                    if ext not in ALLOWED_EXTENSIONS:
+                        errors.append(f"File type not allowed: {original_filename}")
+                        log_progress(f"Skipping {original_filename} - file type not allowed")
+                        continue
+                
+                    # Check file size before saving
+                    file.seek(0, os.SEEK_END)
+                    file_size = file.tell()
+                    file.seek(0)  # Reset file pointer
                     
-                    # Set the data source based on file type
-                    data_source = 'CSV' if file_ext == '.csv' else 'LLM'
-                    source_prefix = 'csv' if file_ext == '.csv' else 'llm'
+                    if file_size > MAX_FILE_SIZE:
+                        errors.append(f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB, max {MAX_FILE_SIZE / 1024 / 1024}MB)")
+                        log_progress(f"Skipping {original_filename} - file too large")
+                        continue
+                
+                    # Generate secure filename
+                    secure_name = generate_secure_filename(original_filename)
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
                     
-                    if extracted_data:
-                        # Check if we have a list of donations or a single donation
-                        if isinstance(extracted_data, list):
-                            log_progress(f"Found {len(extracted_data)} donation records in {original_filename}")
-                            log_progress(f"Processing individual donations from {original_filename}...")
-                            for idx, donation in enumerate(extracted_data):
-                                if idx % 5 == 0 and idx > 0:
-                                    log_progress(f"Processed {idx} of {len(extracted_data)} donations from {original_filename}")
-                                donation['dataSource'] = data_source
-                                donation['internalId'] = f"{source_prefix}_{len(donations) + idx}"
-                                donation['qbSyncStatus'] = 'Pending'
-                                # Only initialize as Unknown if no status was set during matching
-                                if 'qbCustomerStatus' not in donation:
-                                    donation['qbCustomerStatus'] = 'Unknown'
-                                donations.append(donation)
-                        else:
-                            # Single donation (typically from image)
-                            extracted_data['dataSource'] = data_source
-                            extracted_data['internalId'] = f"{source_prefix}_{len(donations)}"
-                            extracted_data['qbSyncStatus'] = 'Pending'
-                            # Only initialize as Unknown if no status was set during matching
-                            if 'qbCustomerStatus' not in extracted_data:
-                                extracted_data['qbCustomerStatus'] = 'Unknown'
-                            donations.append(extracted_data)
+                    log_progress(f"Saving {original_filename} securely...")
+                    file.save(file_path)
+                    uploaded_files.append(file_path)  # Track for cleanup
+                    
+                    # Validate file content
+                    is_valid, error_msg = validate_file_content(file_path)
+                    if not is_valid:
+                        errors.append(f"Invalid file content: {original_filename} - {error_msg}")
+                        log_progress(f"Skipping {original_filename} - {error_msg}")
+                        cleanup_uploaded_file(file_path)
+                        uploaded_files.remove(file_path)
+                        continue
+                
+                    files_to_process.append((file_path, ext))
+                    log_progress(f"File validated: {original_filename}")
+                    
+                except Exception as e:
+                    log_progress(f"Error preparing {original_filename}: {str(e)}")
+                    errors.append(f"Error preparing {original_filename}: {str(e)}")
+            
+            # Process all files concurrently
+            if files_to_process:
+                log_progress(f"Processing {len(files_to_process)} files concurrently...")
+                
+                # Count expected batches
+                total_batches = 0
+                for file_path, ext in files_to_process:
+                    if ext == '.pdf':
+                        # Count PDF pages to estimate batches
+                        try:
+                            import fitz
+                            pdf_doc = fitz.open(file_path)
+                            pages = len(pdf_doc)
+                            pdf_doc.close()
+                            total_batches += (pages + 1) // 2  # 2 pages per batch
+                        except:
+                            total_batches += 1
                     else:
-                        log_progress(f"Could not extract donation data from {original_filename}")
-                        errors.append(f"No donation data could be extracted from {original_filename}")
-                else:
-                    log_progress(f"Unsupported file type: {file_ext}")
-                    errors.append(f"Unsupported file type: {file_ext}")
-            
-            except Exception as e:
-                log_progress(f"Error processing {original_filename}: {str(e)}")
-                errors.append(f"Error processing {original_filename}: {str(e)}")
+                        total_batches += 1
+                
+                log_progress(f"Processing {total_batches} batches across {len(files_to_process)} files...")
+                
+                # Process files concurrently
+                concurrent_donations, concurrent_errors = file_processor.process_files_concurrently(
+                    files_to_process, 
+                    task_id=session_id
+                )
+                
+                # Add data source and internal IDs to donations
+                for idx, donation in enumerate(concurrent_donations):
+                    # Determine data source
+                    data_source = 'CSV' if any(fp.endswith('.csv') for fp, _ in files_to_process) else 'LLM'
+                    source_prefix = 'csv' if data_source == 'CSV' else 'llm'
+                    
+                    donation['dataSource'] = data_source
+                    donation['internalId'] = f"{source_prefix}_{idx}"
+                    donation['qbSyncStatus'] = 'Pending'
+                    # Only initialize as Unknown if no status was set during matching
+                    if 'qbCustomerStatus' not in donation:
+                        donation['qbCustomerStatus'] = 'Unknown'
+                
+                donations.extend(concurrent_donations)
+                errors.extend(concurrent_errors)
+                
+                log_progress(f"Concurrent processing complete: {len(donations)} donations extracted")
+        else:
+            # Single file processing (keep existing logic)
+            for file in files:
+                if file.filename == '':
+                    continue
+                
+                try:
+                    # Validate file extension first
+                    original_filename = file.filename
+                    _, ext = os.path.splitext(original_filename)
+                    ext = ext.lower()
+                    
+                    if ext not in ALLOWED_EXTENSIONS:
+                        errors.append(f"File type not allowed: {original_filename}")
+                        log_progress(f"Skipping {original_filename} - file type not allowed")
+                        continue
+                    
+                    # Check file size before saving
+                    file.seek(0, os.SEEK_END)
+                    file_size = file.tell()
+                    file.seek(0)  # Reset file pointer
+                    
+                    if file_size > MAX_FILE_SIZE:
+                        errors.append(f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB, max {MAX_FILE_SIZE / 1024 / 1024}MB)")
+                        log_progress(f"Skipping {original_filename} - file too large")
+                        continue
+                    
+                    # Generate secure filename
+                    secure_name = generate_secure_filename(original_filename)
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+                    
+                    log_progress(f"Saving {original_filename} securely...")
+                    file.save(file_path)
+                    uploaded_files.append(file_path)  # Track for cleanup
+                    
+                    # Validate file content
+                    is_valid, error_msg = validate_file_content(file_path)
+                    if not is_valid:
+                        errors.append(f"Invalid file content: {original_filename} - {error_msg}")
+                        log_progress(f"Skipping {original_filename} - {error_msg}")
+                        cleanup_uploaded_file(file_path)
+                        uploaded_files.remove(file_path)
+                        continue
+                    
+                    file_size_mb = file_size / (1024 * 1024)
+                    log_progress(f"File validated: {original_filename} ({file_size_mb:.1f}MB)")
+                    
+                    # Process different file types
+                    file_ext = ext  # We already have the extension
+                    
+                    if file_ext in ['.jpg', '.jpeg', '.png', '.pdf', '.csv']:
+                        # Process all files using Gemini
+                        file_type = "spreadsheet" if file_ext == '.csv' else "image" if file_ext in ['.jpg', '.jpeg', '.png'] else "PDF document"
+                        log_progress(f"Reading {file_type}: {original_filename}")
+                        
+                        log_progress(f"Analyzing content of {original_filename}...")
+                        extracted_data = file_processor.process(file_path, file_ext)
+                        log_progress(f"Content analysis complete for {original_filename}")
+                        
+                        # Set the data source based on file type
+                        data_source = 'CSV' if file_ext == '.csv' else 'LLM'
+                        source_prefix = 'csv' if file_ext == '.csv' else 'llm'
+                        
+                        if extracted_data:
+                            # Check if we have a list of donations or a single donation
+                            if isinstance(extracted_data, list):
+                                log_progress(f"Found {len(extracted_data)} donation records in {original_filename}")
+                                log_progress(f"Processing individual donations from {original_filename}...")
+                                for idx, donation in enumerate(extracted_data):
+                                    if idx % 5 == 0 and idx > 0:
+                                        log_progress(f"Processed {idx} of {len(extracted_data)} donations from {original_filename}")
+                                    donation['dataSource'] = data_source
+                                    donation['internalId'] = f"{source_prefix}_{len(donations) + idx}"
+                                    donation['qbSyncStatus'] = 'Pending'
+                                    # Only initialize as Unknown if no status was set during matching
+                                    if 'qbCustomerStatus' not in donation:
+                                        donation['qbCustomerStatus'] = 'Unknown'
+                                    donations.append(donation)
+                            else:
+                                # Single donation (typically from image)
+                                extracted_data['dataSource'] = data_source
+                                extracted_data['internalId'] = f"{source_prefix}_{len(donations)}"
+                                extracted_data['qbSyncStatus'] = 'Pending'
+                                # Only initialize as Unknown if no status was set during matching
+                                if 'qbCustomerStatus' not in extracted_data:
+                                    extracted_data['qbCustomerStatus'] = 'Unknown'
+                                donations.append(extracted_data)
+                        else:
+                            log_progress(f"Could not extract donation data from {original_filename}")
+                            errors.append(f"No donation data could be extracted from {original_filename}")
+                    else:
+                        log_progress(f"Unsupported file type: {file_ext}")
+                        errors.append(f"Unsupported file type: {file_ext}")
+                
+                except Exception as e:
+                    log_progress(f"Error processing {original_filename}: {str(e)}")
+                    errors.append(f"Error processing {original_filename}: {str(e)}")
         
         # Process donations
         if donations:

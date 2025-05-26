@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, Tuple
 import PyPDF2
 from PIL import Image
 import io
@@ -9,24 +9,31 @@ import io
 try:
     from src.utils.gemini_service import GeminiService
     from src.utils.prompt_manager import PromptManager
+    from src.utils.batch_processor import BatchProcessor
+    from src.utils.progress_logger import ProgressLogger
 except ModuleNotFoundError:
     # Fall back to relative imports if running directly
     from utils.gemini_service import GeminiService
     from utils.prompt_manager import PromptManager
+    from utils.batch_processor import BatchProcessor
+    from utils.progress_logger import ProgressLogger
 
 class FileProcessor:
     """Service for processing different file types (images, PDFs) for donation extraction."""
     
-    def __init__(self, gemini_service: GeminiService, qbo_service=None):
+    def __init__(self, gemini_service: GeminiService, qbo_service=None, progress_logger=None):
         """Initialize the file processor with Gemini and QBO services.
         
         Args:
             gemini_service: Service for AI-based extraction
             qbo_service: Optional QuickBooks Online service for customer lookups
+            progress_logger: Optional progress logger for tracking batch processing
         """
         self.gemini_service = gemini_service
         self.qbo_service = qbo_service
+        self.progress_logger = progress_logger
         self.prompt_manager = PromptManager(prompt_dir='docs/prompts_archive')
+        self.batch_processor = BatchProcessor(gemini_service, progress_logger)
     
     def process(self, file_path: str, file_ext: str) -> Any:
         """Process a file to extract donation information.
@@ -419,3 +426,83 @@ class FileProcessor:
         
         # Return in the same format as input
         return matched_donations[0] if is_single else matched_donations
+    
+    def process_files_concurrently(self, files: List[Tuple[str, str]], task_id: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """Process multiple files concurrently using batch processing.
+        
+        Args:
+            files: List of tuples (file_path, file_type)
+            task_id: Optional task ID for progress tracking
+            
+        Returns:
+            Tuple of (all_donations, all_errors)
+        """
+        try:
+            # Prepare batches from all files
+            print(f"Preparing batches for {len(files)} files")
+            batches = self.batch_processor.prepare_batches(files)
+            print(f"Created {len(batches)} batches for concurrent processing")
+            
+            # Process all batches concurrently
+            all_donations, all_errors = self.batch_processor.process_batches_concurrently(batches, task_id)
+            
+            # Perform validation and reprocessing on all donations
+            if all_donations:
+                print(f"Validating and enhancing {len(all_donations)} donations")
+                validated_donations = []
+                
+                for donation in all_donations:
+                    # For concurrent processing, donations are already validated by the batch processor
+                    # Just add them to the validated list
+                    validated_donations.append(donation)
+                
+                # Deduplicate all donations after batch processing
+                print(f"Deduplicating {len(validated_donations)} donations")
+                deduplicated = self._deduplicate_donations(validated_donations)
+                
+                # Match with QBO customers
+                if self.qbo_service and deduplicated:
+                    print(f"Matching {len(deduplicated)} donations with QBO customers")
+                    deduplicated = self.match_donations_with_qbo_customers(deduplicated)
+                
+                return deduplicated, all_errors
+            
+            return [], all_errors
+            
+        except Exception as e:
+            error_msg = f"Error in concurrent file processing: {str(e)}"
+            print(error_msg)
+            return [], [error_msg]
+    
+    def _deduplicate_donations(self, donations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Deduplicate donations based on key fields.
+        
+        Args:
+            donations: List of donation dictionaries
+            
+        Returns:
+            List of unique donations
+        """
+        seen = {}
+        unique_donations = []
+        
+        for donation in donations:
+            # Create a key based on donor name, amount, date, and check number
+            key = (
+                donation.get('Donor Name', '').lower().strip(),
+                donation.get('Gift Amount', ''),
+                donation.get('Gift Date', ''),
+                donation.get('Check No.', '')
+            )
+            
+            if key not in seen:
+                seen[key] = donation
+                unique_donations.append(donation)
+            else:
+                # Merge duplicate donations, keeping the most complete data
+                existing = seen[key]
+                for field, value in donation.items():
+                    if value and not existing.get(field):
+                        existing[field] = value
+        
+        return unique_donations

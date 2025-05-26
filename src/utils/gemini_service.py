@@ -509,6 +509,76 @@ class GeminiService:
         except Exception as e:
             print(f"Error calling Gemini API: {str(e)}")
             return None
+    def extract_donation_data_from_content(self, content: Dict[str, Any], 
+                                          file_type: str = 'pdf_batch',
+                                          batch_info: Optional[str] = None) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
+        """Extract donation data from prepared content (for batch processing).
+        
+        Args:
+            content: Dictionary containing 'images', 'text', and 'page_info'
+            file_type: Type of content being processed
+            batch_info: Optional batch identification info
+            
+        Returns:
+            Dictionary or list of dictionaries with donation data
+        """
+        try:
+            # Get the extraction prompt
+            extraction_prompt = self.prompt_manager.get_prompt('simplified_extraction_prompt')
+            
+            # Build content parts for Gemini
+            content_parts = [extraction_prompt]
+            
+            # Add text context if available
+            if content.get('text'):
+                pdf_context = self.prompt_manager.get_prompt('simplified_pdf_context', 
+                                                            {'pdf_text': content['text']})
+                content_parts[0] += f"\n\n{pdf_context}"
+            
+            # Add page info if available
+            if content.get('page_info'):
+                content_parts[0] += f"\n\nProcessing {content['page_info']}."
+            
+            # Add batch info if provided
+            if batch_info:
+                content_parts[0] += f"\n\nBatch: {batch_info}"
+            
+            # Add images
+            if content.get('images'):
+                content_parts.extend(content['images'])
+            
+            # Check rate limit before making API call
+            self._check_rate_limit()
+            
+            # Set up model
+            model = genai.GenerativeModel(self.model_name)
+            
+            # Call Gemini API
+            print(f"Sending batch {batch_info or 'unknown'} to Gemini")
+            response = model.generate_content(
+                contents=content_parts,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.2
+                )
+            )
+            
+            # Extract and parse response
+            if response and response.text:
+                parsed_json = self._extract_json_from_text(response.text)
+                if parsed_json:
+                    if isinstance(parsed_json, list):
+                        print(f"Batch {batch_info or 'unknown'} extracted {len(parsed_json)} donations")
+                        return parsed_json
+                    else:
+                        return [parsed_json]
+            
+            print(f"Failed to extract donation data from batch {batch_info or 'unknown'}")
+            return None
+            
+        except Exception as e:
+            print(f"Error processing content batch {batch_info or 'unknown'}: {str(e)}")
+            return None
+    
     def generate_text(self, prompt: str) -> Optional[str]:
         """Generate text response from Gemini for general prompts.
         
