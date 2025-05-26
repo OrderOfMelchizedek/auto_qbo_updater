@@ -6,6 +6,9 @@ import base64
 from urllib.parse import urlencode, quote
 import time
 import logging
+import threading
+from functools import lru_cache
+from datetime import datetime, timedelta
 
 # Import custom exceptions and retry logic
 try:
@@ -54,6 +57,12 @@ class QBOService:
         
         # Token persistence (for future implementation)
         # TODO: Implement token storage (database or secure file storage)
+        
+        # Performance optimization: Customer caching
+        self._customer_cache = {}
+        self._cache_timestamp = None
+        self._cache_lock = threading.Lock()
+        self._cache_ttl = 300  # 5 minutes cache TTL
     
     def get_authorization_url(self) -> str:
         """Get the QBO authorization URL for OAuth flow.
@@ -257,8 +266,14 @@ class QBOService:
         
         # Handle empty lookup values
         if not customer_lookup or customer_lookup.strip() == '':
-            print("Empty customer lookup value")
+            logger.warning("Empty customer lookup value")
             return None
+        
+        # Try cache first for performance
+        cached_customer = self.get_cached_customer(customer_lookup)
+        if cached_customer:
+            logger.info(f"Found customer '{customer_lookup}' in cache: {cached_customer.get('DisplayName')}")
+            return cached_customer
             
         # Properly escape the lookup value
         safe_lookup = self._escape_query_value(customer_lookup)
@@ -628,17 +643,93 @@ class QBOService:
             import traceback
             traceback.print_exc()
             return {"error": True, "message": str(e)}
+    
+    def _is_cache_valid(self) -> bool:
+        """Check if customer cache is still valid.
+        
+        Returns:
+            True if cache is valid, False otherwise
+        """
+        if not self._cache_timestamp:
+            return False
+        
+        cache_age = datetime.now().timestamp() - self._cache_timestamp
+        return cache_age < self._cache_ttl
+    
+    def _update_customer_cache(self, customers: List[Dict[str, Any]]) -> None:
+        """Update the customer cache with new data.
+        
+        Args:
+            customers: List of customer dictionaries
+        """
+        with self._cache_lock:
+            self._customer_cache = {
+                customer.get('DisplayName', '').lower(): customer
+                for customer in customers
+                if customer.get('DisplayName')
+            }
+            # Also cache by ID for quick lookups
+            for customer in customers:
+                if customer.get('Id'):
+                    self._customer_cache[f"id_{customer['Id']}"] = customer
             
-    def get_all_customers(self) -> List[Dict[str, Any]]:
+            self._cache_timestamp = datetime.now().timestamp()
+            logger.info(f"Updated customer cache with {len(customers)} customers")
+    
+    def get_cached_customer(self, lookup_value: str) -> Optional[Dict[str, Any]]:
+        """Get customer from cache by name or ID.
+        
+        Args:
+            lookup_value: Customer name or ID to lookup
+            
+        Returns:
+            Customer data if found in cache, None otherwise
+        """
+        if not self._is_cache_valid():
+            return None
+            
+        with self._cache_lock:
+            # Try exact match first
+            customer = self._customer_cache.get(lookup_value.lower())
+            if customer:
+                return customer
+            
+            # Try partial match for names
+            lookup_lower = lookup_value.lower()
+            for cached_name, customer in self._customer_cache.items():
+                if not cached_name.startswith('id_') and lookup_lower in cached_name:
+                    return customer
+            
+            return None
+    
+    def clear_customer_cache(self) -> None:
+        """Clear the customer cache."""
+        with self._cache_lock:
+            self._customer_cache.clear()
+            self._cache_timestamp = None
+            logger.info("Customer cache cleared")
+            
+    def get_all_customers(self, use_cache: bool = True) -> List[Dict[str, Any]]:
         """Fetch the complete list of customers from QBO.
+        
+        Args:
+            use_cache: Whether to use cached data if available
         
         Returns:
             List of all customer data dictionaries
         """
+        # Check cache first if enabled
+        if use_cache and self._is_cache_valid():
+            with self._cache_lock:
+                cached_customers = [customer for key, customer in self._customer_cache.items() 
+                                  if not key.startswith('id_')]
+                if cached_customers:
+                    logger.info(f"Returning {len(cached_customers)} customers from cache")
+                    return cached_customers
+        
         if not self.access_token or not self.realm_id:
-            print("Not authenticated with QBO - Missing access_token or realm_id")
-            print(f"access_token exists: {self.access_token is not None}")
-            print(f"realm_id exists: {self.realm_id is not None}")
+            logger.error("Not authenticated with QBO - Missing access_token or realm_id")
+            raise QBOAPIException("QuickBooks not authenticated", is_user_error=True)
             return []
         
         try:
@@ -704,15 +795,17 @@ class QBOService:
                     print(f"Error details: {error_text}")
                     break
             
-            print("==== CUSTOMER RETRIEVAL SUMMARY ====")
-            print(f"Successfully retrieved {len(customers)} customers in {batch_count} batches")
+            logger.info(f"Successfully retrieved {len(customers)} customers in {batch_count} batches")
             
             # Log a few customer names for verification
             if customers:
-                print("Sample of retrieved customers:")
+                logger.debug("Sample of retrieved customers:")
                 for i, customer in enumerate(customers[:5]):
-                    print(f"  {i+1}. {customer.get('DisplayName', 'Unknown')}")
-                print("  ...")
+                    logger.debug(f"  {i+1}. {customer.get('DisplayName', 'Unknown')}")
+            
+            # Cache the results if we have customers
+            if use_cache and customers:
+                self._update_customer_cache(customers)
                 
             return customers
         except Exception as e:

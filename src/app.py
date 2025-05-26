@@ -7,6 +7,7 @@ from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from werkzeug.utils import secure_filename
 import pandas as pd
 from dotenv import load_dotenv
@@ -197,6 +198,101 @@ def log_audit_event(event_type, user_id=None, details=None, request_ip=None):
     }
     
     audit_logger.info(json.dumps(event_data))
+
+def process_single_file(file_data, qbo_authenticated):
+    """Process a single file for donation extraction.
+    
+    Args:
+        file_data: Dictionary containing file information
+        qbo_authenticated: Whether QBO is authenticated
+        
+    Returns:
+        Dictionary with processing results
+    """
+    result = {
+        'success': False,
+        'filename': file_data['filename'],
+        'error': None,
+        'donations': [],
+        'file_path': None,
+        'processing_time': 0
+    }
+    
+    import time
+    start_time = time.time()
+    
+    try:
+        file_storage = file_data['file_storage']
+        original_filename = file_data['filename']
+        
+        # Validate file extension
+        _, ext = os.path.splitext(original_filename)
+        ext = ext.lower()
+        
+        if ext not in ALLOWED_EXTENSIONS:
+            result['error'] = f"File type not allowed: {original_filename}"
+            return result
+        
+        # Check file size
+        file_storage.seek(0, os.SEEK_END)
+        file_size = file_storage.tell()
+        file_storage.seek(0)
+        
+        if file_size > MAX_FILE_SIZE:
+            result['error'] = f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB)"
+            return result
+        
+        # Generate secure filename and save
+        secure_name = generate_secure_filename(original_filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+        
+        file_storage.save(file_path)
+        result['file_path'] = file_path
+        
+        # Validate file content
+        with open(file_path, 'rb') as f:
+            file_content = f.read()
+        
+        is_valid = validate_file_content(file_content, original_filename)
+        if not is_valid:
+            result['error'] = f"Invalid file content: {original_filename}"
+            cleanup_uploaded_file(file_path)
+            return result
+        
+        # Process the file
+        log_progress(f"Processing {original_filename} in parallel...")
+        extracted_data = file_processor.process(file_path, ext)
+        
+        if extracted_data:
+            if isinstance(extracted_data, list):
+                result['donations'] = extracted_data
+            else:
+                result['donations'] = [extracted_data]
+            
+            # Apply customer matching if QBO is authenticated
+            if qbo_authenticated and result['donations']:
+                for donation in result['donations']:
+                    if donation.get('Donor Name'):
+                        customer = qbo_service.find_customer(donation['Donor Name'])
+                        if customer:
+                            donation['qboCustomerId'] = customer.get('Id')
+                            donation['qbCustomerStatus'] = 'Found'
+                            donation['matchMethod'] = 'Automatic'
+                            donation['matchConfidence'] = 'High'
+            
+            result['success'] = True
+            log_progress(f"Successfully processed {original_filename}: {len(result['donations'])} donations found")
+        else:
+            result['error'] = f"No donation data extracted from {original_filename}"
+            
+    except Exception as e:
+        result['error'] = f"Error processing {original_filename}: {str(e)}"
+        logger.error(f"Error in process_single_file: {e}", exc_info=True)
+        
+    finally:
+        result['processing_time'] = time.time() - start_time
+        
+    return result
 
 # File upload security configuration
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.pdf', '.csv'}
@@ -1233,9 +1329,37 @@ def test_progress():
 
 @app.route('/donations', methods=['GET'])
 def get_donations():
-    """Return all donations currently in the session."""
+    """Return donations with pagination support."""
+    # Get pagination parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 50, type=int), 200)  # Max 200 per page
+    
     donations = session.get('donations', [])
-    return jsonify(donations)
+    total = len(donations)
+    
+    # Calculate pagination
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated_donations = donations[start:end]
+    
+    # Calculate pagination info
+    total_pages = (total + per_page - 1) // per_page if total > 0 else 1
+    has_next = page < total_pages
+    has_prev = page > 1
+    
+    return jsonify({
+        'donations': paginated_donations,
+        'pagination': {
+            'page': page,
+            'per_page': per_page,
+            'total': total,
+            'total_pages': total_pages,
+            'has_next': has_next,
+            'has_prev': has_prev,
+            'next_page': page + 1 if has_next else None,
+            'prev_page': page - 1 if has_prev else None
+        }
+    })
 
 @app.route('/session-info')
 def session_info():
