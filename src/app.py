@@ -858,6 +858,15 @@ def index():
     """Render the main application page."""
     return render_template('index.html')
 
+@app.route('/upload-test', methods=['POST'])
+def upload_test():
+    """Simple upload test endpoint."""
+    return jsonify({
+        'success': True,
+        'message': 'Upload endpoint is working',
+        'timestamp': datetime.now().isoformat()
+    })
+
 @app.route('/health')
 def health_check():
     """Basic health check endpoint - does not test external services."""
@@ -1120,7 +1129,17 @@ def upload_start():
 @limiter.limit("10 per hour")
 def upload_files():
     """Handle file uploads (images, PDFs, CSV)."""
+    print("[UPLOAD] Upload endpoint called")
     try:
+        # Quick health check - return immediately if no files
+        print("[UPLOAD] Checking for files in request")
+        if 'files' not in request.files:
+            print("[UPLOAD] No files in request")
+            return jsonify({
+                'success': False,
+                'message': 'No files provided',
+                'progressSessionId': None
+            }), 400
         # Get session ID from request or create new one
         import uuid
         import time
@@ -1209,7 +1228,8 @@ def upload_files():
             warnings.append("QuickBooks is not connected. Customer matching will be skipped. Please connect to QuickBooks to enable automatic customer matching.")
         
         # Check if we should use concurrent processing
-        use_concurrent = len(files) > 1 or any(file.filename.lower().endswith('.pdf') for file in files if file.filename)
+        # TEMPORARY: Disable concurrent processing for debugging
+        use_concurrent = False  # len(files) > 1 or any(file.filename.lower().endswith('.pdf') for file in files if file.filename)
         
         if use_concurrent:
             # Prepare files for concurrent processing
