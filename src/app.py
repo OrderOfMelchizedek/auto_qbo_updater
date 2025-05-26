@@ -1110,6 +1110,132 @@ def upload_start():
         'sessionId': session_id
     })
 
+@app.route('/upload-async', methods=['POST'])
+@limiter.limit("10 per hour")
+def upload_files_async():
+    """Handle file uploads asynchronously using Celery."""
+    try:
+        # Import Celery task
+        from utils.tasks import process_files_task
+        
+        # Get session ID from request or create new one
+        import uuid
+        import base64
+        session_id = request.form.get('sessionId')
+        
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            progress_logger.start_session(session_id)
+        
+        # Check if request has files
+        if 'files' not in request.files:
+            return jsonify({
+                'success': False,
+                'message': 'No files were selected'
+            }), 400
+        
+        files = request.files.getlist('files')
+        if not files or len(files) == 0 or all(file.filename == '' for file in files):
+            return jsonify({
+                'success': False,
+                'message': 'No files were selected'
+            }), 400
+        
+        # Prepare files for Celery task
+        files_data = []
+        for file in files:
+            if file.filename == '':
+                continue
+            
+            # Read file content and encode as base64
+            file_content = file.read()
+            file_data = {
+                'filename': file.filename,
+                'content': base64.b64encode(file_content).decode('utf-8'),
+                'content_type': file.content_type or 'application/octet-stream'
+            }
+            files_data.append(file_data)
+        
+        # Prepare QBO config if authenticated
+        qbo_config = None
+        if qbo_service.is_authenticated():
+            qbo_config = {
+                'access_token': qbo_service.access_token,
+                'refresh_token': qbo_service.refresh_token,
+                'realm_id': qbo_service.realm_id,
+                'environment': qbo_service.environment
+            }
+        
+        # Queue the task
+        task = process_files_task.apply_async(
+            args=[files_data],
+            kwargs={
+                'session_id': session_id,
+                'qbo_config': qbo_config,
+                'gemini_model': gemini_model
+            },
+            task_id=f"process_{session_id}"
+        )
+        
+        # Log initial progress
+        log_progress(f"Files queued for processing. Task ID: {task.id}", session_id=session_id)
+        log_progress("Your files are being processed in the background...", session_id=session_id, force_summary=True)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Files queued for processing',
+            'task_id': task.id,
+            'progressSessionId': session_id,
+            'qboAuthenticated': qbo_service.is_authenticated()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in async upload: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error queuing files: {str(e)}'
+        }), 500
+
+@app.route('/task-status/<task_id>', methods=['GET'])
+def get_task_status(task_id):
+    """Get the status of a Celery task."""
+    try:
+        from utils.tasks import celery_app
+        from celery.result import AsyncResult
+        
+        result = AsyncResult(task_id, app=celery_app)
+        
+        if result.state == 'PENDING':
+            response = {
+                'state': result.state,
+                'status': 'Task is waiting to be processed...'
+            }
+        elif result.state == 'SUCCESS':
+            response = {
+                'state': result.state,
+                'result': result.result
+            }
+        elif result.state == 'FAILURE':
+            response = {
+                'state': result.state,
+                'error': str(result.info)
+            }
+        else:
+            # RUNNING, RETRY, etc.
+            response = {
+                'state': result.state,
+                'info': result.info if result.info else 'Processing...'
+            }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        logger.error(f"Error checking task status: {str(e)}")
+        return jsonify({
+            'state': 'ERROR',
+            'error': str(e)
+        }), 500
+
 @app.route('/upload', methods=['POST'])
 @limiter.limit("10 per hour")
 def upload_files():
@@ -1632,6 +1758,66 @@ def remove_invalid_donations():
         'success': True,
         'removedCount': removed_count
     })
+
+@app.route('/donations/update-session', methods=['POST'])
+def update_donations_session():
+    """Update session with donations from async task."""
+    try:
+        data = request.json
+        if not data or 'donations' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'No donations provided'
+            }), 400
+        
+        new_donations = data['donations']
+        
+        # Get existing donations from session
+        existing_donations = session.get('donations', [])
+        
+        # Deduplicate if there are existing donations
+        if existing_donations:
+            from collections import defaultdict
+            donation_map = defaultdict(list)
+            
+            # Add existing donations to map
+            for donation in existing_donations:
+                key = generate_dedup_key(donation)
+                donation_map[key].append(donation)
+            
+            # Process new donations
+            for new_donation in new_donations:
+                key = generate_dedup_key(new_donation)
+                if key in donation_map:
+                    # Merge with existing
+                    existing = donation_map[key][0]
+                    merged = synthesize_donation_data(existing, new_donation)
+                    donation_map[key] = [merged]
+                else:
+                    # Add new donation
+                    donation_map[key].append(new_donation)
+            
+            # Flatten the map back to a list
+            deduplicated_donations = []
+            for donations_list in donation_map.values():
+                deduplicated_donations.extend(donations_list)
+            
+            session['donations'] = deduplicated_donations
+        else:
+            # No existing donations, just use new ones
+            session['donations'] = new_donations
+        
+        return jsonify({
+            'success': True,
+            'totalDonations': len(session['donations'])
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating donations session: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error updating session: {str(e)}'
+        }), 500
 
 @app.route('/qbo/status')
 def qbo_status():

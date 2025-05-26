@@ -2422,6 +2422,174 @@ function uploadAndProcessFiles(files) {
         });
 }
 
+// Async upload function using Celery
+function uploadAndProcessFilesAsync(files) {
+    // Create form data
+    const formData = new FormData();
+    files.forEach(file => {
+        formData.append('files', file);
+    });
+    
+    // Show uploading indicator
+    const uploadButton = document.getElementById('uploadButton');
+    uploadButton.disabled = true;
+    uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Processing...';
+    
+    // Show progress display immediately
+    showProgressDisplay();
+    
+    // Store session ID and task ID for later use
+    let sessionId = null;
+    let taskId = null;
+    
+    // First get a session ID by starting the upload
+    fetchWithCSRF('/upload-start', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(startData => {
+        if (startData.sessionId) {
+            sessionId = startData.sessionId;
+            // Start progress stream immediately
+            console.log('Starting progress stream with session ID:', sessionId);
+            startProgressStream(sessionId);
+            
+            // Add session ID to form data
+            formData.append('sessionId', sessionId);
+            
+            // Small delay to ensure SSE connection is established, then upload
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    fetchWithCSRF('/upload-async', {
+                        method: 'POST',
+                        body: formData
+                    }).then(resolve);
+                }, 100);
+            });
+        } else {
+            // Fallback to async upload without session
+            return fetchWithCSRF('/upload-async', {
+                method: 'POST',
+                body: formData
+            });
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            if (response.status === 413) {
+                throw new Error("File size too large. Maximum size is 50MB per upload.");
+            }
+            return response.json().then(data => {
+                throw new Error(data.message || `Server error: ${response.status}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            taskId = data.task_id;
+            showToast('Files queued for processing. Checking status...', 'info');
+            
+            // Poll for task completion
+            const pollInterval = setInterval(() => {
+                fetchWithCSRF(`/task-status/${taskId}`)
+                    .then(response => response.json())
+                    .then(statusData => {
+                        if (statusData.state === 'SUCCESS') {
+                            clearInterval(pollInterval);
+                            
+                            // Process the result
+                            const result = statusData.result;
+                            if (result.success) {
+                                // Update session with donations
+                                if (result.donations && result.donations.length > 0) {
+                                    // Store donations in session via API call
+                                    fetchWithCSRF('/donations/update-session', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({
+                                            donations: result.donations
+                                        })
+                                    }).then(() => {
+                                        // Process the upload response
+                                        const processedCount = processUploadResponse(result);
+                                        
+                                        if (processedCount === 0) {
+                                            showToast('No donation data found in the uploaded files', 'warning');
+                                        } else {
+                                            showToast(`Successfully processed ${processedCount} donations`, 'success');
+                                        }
+                                        
+                                        // Clear the file list
+                                        document.getElementById('fileList').innerHTML = '';
+                                        document.getElementById('uploadPreview').classList.add('d-none');
+                                        
+                                        // Hide progress display after a delay
+                                        setTimeout(hideProgressDisplay, 2000);
+                                    });
+                                } else {
+                                    showToast(result.message || 'No donations found', 'warning');
+                                    setTimeout(hideProgressDisplay, 1000);
+                                }
+                            } else {
+                                showToast(result.message || 'Processing failed', 'danger');
+                                setTimeout(hideProgressDisplay, 1000);
+                            }
+                            
+                            // Reset upload button
+                            uploadButton.disabled = false;
+                            uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
+                            
+                        } else if (statusData.state === 'FAILURE') {
+                            clearInterval(pollInterval);
+                            showToast('Processing failed: ' + statusData.error, 'danger');
+                            
+                            // Hide progress display on error
+                            setTimeout(hideProgressDisplay, 1000);
+                            
+                            // Reset upload button
+                            uploadButton.disabled = false;
+                            uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
+                        }
+                        // Continue polling for PENDING, RUNNING states
+                    })
+                    .catch(error => {
+                        console.error('Error checking task status:', error);
+                    });
+            }, 2000); // Poll every 2 seconds
+            
+        } else {
+            showToast(data.message || 'Error queuing files', 'danger');
+            // Hide progress display on error
+            setTimeout(hideProgressDisplay, 1000);
+            
+            // Reset upload button
+            uploadButton.disabled = false;
+            uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
+        }
+    })
+    .catch(error => {
+        console.error('Error uploading files:', error);
+        let errorMessage = 'Error uploading and processing files';
+        
+        // Show more specific error messages
+        if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        showToast(errorMessage, 'danger');
+        
+        // Hide progress display on error
+        setTimeout(hideProgressDisplay, 1000);
+        
+        // Reset upload button
+        uploadButton.disabled = false;
+        uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
+    });
+}
+
 // Progress display functions
 function showProgressDisplay() {
     const progressDisplay = document.getElementById('progressDisplay');
@@ -2527,7 +2695,12 @@ function checkAuthAndProcessFiles() {
                 // Process the files
                 showToast("Connected to QuickBooks successfully! Processing your files now.", "success");
                 if (window.pendingFiles && window.pendingFiles.length > 0) {
-                    uploadAndProcessFiles(window.pendingFiles);
+                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || false;
+                    if (useAsyncProcessing) {
+                        uploadAndProcessFilesAsync(window.pendingFiles);
+                    } else {
+                        uploadAndProcessFiles(window.pendingFiles);
+                    }
                 }
             }
         })
@@ -2610,7 +2783,12 @@ function checkQBOAuthStatus() {
                 if (data.justConnected && window.pendingFiles && window.pendingFiles.length > 0) {
                     console.log("Just connected to QBO and have pending files - processing them now");
                     showToast("Connected to QuickBooks successfully! Processing your files now.", "success");
-                    uploadAndProcessFiles(window.pendingFiles);
+                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || false;
+                    if (useAsyncProcessing) {
+                        uploadAndProcessFilesAsync(window.pendingFiles);
+                    } else {
+                        uploadAndProcessFiles(window.pendingFiles);
+                    }
                     window.pendingFiles = null; // Clear pending files
                 }
             } else {
@@ -2897,7 +3075,12 @@ document.addEventListener('DOMContentLoaded', function() {
         // If we have pending files, process them
         if (window.pendingFiles && window.pendingFiles.length > 0) {
             showToast("Processing without QuickBooks connection. Customer matching will be unavailable.", "warning");
-            uploadAndProcessFiles(window.pendingFiles);
+            const useAsyncProcessing = window.USE_ASYNC_PROCESSING || false;
+            if (useAsyncProcessing) {
+                uploadAndProcessFilesAsync(window.pendingFiles);
+            } else {
+                uploadAndProcessFiles(window.pendingFiles);
+            }
             window.pendingFiles = null; // Clear pending files
         }
     });
@@ -3004,7 +3187,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         return;
                     }
                     // If QBO is already connected, proceed with file processing
-                    uploadAndProcessFiles(files);
+                    // Check if we should use async processing (can be configured)
+                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || false;
+                    if (useAsyncProcessing) {
+                        uploadAndProcessFilesAsync(files);
+                    } else {
+                        uploadAndProcessFiles(files);
+                    }
                 })
                 .catch(error => {
                     console.error("Error checking QBO auth status:", error);
