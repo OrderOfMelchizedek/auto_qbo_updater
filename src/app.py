@@ -717,28 +717,26 @@ csrf = CSRFProtect(app)
 app.config['WTF_CSRF_HEADERS'] = ['X-CSRFToken']
 
 # Initialize rate limiter
-# Handle Heroku Redis URL (rediss:// with SSL)
+# For now, disable rate limiting in production due to Redis SSL issues
+# TODO: Fix Redis SSL configuration for Flask-Limiter
 redis_url = os.environ.get('REDIS_URL')
-if redis_url and redis_url.startswith('rediss://'):
-    # For Heroku Redis with SSL, we need to disable SSL verification
-    # This is safe for Heroku's self-signed certificates
-    storage_options = {
-        "socket_connect_timeout": 30,
-        "connection_class": "redis.connection.SSLConnection",
-        "connection_kwargs": {
-            "ssl_cert_reqs": None
-        }
-    }
+if redis_url:
+    # Use memory storage for rate limiting until Redis SSL is fixed
+    print("Using memory storage for rate limiting (Redis SSL issue workaround)")
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["200 per hour", "50 per minute"],
+        storage_uri="memory://"
+    )
 else:
-    storage_options = {"socket_connect_timeout": 30} if redis_url else {}
-
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per hour", "50 per minute"],
-    storage_uri=redis_url or "memory://",
-    storage_options=storage_options
-)
+    # Use memory storage for development
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["200 per hour", "50 per minute"],
+        storage_uri="memory://"
+    )
 
 # Configure server-side session storage
 def configure_session(app):
