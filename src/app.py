@@ -954,10 +954,11 @@ def upload_simple():
                             'qbSyncStatus': 'Pending'
                         })
                 elif ext in ['.jpg', '.jpeg', '.png']:
-                    # For images, create a different test donation
+                    # Skip image processing for now - just use test data
+                    print(f"[UPLOAD-SIMPLE] Skipping image processing for: {original_filename}")
                     donations.append({
                         'internalId': f'img_{idx}',
-                        'Donor Name': f'Image Donor {idx + 1}',
+                        'Donor Name': f'Image Processing Disabled',
                         'Gift Amount': '200.00',
                         'Check Date': datetime.now().strftime('%m/%d/%Y'),
                         'Check No.': f'IMG{idx + 1:03d}',
