@@ -28,8 +28,8 @@ class BatchProcessor:
     """Handles concurrent batch processing of files."""
     
     # Configuration
-    PDF_BATCH_SIZE = 10  # Pages per PDF batch
-    MAX_CONCURRENT_BATCHES = 10  # Maximum concurrent API calls
+    PDF_BATCH_SIZE = 5  # Pages per PDF batch (reduced for Heroku)
+    MAX_CONCURRENT_BATCHES = 5  # Maximum concurrent API calls (reduced for Heroku)
     
     def __init__(self, gemini_service: GeminiService, progress_logger: Optional[ProgressLogger] = None):
         """Initialize the batch processor.

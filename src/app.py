@@ -809,7 +809,13 @@ def configure_filesystem_sessions(app):
 configure_session(app)
 
 # Create necessary directories
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+try:
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+except Exception as e:
+    print(f"Warning: Could not create upload directory: {e}")
+    # Use temp directory as fallback
+    import tempfile
+    app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp(prefix='fom_qbo_uploads_')
 
 # Initialize Redis client for QBO token persistence
 redis_client = None
