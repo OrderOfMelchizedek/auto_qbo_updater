@@ -717,12 +717,27 @@ csrf = CSRFProtect(app)
 app.config['WTF_CSRF_HEADERS'] = ['X-CSRFToken']
 
 # Initialize rate limiter
+# Handle Heroku Redis URL (rediss:// with SSL)
+redis_url = os.environ.get('REDIS_URL')
+if redis_url and redis_url.startswith('rediss://'):
+    # For Heroku Redis with SSL, we need to disable SSL verification
+    # This is safe for Heroku's self-signed certificates
+    storage_options = {
+        "socket_connect_timeout": 30,
+        "connection_class": "redis.connection.SSLConnection",
+        "connection_kwargs": {
+            "ssl_cert_reqs": None
+        }
+    }
+else:
+    storage_options = {"socket_connect_timeout": 30} if redis_url else {}
+
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["200 per hour", "50 per minute"],
-    storage_uri=os.environ.get('REDIS_URL') or "memory://",
-    storage_options={"socket_connect_timeout": 30} if os.environ.get('REDIS_URL') else {}
+    storage_uri=redis_url or "memory://",
+    storage_options=storage_options
 )
 
 # Configure server-side session storage
@@ -734,9 +749,17 @@ def configure_session(app):
         # Use Redis for production
         try:
             # Parse Redis URL (handles various formats including Heroku's)
-            if redis_url.startswith('redis://'):
+            if redis_url.startswith(('redis://', 'rediss://')):
                 app.config['SESSION_TYPE'] = 'redis'
-                app.config['SESSION_REDIS'] = redis.from_url(redis_url)
+                # Handle Heroku Redis SSL URLs
+                if redis_url.startswith('rediss://'):
+                    # For SSL Redis connections, we need special handling
+                    app.config['SESSION_REDIS'] = redis.from_url(
+                        redis_url, 
+                        ssl_cert_reqs=None
+                    )
+                else:
+                    app.config['SESSION_REDIS'] = redis.from_url(redis_url)
                 print("Using Redis for session storage")
             else:
                 raise ValueError("Invalid REDIS_URL format")
