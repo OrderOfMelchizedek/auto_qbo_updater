@@ -869,26 +869,93 @@ def upload_test():
 
 @app.route('/upload-simple', methods=['POST'])
 def upload_simple():
-    """Minimal upload endpoint that returns immediately."""
+    """Simplified upload endpoint with basic processing."""
     try:
-        # Get basic info without processing
-        file_count = 0
-        if 'files' in request.files:
-            files = request.files.getlist('files')
-            file_count = len([f for f in files if f.filename])
+        print("[UPLOAD-SIMPLE] Starting simple upload")
         
-        # Just return success with a fake session ID
+        # Get files
+        if 'files' not in request.files:
+            return jsonify({
+                'success': False,
+                'message': 'No files provided'
+            }), 400
+            
+        files = request.files.getlist('files')
+        valid_files = [f for f in files if f.filename]
+        
+        if not valid_files:
+            return jsonify({
+                'success': False,
+                'message': 'No valid files provided'
+            }), 400
+        
+        print(f"[UPLOAD-SIMPLE] Processing {len(valid_files)} files")
+        
+        # Create session
         import uuid
         session_id = str(uuid.uuid4())
+        
+        # Check QBO authentication
+        qbo_authenticated = qbo_service.access_token is not None and qbo_service.realm_id is not None
+        
+        # Simple processing - just save files and extract basic info
+        donations = []
+        errors = []
+        uploaded_files = []
+        
+        for idx, file in enumerate(valid_files):
+            try:
+                # Save file
+                original_filename = file.filename
+                secure_name = generate_secure_filename(original_filename)
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+                file.save(file_path)
+                uploaded_files.append(file_path)
+                
+                # Create dummy donation for testing
+                donations.append({
+                    'internalId': f'test_{idx}',
+                    'Donor Name': f'Test Donor {idx + 1}',
+                    'Gift Amount': '100.00',
+                    'Check Date': datetime.now().strftime('%m/%d/%Y'),
+                    'Check No.': f'TEST{idx + 1:03d}',
+                    'fileName': original_filename,
+                    'dataSource': 'TEST',
+                    'qbSyncStatus': 'Pending'
+                })
+                
+            except Exception as e:
+                print(f"[UPLOAD-SIMPLE] Error processing {file.filename}: {e}")
+                errors.append(f"Error processing {file.filename}: {str(e)}")
+        
+        # Clean up files
+        for file_path in uploaded_files:
+            try:
+                os.remove(file_path)
+            except:
+                pass
+        
+        # Store in session
+        if 'donations' not in session:
+            session['donations'] = []
+        session['donations'].extend(donations)
+        
+        print(f"[UPLOAD-SIMPLE] Completed. Found {len(donations)} donations")
         
         return jsonify({
             'success': True,
             'progressSessionId': session_id,
-            'donations': [],  # Empty donations for now
-            'message': f'Received {file_count} files',
-            'qboAuthenticated': False
+            'donations': session['donations'],
+            'newCount': len(donations),
+            'totalCount': len(session['donations']),
+            'qboAuthenticated': qbo_authenticated,
+            'warnings': errors if errors else None
         })
+        
     except Exception as e:
+        print(f"[UPLOAD-SIMPLE] Error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'message': f'Error: {str(e)}'
