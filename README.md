@@ -25,16 +25,15 @@ A web application to process donation information for Friends of Mwangaza, inclu
    ```
    pip install -r requirements.txt
    ```
-5. Set up the Intuit OAuth Library (included in the repo):
-   ```
-   python setup_oauth_lib.py
-   ```
-6. Copy `.env.example` to `.env` and add your API keys:
+5. Copy `.env.example` to `.env` and add your API keys:
    ```
    cp .env.example .env
    ```
-   Then edit `.env` with your QuickBooks Online and Gemini API credentials
-7. Run the application:
+   Then edit `.env` with your credentials:
+   - Generate a Flask secret key: `python -c 'import secrets; print(secrets.token_hex(32))'`
+   - Add your QuickBooks Online credentials from [Intuit Developer Portal](https://developer.intuit.com/)
+   - Add your Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+6. Run the application:
    ```
    # Run with default settings (Sandbox QBO, Gemini Flash model)
    python run.py
@@ -49,8 +48,8 @@ A web application to process donation information for Friends of Mwangaza, inclu
    python run.py --env production
    
    # Full model names can also be used
-   python run.py --model gemini-2.5-flash-preview-04-17
-   python run.py --model gemini-2.5-pro-preview-03-25
+   python run.py --model gemini-2.5-flash-preview-05-20
+   python run.py --model gemini-2.5-pro-preview-05-06
    ```
 
 ## QuickBooks Online Integration
