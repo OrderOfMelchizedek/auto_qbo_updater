@@ -1,1 +1,1 @@
-web: gunicorn src.app:app --timeout 120 --workers 2 --worker-class sync --max-requests 1000 --max-requests-jitter 50
+web: gunicorn src.app:app --timeout 300 --workers 2 --worker-class sync --max-requests 500 --max-requests-jitter 50 --graceful-timeout 30

@@ -8,11 +8,28 @@ function getCSRFToken() {
     return token ? token.getAttribute('content') : '';
 }
 
-// Helper function to add CSRF token to fetch headers
+// Helper function to add CSRF token to fetch headers with timeout support
 function fetchWithCSRF(url, options = {}) {
     options.headers = options.headers || {};
     options.headers['X-CSRFToken'] = getCSRFToken();
-    return fetch(url, options);
+    
+    // Add timeout support (default 60 seconds for most requests)
+    const timeout = options.timeout || 60000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    return fetch(url, { ...options, signal: controller.signal })
+        .then(response => {
+            clearTimeout(timeoutId);
+            return response;
+        })
+        .catch(error => {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error('Request timed out. The server is taking too long to respond.');
+            }
+            throw error;
+        });
 }
 
 // Show merge history for a donation
@@ -1220,13 +1237,20 @@ function populatePaymentMethodSelects() {
                 } else {
                     console.warn(`Default payment method ID ${defaultPaymentMethodId} not found in QBO payment methods`);
                     
-                    // Add the default "CHECK" method if missing
-                    if (defaultPaymentMethodId === 'CHECK') {
+                    // Add common payment methods if missing
+                    const commonMethods = [
+                        { id: 'CHECK', name: 'Check' },
+                        { id: 'Cash', name: 'Cash' },
+                        { id: 'Credit Card', name: 'Credit Card' }
+                    ];
+                    
+                    const methodToAdd = commonMethods.find(m => m.id === defaultPaymentMethodId);
+                    if (methodToAdd) {
                         const option = document.createElement('option');
-                        option.value = 'CHECK';
-                        option.textContent = 'Check';
+                        option.value = methodToAdd.id;
+                        option.textContent = methodToAdd.name;
                         select.appendChild(option);
-                        select.value = 'CHECK';
+                        select.value = methodToAdd.id;
                     }
                 }
             }
@@ -2452,8 +2476,16 @@ function startProgressStream(sessionId) {
         
         currentProgressStream.onerror = function(event) {
             console.error('Progress stream error:', event);
-            currentProgressStream.close();
-            currentProgressStream = null;
+            if (currentProgressStream) {
+                currentProgressStream.close();
+                currentProgressStream = null;
+            }
+            
+            // Show error to user if we were actively processing
+            const statusDiv = document.getElementById('processingStatus');
+            if (statusDiv && statusDiv.textContent.includes('Processing')) {
+                showToast("Connection interrupted. Please check if your files were processed.", "warning");
+            }
         };
     } catch (e) {
         console.error('Error starting progress stream:', e);
