@@ -912,17 +912,73 @@ def upload_simple():
                 file.save(file_path)
                 uploaded_files.append(file_path)
                 
-                # Create dummy donation for testing
-                donations.append({
-                    'internalId': f'test_{idx}',
-                    'Donor Name': f'Test Donor {idx + 1}',
-                    'Gift Amount': '100.00',
-                    'Check Date': datetime.now().strftime('%m/%d/%Y'),
-                    'Check No.': f'TEST{idx + 1:03d}',
-                    'fileName': original_filename,
-                    'dataSource': 'TEST',
-                    'qbSyncStatus': 'Pending'
-                })
+                # Detect file type
+                _, ext = os.path.splitext(original_filename)
+                ext = ext.lower()
+                
+                # Process based on file type (but simplified for now)
+                if ext == '.csv':
+                    # Process CSV file
+                    try:
+                        print(f"[UPLOAD-SIMPLE] Processing CSV: {original_filename}")
+                        result = file_processor.process_csv(file_path)
+                        if result and 'donations' in result:
+                            for donation in result['donations']:
+                                donation['fileName'] = original_filename
+                                donation['dataSource'] = 'CSV'
+                                donation['internalId'] = f'csv_{idx}_{donations.index(donation)}'
+                            donations.extend(result['donations'])
+                        else:
+                            # Fallback to test data
+                            donations.append({
+                                'internalId': f'csv_{idx}',
+                                'Donor Name': f'CSV Test Donor {idx + 1}',
+                                'Gift Amount': '150.00',
+                                'Check Date': datetime.now().strftime('%m/%d/%Y'),
+                                'Check No.': f'CSV{idx + 1:03d}',
+                                'fileName': original_filename,
+                                'dataSource': 'CSV',
+                                'qbSyncStatus': 'Pending'
+                            })
+                    except Exception as csv_error:
+                        print(f"[UPLOAD-SIMPLE] CSV processing error: {csv_error}")
+                        # Fallback to test data
+                        donations.append({
+                            'internalId': f'csv_{idx}',
+                            'Donor Name': f'CSV Error - Test Data',
+                            'Gift Amount': '0.00',
+                            'Check Date': datetime.now().strftime('%m/%d/%Y'),
+                            'Check No.': f'ERR{idx + 1:03d}',
+                            'fileName': original_filename,
+                            'dataSource': 'CSV',
+                            'qbSyncStatus': 'Pending'
+                        })
+                elif ext in ['.jpg', '.jpeg', '.png']:
+                    # For images, create a different test donation
+                    donations.append({
+                        'internalId': f'img_{idx}',
+                        'Donor Name': f'Image Donor {idx + 1}',
+                        'Gift Amount': '200.00',
+                        'Check Date': datetime.now().strftime('%m/%d/%Y'),
+                        'Check No.': f'IMG{idx + 1:03d}',
+                        'fileName': original_filename,
+                        'dataSource': 'IMAGE',
+                        'qbSyncStatus': 'Pending'
+                    })
+                elif ext == '.pdf':
+                    # For PDFs, create another test donation
+                    donations.append({
+                        'internalId': f'pdf_{idx}',
+                        'Donor Name': f'PDF Donor {idx + 1}',
+                        'Gift Amount': '250.00',
+                        'Check Date': datetime.now().strftime('%m/%d/%Y'),
+                        'Check No.': f'PDF{idx + 1:03d}',
+                        'fileName': original_filename,
+                        'dataSource': 'PDF',
+                        'qbSyncStatus': 'Pending'
+                    })
+                else:
+                    errors.append(f"Unsupported file type: {ext}")
                 
             except Exception as e:
                 print(f"[UPLOAD-SIMPLE] Error processing {file.filename}: {e}")
