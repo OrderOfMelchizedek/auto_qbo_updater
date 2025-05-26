@@ -10,6 +10,7 @@ import threading
 from functools import lru_cache
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import redis
 
 # Import custom exceptions and retry logic
 try:
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 class QBOService:
     """Service for interacting with QuickBooks Online API."""
     
-    def __init__(self, client_id: str, client_secret: str, redirect_uri: str, environment: str = 'sandbox'):
+    def __init__(self, client_id: str, client_secret: str, redirect_uri: str, environment: str = 'sandbox', redis_client: Optional[redis.Redis] = None):
         """Initialize the QBO service with OAuth credentials.
         
         Args:
@@ -34,6 +35,7 @@ class QBOService:
             client_secret: QBO Client Secret
             redirect_uri: OAuth redirect URI
             environment: 'sandbox' or 'production'
+            redis_client: Optional Redis client for token persistence
         """
         if environment not in ['sandbox', 'production']:
             raise ValueError(f"Environment must be 'sandbox' or 'production', got: {environment}")
@@ -42,6 +44,7 @@ class QBOService:
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
         self.environment = environment
+        self.redis_client = redis_client
         
         # Base URLs for QBO API
         if environment == 'sandbox':
@@ -54,19 +57,119 @@ class QBOService:
             self.api_base = 'https://quickbooks.api.intuit.com/v3/company/'
         
         # OAuth tokens (to be set during authorization flow)
-        self.access_token = None
-        self.refresh_token = None
-        self.realm_id = None
-        self.token_expires_at = 0
+        self._access_token = None
+        self._refresh_token = None
+        self._realm_id = None
+        self._token_expires_at = 0
         
-        # Token persistence (for future implementation)
-        # TODO: Implement token storage (database or secure file storage)
+        # Token persistence key prefix
+        self.token_key_prefix = f"qbo_tokens:{environment}:"
+        
+        # Load tokens from Redis if available
+        if self.redis_client:
+            self._load_tokens_from_redis()
         
         # Performance optimization: Customer caching
         self._customer_cache = {}
         self._cache_timestamp = None
         self._cache_lock = threading.Lock()
         self._cache_ttl = 300  # 5 minutes cache TTL
+    
+    # Token properties with Redis persistence
+    @property
+    def access_token(self):
+        return self._access_token
+    
+    @access_token.setter
+    def access_token(self, value):
+        self._access_token = value
+        self._save_token_to_redis('access_token', value)
+    
+    @property
+    def refresh_token(self):
+        return self._refresh_token
+    
+    @refresh_token.setter
+    def refresh_token(self, value):
+        self._refresh_token = value
+        self._save_token_to_redis('refresh_token', value)
+    
+    @property
+    def realm_id(self):
+        return self._realm_id
+    
+    @realm_id.setter
+    def realm_id(self, value):
+        self._realm_id = value
+        self._save_token_to_redis('realm_id', value)
+    
+    @property
+    def token_expires_at(self):
+        return self._token_expires_at
+    
+    @token_expires_at.setter
+    def token_expires_at(self, value):
+        self._token_expires_at = value
+        self._save_token_to_redis('token_expires_at', str(value))
+    
+    def _save_token_to_redis(self, key: str, value: Optional[str]):
+        """Save a token value to Redis if client is available."""
+        if self.redis_client and value is not None:
+            try:
+                redis_key = f"{self.token_key_prefix}{key}"
+                # Set with 90 day expiration (QBO refresh tokens last 100 days)
+                self.redis_client.setex(redis_key, 90 * 24 * 60 * 60, value)
+                logger.debug(f"Saved {key} to Redis")
+            except Exception as e:
+                logger.error(f"Failed to save {key} to Redis: {e}")
+    
+    def _load_tokens_from_redis(self):
+        """Load tokens from Redis if available."""
+        if not self.redis_client:
+            return
+        
+        try:
+            # Load each token field
+            access_token = self.redis_client.get(f"{self.token_key_prefix}access_token")
+            if access_token:
+                self._access_token = access_token.decode('utf-8')
+            
+            refresh_token = self.redis_client.get(f"{self.token_key_prefix}refresh_token")
+            if refresh_token:
+                self._refresh_token = refresh_token.decode('utf-8')
+            
+            realm_id = self.redis_client.get(f"{self.token_key_prefix}realm_id")
+            if realm_id:
+                self._realm_id = realm_id.decode('utf-8')
+            
+            token_expires_at = self.redis_client.get(f"{self.token_key_prefix}token_expires_at")
+            if token_expires_at:
+                try:
+                    self._token_expires_at = int(token_expires_at.decode('utf-8'))
+                except ValueError:
+                    self._token_expires_at = 0
+            
+            if self._access_token:
+                logger.info(f"Loaded QBO tokens from Redis (realm_id: {self._realm_id})")
+        except Exception as e:
+            logger.error(f"Failed to load tokens from Redis: {e}")
+    
+    def clear_tokens(self):
+        """Clear all tokens from memory and Redis."""
+        self._access_token = None
+        self._refresh_token = None
+        self._realm_id = None
+        self._token_expires_at = 0
+        
+        if self.redis_client:
+            try:
+                # Clear all token keys from Redis
+                for key in ['access_token', 'refresh_token', 'realm_id', 'token_expires_at']:
+                    redis_key = f"{self.token_key_prefix}{key}"
+                    self.redis_client.delete(redis_key)
+                logger.info("Cleared QBO tokens from Redis")
+            except Exception as e:
+                logger.error(f"Failed to clear tokens from Redis: {e}")
     
     def get_authorization_url(self) -> str:
         """Get the QBO authorization URL for OAuth flow.

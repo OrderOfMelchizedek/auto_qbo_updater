@@ -811,6 +811,23 @@ configure_session(app)
 # Create necessary directories
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# Initialize Redis client for QBO token persistence
+redis_client = None
+redis_url = os.environ.get('REDIS_URL')
+if redis_url:
+    try:
+        if redis_url.startswith('rediss://'):
+            # SSL Redis connection
+            redis_client = redis.from_url(redis_url, ssl_cert_reqs=None)
+        else:
+            redis_client = redis.from_url(redis_url)
+        # Test connection
+        redis_client.ping()
+        logger.info("Redis connection established for QBO token persistence")
+    except Exception as e:
+        logger.error(f"Failed to connect to Redis for token persistence: {e}")
+        redis_client = None
+
 # Initialize services
 gemini_service = GeminiService(
     api_key=os.getenv('GEMINI_API_KEY'),
@@ -820,7 +837,8 @@ qbo_service = QBOService(
     client_id=os.getenv('QBO_CLIENT_ID'),
     client_secret=os.getenv('QBO_CLIENT_SECRET'),
     redirect_uri=os.getenv('QBO_REDIRECT_URI'),
-    environment=qbo_environment  # Use the command-line specified environment
+    environment=qbo_environment,  # Use the command-line specified environment
+    redis_client=redis_client  # Pass Redis client for token persistence
 )
 # Pass both services to the file processor for integrated customer matching
 file_processor = FileProcessor(gemini_service, qbo_service, progress_logger)
@@ -1045,6 +1063,34 @@ def qbo_auth_status():
         'tokenExpiry': qbo_service.token_expires_at if authenticated else None,
         'justConnected': just_connected
     })
+
+@app.route('/qbo/disconnect', methods=['POST'])
+@limiter.limit("10 per hour")
+def disconnect_qbo():
+    """Disconnect from QuickBooks by clearing stored tokens."""
+    try:
+        # Log audit event
+        log_audit_event(
+            'qbo_disconnect',
+            request_ip=request.remote_addr,
+            details={'realm_id': qbo_service.realm_id}
+        )
+        
+        # Clear tokens
+        qbo_service.clear_tokens()
+        
+        # Clear customer cache
+        qbo_service.clear_customer_cache()
+        
+        # Clear session flags
+        session.pop('qbo_connected', None)
+        session.pop('qbo_just_connected', None)
+        
+        flash('Successfully disconnected from QuickBooks Online', 'success')
+        return jsonify({'success': True, 'message': 'Disconnected from QuickBooks'})
+    except Exception as e:
+        logger.error(f"Error disconnecting from QBO: {e}")
+        return jsonify({'success': False, 'message': 'Error disconnecting from QuickBooks'}), 500
 
 @app.route('/upload-start', methods=['POST'])
 def upload_start():
@@ -1668,6 +1714,7 @@ def qbo_callback():
     
     # Add a script to update the UI
     session['qbo_connected'] = True
+    session['qbo_just_connected'] = success  # Flag for auth-status endpoint
     
     # Return a simple success page that will work with the popup window
     success_html = """
