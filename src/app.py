@@ -867,6 +867,33 @@ def upload_test():
         'timestamp': datetime.now().isoformat()
     })
 
+@app.route('/upload-simple', methods=['POST'])
+def upload_simple():
+    """Minimal upload endpoint that returns immediately."""
+    try:
+        # Get basic info without processing
+        file_count = 0
+        if 'files' in request.files:
+            files = request.files.getlist('files')
+            file_count = len([f for f in files if f.filename])
+        
+        # Just return success with a fake session ID
+        import uuid
+        session_id = str(uuid.uuid4())
+        
+        return jsonify({
+            'success': True,
+            'progressSessionId': session_id,
+            'donations': [],  # Empty donations for now
+            'message': f'Received {file_count} files',
+            'qboAuthenticated': False
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
 @app.route('/health')
 def health_check():
     """Basic health check endpoint - does not test external services."""

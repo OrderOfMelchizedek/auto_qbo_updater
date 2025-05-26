@@ -2327,17 +2327,21 @@ function uploadAndProcessFiles(files) {
             // Small delay to ensure SSE connection is established, then upload
             return new Promise((resolve) => {
                 setTimeout(() => {
-                    fetchWithCSRF('/upload', {
+                    // TEMPORARY: Use simple upload endpoint
+                    fetchWithCSRF('/upload-simple', {
                         method: 'POST',
-                        body: formData
+                        body: formData,
+                        timeout: 120000  // 2 minutes
                     }).then(resolve);
                 }, 100);
             });
         } else {
             // Fallback to original upload
-            return fetchWithCSRF('/upload', {
+            // TEMPORARY: Use simple upload endpoint
+            return fetchWithCSRF('/upload-simple', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                timeout: 120000  // 2 minutes
             });
         }
     })
