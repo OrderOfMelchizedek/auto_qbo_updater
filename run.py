@@ -14,7 +14,8 @@ parser.add_argument('--env', type=str, choices=['sandbox', 'production'],
                     default=os.getenv('QBO_ENVIRONMENT', 'sandbox'),
                     help='QuickBooks Online environment (sandbox or production)')
 parser.add_argument('--model', type=str, default='gemini-flash',
-                    choices=['gemini-flash', 'gemini-pro', 'gemini-2.5-flash-preview-04-17', 'gemini-2.5-pro-preview-03-25'],
+                    choices=['gemini-flash', 'gemini-pro', 'gemini-2.5-flash-preview-05-20', 'gemini-2.5-pro-preview-05-06', 
+                             'gemini-2.5-flash-preview-04-17', 'gemini-2.5-pro-preview-03-25'],
                     help='Gemini model to use (flash for faster responses, pro for better quality)')
 
 # Parse arguments before importing app to set environment variables properly
@@ -22,15 +23,18 @@ args = parser.parse_args()
 
 # Map model aliases to full model names
 MODEL_MAPPING = {
-    'gemini-flash': 'gemini-2.5-flash-preview-04-17',
-    'gemini-pro': 'gemini-2.5-pro-preview-03-25',
+    'gemini-flash': 'gemini-2.5-flash-preview-05-20',
+    'gemini-pro': 'gemini-2.5-pro-preview-05-06',
     # Include the full model names as keys for consistency
+    'gemini-2.5-flash-preview-05-20': 'gemini-2.5-flash-preview-05-20',
+    'gemini-2.5-pro-preview-05-06': 'gemini-2.5-pro-preview-05-06',
+    # Keep old model names for backward compatibility
     'gemini-2.5-flash-preview-04-17': 'gemini-2.5-flash-preview-04-17',
     'gemini-2.5-pro-preview-03-25': 'gemini-2.5-pro-preview-03-25'
 }
 
 # Resolve the model name from the alias
-model_name = MODEL_MAPPING.get(args.model, 'gemini-2.5-flash-preview-04-17')
+model_name = MODEL_MAPPING.get(args.model, 'gemini-2.5-flash-preview-05-20')
 
 # Set environment variables for the app to use
 os.environ['QBO_ENVIRONMENT'] = args.env
