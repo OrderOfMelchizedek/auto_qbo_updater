@@ -1449,7 +1449,7 @@ def qbo_status():
     return jsonify({
         'authenticated': qbo_service.access_token is not None and qbo_service.realm_id is not None,
         'realmId': qbo_service.realm_id,
-        'tokenExpiry': qbo_service.token_expires_at if hasattr(qbo_service, 'token_expires_at') else None,
+        'tokenExpiry': qbo_service.token_expires_at if (hasattr(qbo_service, 'token_expires_at') and qbo_service.token_expires_at and qbo_service.token_expires_at > 0) else None,
         'environment': qbo_service.environment  # Include the environment in the status
     })
 

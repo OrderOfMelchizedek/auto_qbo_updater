@@ -34,6 +34,9 @@ class QBOService:
             redirect_uri: OAuth redirect URI
             environment: 'sandbox' or 'production'
         """
+        if environment not in ['sandbox', 'production']:
+            raise ValueError(f"Environment must be 'sandbox' or 'production', got: {environment}")
+            
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
@@ -118,11 +121,7 @@ class QBOService:
                 return True
             else:
                 logger.error(f"Failed to get QBO tokens: {response.status_code} - {response.text}")
-                raise QBOAPIException(
-                    f"Failed to exchange authorization code",
-                    status_code=response.status_code,
-                    response_text=response.text
-                )
+                return False
         
         except requests.RequestException as e:
             logger.error(f"Network error getting QBO tokens: {str(e)}")
@@ -180,32 +179,47 @@ class QBOService:
             print(f"Exception in refresh_access_token: {str(e)}")
             return False
     
+    def refresh_tokens(self) -> bool:
+        """Alias for refresh_access_token for compatibility.
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        return self.refresh_access_token()
+    
     def is_token_valid(self) -> bool:
         """Check if the current access token is valid.
         
         Returns:
             True if token exists and not expired, False otherwise
         """
-        if not self.access_token:
+        if not self.access_token or not self.token_expires_at:
             return False
         
         # Check if token is expired (with 60 second buffer)
         return int(time.time()) < (self.token_expires_at - 60)
     
-    def get_token_info(self) -> Dict[str, Any]:
+    def get_token_info(self) -> Optional[Dict[str, Any]]:
         """Get information about current token status.
         
         Returns:
-            Dictionary with token status information
+            Dictionary with token status information or None if no token
         """
-        return {
-            'has_access_token': bool(self.access_token),
-            'has_refresh_token': bool(self.refresh_token),
-            'realm_id': self.realm_id,
-            'expires_at': self.token_expires_at,
-            'expires_in_seconds': max(0, self.token_expires_at - int(time.time())),
-            'is_valid': self.is_token_valid()
-        }
+        if not self.access_token:
+            return None
+            
+        try:
+            expires_at_iso = datetime.fromtimestamp(self.token_expires_at).isoformat() if self.token_expires_at else None
+            expires_in_hours = max(0, (self.token_expires_at - int(time.time())) / 3600) if self.token_expires_at else 0
+            
+            return {
+                'realm_id': self.realm_id,
+                'expires_at': expires_at_iso,
+                'expires_in_hours': expires_in_hours,
+                'is_valid': self.is_token_valid()
+            }
+        except Exception:
+            return None
     
     def _get_auth_headers(self) -> Dict[str, str]:
         """Get headers with authentication for QBO API calls.
@@ -214,8 +228,23 @@ class QBOService:
             Dictionary of HTTP headers
         """
         # Check if token is expired (or will expire soon)
-        if int(time.time()) >= (self.token_expires_at - 60):
-            self.refresh_access_token()
+        if self.token_expires_at:
+            try:
+                # Handle both integer timestamp and string formats
+                if isinstance(self.token_expires_at, str):
+                    expires_at = int(datetime.fromisoformat(self.token_expires_at.replace('Z', '+00:00')).timestamp())
+                else:
+                    expires_at = self.token_expires_at
+                    
+                if expires_at > 0 and int(time.time()) >= (expires_at - 60):
+                    success = self.refresh_access_token()
+                    if not success:
+                        raise QBOAPIException("Failed to refresh expired token", user_message="Authentication expired. Please reconnect to QuickBooks.")
+            except (ValueError, TypeError):
+                # If we can't parse the expiry time, try to refresh
+                success = self.refresh_access_token()
+                if not success:
+                    raise QBOAPIException("Failed to refresh token", user_message="Authentication expired. Please reconnect to QuickBooks.")
         
         return {
             'Authorization': f'Bearer {self.access_token}',
@@ -729,7 +758,7 @@ class QBOService:
         
         if not self.access_token or not self.realm_id:
             logger.error("Not authenticated with QBO - Missing access_token or realm_id")
-            raise QBOAPIException("QuickBooks not authenticated", is_user_error=True)
+            raise QBOAPIException("QuickBooks not authenticated")
             return []
         
         try:
@@ -808,11 +837,15 @@ class QBOService:
                 self._update_customer_cache(customers)
                 
             return customers
+        except QBOAPIException:
+            # Re-raise QBO-specific exceptions (auth failures, API errors)
+            raise
+        except requests.RequestException as e:
+            logger.error(f"Network error in get_all_customers: {str(e)}")
+            raise QBOAPIException(f"Network error retrieving customers: {str(e)}", user_message="Unable to connect to QuickBooks. Please check your internet connection.")
         except Exception as e:
-            print(f"Exception in get_all_customers: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return []
+            logger.error(f"Unexpected error in get_all_customers: {str(e)}")
+            raise QBOAPIException(f"Unexpected error retrieving customers: {str(e)}", user_message="An unexpected error occurred while retrieving customers.")
             
     def create_account(self, account_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Create a new account in QBO.

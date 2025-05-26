@@ -96,8 +96,8 @@ class TestOAuthFlow(unittest.TestCase):
         
         response = self.client.get('/qbo/callback?code=test_auth_code&realmId=123456789')
         
-        self.assertEqual(response.status_code, 302)  # Redirect to index
-        self.assertIn('/', response.location)
+        self.assertEqual(response.status_code, 200)  # Returns HTML success page
+        self.assertIn(b'QuickBooks Connected', response.data)
         
         # Verify method calls
         mock_get_tokens.assert_called_once_with('test_auth_code', '123456789')
@@ -110,22 +110,23 @@ class TestOAuthFlow(unittest.TestCase):
         
         response = self.client.get('/qbo/callback?code=test_auth_code&realmId=123456789')
         
-        self.assertEqual(response.status_code, 302)  # Redirect to index
-        self.assertIn('/', response.location)
+        self.assertEqual(response.status_code, 200)  # Returns HTML success page
+        self.assertIn(b'QuickBooks Connected', response.data)
         mock_get_tokens.assert_called_once_with('test_auth_code', '123456789')
     
     @patch('src.utils.qbo_service.QBOService.get_tokens')
     @patch('src.utils.qbo_service.QBOService.get_all_customers')
     def test_qbo_callback_customer_fetch_failure(self, mock_get_customers, mock_get_tokens):
         """Test OAuth callback when customer fetch fails."""
-        from utils.exceptions import QBOAPIException
+        from src.utils.exceptions import QBOAPIException
         
         mock_get_tokens.return_value = True
-        mock_get_customers.side_effect = QBOAPIException("API Error", is_user_error=True)
+        mock_get_customers.side_effect = QBOAPIException("API Error")
         
         response = self.client.get('/qbo/callback?code=test_auth_code&realmId=123456789')
         
-        self.assertEqual(response.status_code, 302)  # Redirect to index
+        self.assertEqual(response.status_code, 200)  # Returns HTML success page
+        self.assertIn(b'QuickBooks Connected', response.data)
         mock_get_tokens.assert_called_once_with('test_auth_code', '123456789')
         mock_get_customers.assert_called_once()
 
@@ -159,7 +160,7 @@ class TestQBOService(unittest.TestCase):
         """Test token validation with expired token."""
         # Set expired token
         self.qbo_service.access_token = 'test_token'
-        self.qbo_service.token_expires_at = (datetime.now() - timedelta(hours=1)).isoformat()
+        self.qbo_service.token_expires_at = int((datetime.now() - timedelta(hours=1)).timestamp())
         
         self.assertFalse(self.qbo_service.is_token_valid())
     
@@ -167,7 +168,7 @@ class TestQBOService(unittest.TestCase):
         """Test token validation with valid token."""
         # Set valid token
         self.qbo_service.access_token = 'test_token'
-        self.qbo_service.token_expires_at = (datetime.now() + timedelta(hours=1)).isoformat()
+        self.qbo_service.token_expires_at = int((datetime.now() + timedelta(hours=1)).timestamp())
         
         self.assertTrue(self.qbo_service.is_token_valid())
     
@@ -181,7 +182,7 @@ class TestQBOService(unittest.TestCase):
         """Test get token info with valid token."""
         expires_at = datetime.now() + timedelta(hours=2)
         self.qbo_service.access_token = 'test_token'
-        self.qbo_service.token_expires_at = expires_at.isoformat()
+        self.qbo_service.token_expires_at = int(expires_at.timestamp())
         self.qbo_service.realm_id = '123456789'
         
         token_info = self.qbo_service.get_token_info()
