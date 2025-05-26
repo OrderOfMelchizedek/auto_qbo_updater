@@ -81,7 +81,7 @@ class FileProcessor:
         donations_to_reprocess = []
         
         # Critical fields that must be present
-        critical_fields = ['Donor Name', 'Gift Amount', 'Check Date']
+        critical_fields = ['Donor Name', 'Gift Amount', 'Check Date', 'Check No.']
         
         # Nice-to-have fields (we'll try to get these but won't reprocess just for them)
         optional_fields = ['Address - Line 1', 'City', 'State', 'ZIP', 'First Name', 'Last Name']
@@ -598,10 +598,21 @@ class FileProcessor:
                 print(f"Validating and enhancing {len(all_donations)} donations")
                 validated_donations = []
                 
+                # Critical fields that must be present
+                critical_fields = ['Donor Name', 'Gift Amount', 'Check Date', 'Check No.']
+                
                 for donation in all_donations:
-                    # For concurrent processing, donations are already validated by the batch processor
-                    # Just add them to the validated list
-                    validated_donations.append(donation)
+                    # Check for missing critical fields
+                    missing_critical = [field for field in critical_fields if not donation.get(field)]
+                    
+                    if missing_critical:
+                        # Critical fields are missing - reject this donation
+                        error_msg = f"Donation rejected - missing critical fields: {', '.join(missing_critical)}. Donor: {donation.get('Donor Name', 'Unknown')}"
+                        print(error_msg)
+                        all_errors.append(error_msg)
+                    else:
+                        # All critical fields present - add to validated list
+                        validated_donations.append(donation)
                 
                 # Deduplicate all donations after batch processing
                 print(f"Deduplicating {len(validated_donations)} donations")
@@ -633,12 +644,21 @@ class FileProcessor:
         seen = {}
         unique_donations = []
         
+        # Critical fields that must be present (safety check)
+        critical_fields = ['Donor Name', 'Gift Amount', 'Check Date', 'Check No.']
+        
         for donation in donations:
-            # Create a key based on donor name, amount, date, and check number
+            # Final safety check - skip donations missing critical fields
+            missing_critical = [field for field in critical_fields if not donation.get(field)]
+            if missing_critical:
+                print(f"WARNING: Skipping invalid donation during deduplication - missing: {', '.join(missing_critical)}")
+                continue
+            
+            # Create a key based on donor name, amount, check date, and check number
             key = (
                 donation.get('Donor Name', '').lower().strip(),
                 donation.get('Gift Amount', ''),
-                donation.get('Gift Date', ''),
+                donation.get('Check Date', ''),  # Use Check Date instead of Gift Date
                 donation.get('Check No.', '')
             )
             
