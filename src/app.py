@@ -62,8 +62,12 @@ def configure_logging():
     is_production = os.getenv('FLASK_ENV', 'development') == 'production'
     
     # Create logs directory if it doesn't exist
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
+    try:
+        os.makedirs('logs', exist_ok=True)
+    except Exception as e:
+        # In production (like Heroku), we may not have write access to create directories
+        print(f"Warning: Could not create logs directory: {e}")
+        # Continue without file logging
     
     # Enhanced format with more context
     detailed_format = logging.Formatter(
@@ -90,45 +94,59 @@ def configure_logging():
         console_handler.setFormatter(detailed_format)
     root_logger.addHandler(console_handler)
     
-    # File handlers
-    # General application log
-    app_handler = RotatingFileHandler(
-        'logs/fom_qbo.log',
-        maxBytes=10485760,  # 10MB
-        backupCount=5,
-        encoding='utf-8'
-    )
-    app_handler.setLevel(logging.INFO)
-    app_handler.setFormatter(detailed_format)
-    root_logger.addHandler(app_handler)
-    
-    # Error-only log for monitoring
-    error_handler = RotatingFileHandler(
-        'logs/errors.log',
-        maxBytes=5242880,  # 5MB
-        backupCount=3,
-        encoding='utf-8'
-    )
-    error_handler.setLevel(logging.ERROR)
-    error_handler.setFormatter(detailed_format)
-    root_logger.addHandler(error_handler)
-    
-    # Audit log for security events
-    audit_handler = RotatingFileHandler(
-        'logs/audit.log',
-        maxBytes=5242880,  # 5MB
-        backupCount=10,
-        encoding='utf-8'
-    )
-    audit_handler.setLevel(logging.INFO)
-    audit_formatter = logging.Formatter(
-        '%(asctime)s - AUDIT - %(levelname)s - %(message)s'
-    )
-    audit_handler.setFormatter(audit_formatter)
-    # Create separate audit logger
-    audit_logger = logging.getLogger('audit')
-    audit_logger.addHandler(audit_handler)
-    audit_logger.setLevel(logging.INFO)
+    # File handlers - only add if we can write to disk
+    if os.path.exists('logs') or not is_production:
+        try:
+            # General application log
+            app_handler = RotatingFileHandler(
+                'logs/fom_qbo.log',
+                maxBytes=10485760,  # 10MB
+                backupCount=5,
+                encoding='utf-8'
+            )
+            app_handler.setLevel(logging.INFO)
+            app_handler.setFormatter(detailed_format)
+            root_logger.addHandler(app_handler)
+            
+            # Error-only log for monitoring
+            error_handler = RotatingFileHandler(
+                'logs/errors.log',
+                maxBytes=5242880,  # 5MB
+                backupCount=3,
+                encoding='utf-8'
+            )
+            error_handler.setLevel(logging.ERROR)
+            error_handler.setFormatter(detailed_format)
+            root_logger.addHandler(error_handler)
+            
+            # Audit log for security events
+            audit_handler = RotatingFileHandler(
+                'logs/audit.log',
+                maxBytes=5242880,  # 5MB
+                backupCount=10,
+                encoding='utf-8'
+            )
+            audit_handler.setLevel(logging.INFO)
+            audit_formatter = logging.Formatter(
+                '%(asctime)s - AUDIT - %(levelname)s - %(message)s'
+            )
+            audit_handler.setFormatter(audit_formatter)
+            
+            # Create separate audit logger
+            audit_logger = logging.getLogger('audit')
+            audit_logger.addHandler(audit_handler)
+            audit_logger.setLevel(logging.INFO)
+        except Exception as e:
+            print(f"Warning: Could not create file handlers: {e}")
+            # Continue with console logging only
+            audit_logger = logging.getLogger('audit')
+            audit_logger.addHandler(console_handler)
+            audit_logger.setLevel(logging.INFO)
+    else:
+        # In production without file logging, use console for audit
+        audit_logger = logging.getLogger('audit')
+        audit_logger.addHandler(console_handler)
+        audit_logger.setLevel(logging.INFO)
     audit_logger.propagate = False
     
     # Reduce noise from external libraries
