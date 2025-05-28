@@ -444,9 +444,6 @@ function renderDonationTable() {
         } else if (donation.qbCustomerStatus === 'Unknown' && donation.qboCustomerId) {
             // If status wasn't updated but we do have a customer ID, show as matched
             statusHtml += '<span class="badge bg-success me-1">Customer Matched</span>';
-        } else {
-            // Default status if nothing is set
-            statusHtml += '<span class="badge bg-secondary me-1">Not Processed</span>';
         }
         
         // Sync status indicator

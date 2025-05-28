@@ -1218,7 +1218,8 @@ def upload_files_async():
                 'access_token': qbo_service.access_token,
                 'refresh_token': qbo_service.refresh_token,
                 'realm_id': qbo_service.realm_id,
-                'environment': qbo_service.environment
+                'environment': qbo_service.environment,
+                'token_expires_at': qbo_service.token_expires_at
             }
         
         # Queue the task with S3 references

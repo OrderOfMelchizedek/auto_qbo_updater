@@ -7,6 +7,7 @@ import tempfile
 import logging
 import gc
 import traceback
+import time
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from werkzeug.utils import secure_filename
@@ -97,8 +98,15 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
             qbo_service.access_token = qbo_config.get('access_token')
             qbo_service.realm_id = qbo_config.get('realm_id')
             qbo_service.refresh_token = qbo_config.get('refresh_token')
+            # Set token expiry time if provided, otherwise default to 1 hour
+            if qbo_config.get('token_expires_at'):
+                qbo_service.token_expires_at = qbo_config.get('token_expires_at')
+            elif qbo_config.get('access_token'):
+                # Default to 1 hour if not provided but token exists
+                qbo_service.token_expires_at = int(time.time()) + 3600
         
-        file_processor = FileProcessor(gemini_service)
+        # Initialize file processor with BOTH services
+        file_processor = FileProcessor(gemini_service, qbo_service)
         
         # Track processing results
         all_donations = []
@@ -277,12 +285,40 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
                 except Exception as e:
                     logger.error(f"Error matching QBO customers: {str(e)}")
                     warnings.append(f"Could not match QuickBooks customers: {str(e)}")
+            else:
+                # Set default status when QBO is not connected
+                if not qbo_service.is_token_valid():
+                    logger.info("QBO not authenticated - skipping customer matching")
+                    if session_id:
+                        log_progress("QuickBooks not connected - customer matching skipped")
+                    
+                    # Set default status for all donations
+                    for donation in unique_donations:
+                        if 'qbCustomerStatus' not in donation:
+                            donation['qbCustomerStatus'] = 'New'
+                        if 'qbSyncStatus' not in donation:
+                            donation['qbSyncStatus'] = 'Pending'
+            
+            # Filter out donations without check numbers AND amounts
+            filtered_donations = []
+            for donation in unique_donations:
+                check_no = donation.get('Check No.', '').strip()
+                amount = donation.get('Gift Amount', '').strip()
+                
+                # Only include donations that have BOTH check number AND amount
+                if check_no and amount:
+                    filtered_donations.append(donation)
+                else:
+                    logger.warning(f"Filtering out donation without check number or amount: {donation.get('Donor Name', 'Unknown')}")
+            
+            if session_id:
+                log_progress(f"Filtered to {len(filtered_donations)} valid donations (removed {len(unique_donations) - len(filtered_donations)} without check numbers)")
             
             # Store full results in file system, return reference
             full_results = {
                 'success': True,
-                'donations': unique_donations,
-                'total_processed': len(unique_donations),
+                'donations': filtered_donations,
+                'total_processed': len(filtered_donations),
                 'warnings': warnings,
                 'errors': processing_errors,
                 'qboAuthenticated': qbo_service.is_token_valid(),
@@ -290,13 +326,13 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
             }
             
             # Store large data in file and return reference
-            if len(unique_donations) > 50:  # Large result set
+            if len(filtered_donations) > 50:  # Large result set
                 result_ref = result_store.store_result(self.request.id, full_results)
                 # Return lightweight reference for Redis
                 results = {
                     'success': True,
                     'result_reference': result_ref,
-                    'donations_count': len(unique_donations),
+                    'donations_count': len(filtered_donations),
                     'total_processed': len(unique_donations),
                     'warnings_count': len(warnings),
                     'errors_count': len(processing_errors),
