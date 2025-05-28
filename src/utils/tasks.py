@@ -282,6 +282,12 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
                 try:
                     # Use the file_processor instance to match customers
                     unique_donations = file_processor.match_donations_with_qbo_customers(unique_donations)
+                    
+                    # Log matching results
+                    matched_count = sum(1 for d in unique_donations if d.get('qbCustomerStatus') in ['Matched', 'Matched-AddressMismatch', 'Matched-AddressNeedsReview'])
+                    logger.warning(f"After QBO matching: {matched_count} matched out of {len(unique_donations)} donations")
+                    for idx, donation in enumerate(unique_donations[:4]):
+                        logger.warning(f"  Donation {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}")
                 except Exception as e:
                     logger.error(f"Error matching QBO customers: {str(e)}")
                     warnings.append(f"Could not match QuickBooks customers: {str(e)}")
@@ -314,6 +320,12 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
             
             if session_id:
                 log_progress(f"Filtered to {len(filtered_donations)} valid donations (removed {len(unique_donations) - len(filtered_donations)} without dates)")
+            
+            # Log what we're about to return
+            filtered_matched = sum(1 for d in filtered_donations if d.get('qbCustomerStatus') in ['Matched', 'Matched-AddressMismatch', 'Matched-AddressNeedsReview'])
+            logger.warning(f"Returning {len(filtered_donations)} donations with {filtered_matched} matched")
+            for idx, donation in enumerate(filtered_donations[:4]):
+                logger.warning(f"  Return {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}")
             
             # Store full results in file system, return reference
             full_results = {
