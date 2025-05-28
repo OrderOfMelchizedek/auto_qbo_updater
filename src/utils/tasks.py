@@ -211,8 +211,7 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
                     all_donations.extend(donations)
                     if session_id:
                         log_progress(
-                            f"Found {len(donations)} donations in {file_info['filename']}", 
-                            session_id=session_id
+                            f"Found {len(donations)} donations in {file_info['filename']}"
                         )
                 else:
                     warnings.append(f"No donations found in {file_info['filename']}")
