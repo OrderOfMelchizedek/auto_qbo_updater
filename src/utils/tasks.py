@@ -17,6 +17,8 @@ from .gemini_service import GeminiService
 from .qbo_service import QBOService
 from .progress_logger import log_progress, progress_logger
 from .memory_monitor import memory_monitor
+from .redis_monitor import redis_monitor
+from .result_store import result_store
 from .exceptions import FOMQBOException, ValidationException, FileProcessingException
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,8 @@ class CallbackTask(Task):
             progress_logger.end_session(session_id)
 
 
-@celery_app.task(base=CallbackTask, bind=True, name='src.utils.tasks.process_files_task')
+@celery_app.task(base=CallbackTask, bind=True, name='src.utils.tasks.process_files_task', 
+                ignore_result=False, store_errors_even_if_ignored=True)
 @memory_monitor.monitor_function
 def process_files_task(self, files_data, session_id=None, qbo_config=None, gemini_model=None):
     """
@@ -190,8 +193,8 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
                     logger.error(f"Error matching QBO customers: {str(e)}")
                     warnings.append(f"Could not match QuickBooks customers: {str(e)}")
             
-            # Prepare results
-            results = {
+            # Store full results in file system, return reference
+            full_results = {
                 'success': True,
                 'donations': unique_donations,
                 'total_processed': len(unique_donations),
@@ -200,6 +203,24 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
                 'qboAuthenticated': qbo_service.is_token_valid(),
                 'timestamp': datetime.now().isoformat()
             }
+            
+            # Store large data in file and return reference
+            if len(unique_donations) > 50:  # Large result set
+                result_ref = result_store.store_result(self.request.id, full_results)
+                # Return lightweight reference for Redis
+                results = {
+                    'success': True,
+                    'result_reference': result_ref,
+                    'donations_count': len(unique_donations),
+                    'total_processed': len(unique_donations),
+                    'warnings_count': len(warnings),
+                    'errors_count': len(processing_errors),
+                    'qboAuthenticated': qbo_service.is_token_valid(),
+                    'timestamp': datetime.now().isoformat()
+                }
+            else:
+                # Small result set - store normally
+                results = full_results
             
             if session_id:
                 log_progress(
@@ -238,6 +259,11 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
         # Final cleanup
         gc.collect()
         memory_monitor.log_memory_usage("Task completion")
+        # Check Redis memory usage
+        try:
+            redis_monitor.check_memory_usage(threshold_mb=20)
+        except Exception as e:
+            logger.warning(f"Redis monitor error: {e}")
 
 
 @celery_app.task(bind=True, name='src.utils.tasks.process_single_file_task')

@@ -1,2 +1,2 @@
 web: gunicorn src.app:app --timeout 300 --workers 2 --worker-class sync --max-requests 100 --max-requests-jitter 20 --graceful-timeout 30
-worker: celery -A src.utils.celery_app:celery_app worker --loglevel=info --concurrency=2 -Q file_processing,celery --max-memory-per-child=150000 --max-tasks-per-child=10
+worker: celery -A src.utils.celery_app:celery_app worker --loglevel=info --concurrency=2 -Q file_processing,celery --max-memory-per-child=100000 --max-tasks-per-child=10 --without-heartbeat --without-gossip --without-mingle --pool=prefork

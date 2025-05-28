@@ -1232,10 +1232,34 @@ def get_task_status(task_id):
                 'status': 'Task is waiting to be processed...'
             }
         elif result.state == 'SUCCESS':
-            response = {
-                'state': result.state,
-                'result': result.result
-            }
+            # Handle file-stored results
+            task_result = result.result
+            if isinstance(task_result, dict) and task_result.get('result_reference'):
+                # Large result stored in file
+                try:
+                    from src.utils.result_store import result_store
+                except ImportError:
+                    from utils.result_store import result_store
+                
+                # Retrieve full results from file
+                full_result = result_store.retrieve_result(task_result['result_reference'])
+                if full_result:
+                    response = {
+                        'state': result.state,
+                        'result': full_result
+                    }
+                else:
+                    # Fallback to summary data
+                    response = {
+                        'state': result.state,
+                        'result': task_result
+                    }
+            else:
+                # Normal result
+                response = {
+                    'state': result.state,
+                    'result': task_result
+                }
         elif result.state == 'FAILURE':
             response = {
                 'state': result.state,
