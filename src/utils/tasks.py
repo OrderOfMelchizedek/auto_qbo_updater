@@ -75,7 +75,18 @@ def process_files_task(self, file_references=None, files_data=None, session_id=N
             api_key=gemini_api_key,
             model_name=gemini_model or 'gemini-2.5-flash-preview-04-17'
         )
+        # Get QBO credentials from environment
+        qbo_client_id = os.environ.get('QBO_CLIENT_ID')
+        qbo_client_secret = os.environ.get('QBO_CLIENT_SECRET')
+        qbo_redirect_uri = os.environ.get('QBO_REDIRECT_URI', 'http://localhost:5000/qbo/callback')
+        
+        if not qbo_client_id or not qbo_client_secret:
+            raise ValueError("QBO_CLIENT_ID and QBO_CLIENT_SECRET environment variables must be set")
+        
         qbo_service = QBOService(
+            client_id=qbo_client_id,
+            client_secret=qbo_client_secret,
+            redirect_uri=qbo_redirect_uri,
             environment=qbo_config.get('environment', 'sandbox') if qbo_config else 'sandbox'
         )
         
