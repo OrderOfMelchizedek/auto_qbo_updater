@@ -665,10 +665,55 @@ def synthesize_donation_data(existing, new):
         else:
             merged['Memo'] = new_memo
     
-    # Preserve QBO-related fields - prioritize existing record but take from new if not present
-    qbo_fields = ['qboCustomerId', 'qbCustomerStatus', 'qbSyncStatus', 
-                  'customerLookup', 'matchMethod', 'matchConfidence', 'internalId']
-    for field in qbo_fields:
+    # Preserve QBO-related fields - intelligently merge to keep the best match
+    # For customer matching fields, prefer matched status over new/unmatched
+    customer_fields = ['qboCustomerId', 'customerLookup', 'matchMethod', 'matchConfidence']
+    
+    # Check if either record has a successful match
+    existing_matched = existing.get('qbCustomerStatus') in ['Matched', 'Matched-AddressMismatch', 'Matched-AddressNeedsReview']
+    new_matched = new.get('qbCustomerStatus') in ['Matched', 'Matched-AddressMismatch', 'Matched-AddressNeedsReview']
+    
+    if existing_matched and not new_matched:
+        # Existing has a match, new doesn't - keep existing
+        for field in customer_fields:
+            if field in existing:
+                merged[field] = existing[field]
+        merged['qbCustomerStatus'] = existing.get('qbCustomerStatus')
+    elif new_matched and not existing_matched:
+        # New has a match, existing doesn't - take new
+        for field in customer_fields:
+            if field in new:
+                merged[field] = new[field]
+        merged['qbCustomerStatus'] = new.get('qbCustomerStatus')
+    elif existing_matched and new_matched:
+        # Both have matches - prefer existing unless new has higher confidence
+        existing_confidence = existing.get('matchConfidence', 0)
+        new_confidence = new.get('matchConfidence', 0)
+        if new_confidence > existing_confidence:
+            for field in customer_fields:
+                if field in new:
+                    merged[field] = new[field]
+            merged['qbCustomerStatus'] = new.get('qbCustomerStatus')
+        else:
+            for field in customer_fields:
+                if field in existing:
+                    merged[field] = existing[field]
+            merged['qbCustomerStatus'] = existing.get('qbCustomerStatus')
+    else:
+        # Neither has a match - preserve any existing data
+        for field in customer_fields:
+            if field in existing and existing[field]:
+                merged[field] = existing[field]
+            elif field in new and new[field]:
+                merged[field] = new[field]
+        if 'qbCustomerStatus' in existing:
+            merged['qbCustomerStatus'] = existing['qbCustomerStatus']
+        elif 'qbCustomerStatus' in new:
+            merged['qbCustomerStatus'] = new['qbCustomerStatus']
+    
+    # Other QBO fields - simple merge
+    other_qbo_fields = ['qbSyncStatus', 'internalId']
+    for field in other_qbo_fields:
         if field in existing and existing[field]:
             merged[field] = existing[field]
         elif field in new and new[field]:
@@ -1880,15 +1925,9 @@ def update_donations_session():
         # Get existing donations from session
         existing_donations = session.get('donations', [])
         
-        # When new donations come from task processing (with customer matching),
-        # we want to prioritize their QBO data during deduplication
-        # So we reverse the order - treat new donations as "existing" to preserve their data
-        if new_donations and any(d.get('qbCustomerStatus') for d in new_donations):
-            # New donations have customer matching data - preserve it
-            deduplicated_donations = deduplicate_and_synthesize_donations(new_donations, existing_donations)
-        else:
-            # Normal case - existing donations take precedence
-            deduplicated_donations = deduplicate_and_synthesize_donations(existing_donations, new_donations)
+        # Always use normal deduplication order, but the synthesize function
+        # will intelligently preserve QBO customer matching data
+        deduplicated_donations = deduplicate_and_synthesize_donations(existing_donations, new_donations)
         
         session['donations'] = deduplicated_donations
         
