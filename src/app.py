@@ -1937,8 +1937,10 @@ def update_donations_session():
         
         # Debug logging to trace customer match data
         logger.info(f"Received {len(new_donations)} donations in update-session")
+        print(f"[UPDATE-SESSION] Received {len(new_donations)} donations")
         for idx, donation in enumerate(new_donations[:3]):  # Log first 3
             logger.info(f"Donation {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}")
+            print(f"[UPDATE-SESSION] Donation {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}")
         
         # Get existing donations from session
         existing_donations = session.get('donations', [])
@@ -1946,6 +1948,10 @@ def update_donations_session():
         # Always use normal deduplication order, but the synthesize function
         # will intelligently preserve QBO customer matching data
         deduplicated_donations = deduplicate_and_synthesize_donations(existing_donations, new_donations)
+        
+        # Log final results
+        matched_count = sum(1 for d in deduplicated_donations if d.get('qbCustomerStatus') in ['Matched', 'Matched-AddressMismatch', 'Matched-AddressNeedsReview'])
+        print(f"[UPDATE-SESSION] After deduplication: {len(deduplicated_donations)} donations, {matched_count} matched")
         
         session['donations'] = deduplicated_donations
         
