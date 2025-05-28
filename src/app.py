@@ -1340,6 +1340,15 @@ def get_task_status(task_id):
         elif result.state == 'SUCCESS':
             # Handle file-stored results
             task_result = result.result
+            
+            # Debug logging for customer match data
+            if isinstance(task_result, dict) and task_result.get('donations'):
+                donations = task_result['donations']
+                matched_count = sum(1 for d in donations if d.get('qbCustomerStatus') in ['Matched', 'Matched-AddressMismatch', 'Matched-AddressNeedsReview'])
+                logger.warning(f"[TASK-STATUS] Returning {len(donations)} donations with {matched_count} matched")
+                for idx, donation in enumerate(donations[:4]):
+                    logger.warning(f"[TASK-STATUS] Donation {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}")
+            
             if isinstance(task_result, dict) and task_result.get('result_reference'):
                 # Large result stored in file
                 try:
@@ -1938,9 +1947,16 @@ def update_donations_session():
         # Debug logging to trace customer match data
         logger.info(f"Received {len(new_donations)} donations in update-session")
         print(f"[UPDATE-SESSION] Received {len(new_donations)} donations")
-        for idx, donation in enumerate(new_donations[:3]):  # Log first 3
+        for idx, donation in enumerate(new_donations[:4]):  # Log first 4
             logger.info(f"Donation {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}")
             print(f"[UPDATE-SESSION] Donation {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}")
+            # Log full customer data if present
+            if donation.get('qboCustomerId'):
+                print(f"[UPDATE-SESSION]   Full customer data: id={donation.get('qboCustomerId')}, name={donation.get('customerLookup')}, method={donation.get('matchMethod')}, confidence={donation.get('matchConfidence')}")
+        
+        # Log raw JSON to see exact structure
+        import json
+        print(f"[UPDATE-SESSION] Raw JSON sample (first donation): {json.dumps(new_donations[0] if new_donations else {}, indent=2)}")
         
         # Get existing donations from session
         existing_donations = session.get('donations', [])
@@ -1952,6 +1968,12 @@ def update_donations_session():
         # Log final results
         matched_count = sum(1 for d in deduplicated_donations if d.get('qbCustomerStatus') in ['Matched', 'Matched-AddressMismatch', 'Matched-AddressNeedsReview'])
         print(f"[UPDATE-SESSION] After deduplication: {len(deduplicated_donations)} donations, {matched_count} matched")
+        
+        # Log detailed match info for debugging
+        for idx, donation in enumerate(deduplicated_donations[:4]):
+            status = donation.get('qbCustomerStatus', 'None')
+            cust_id = donation.get('qboCustomerId', 'None')
+            print(f"[UPDATE-SESSION] Final donation {idx}: {donation.get('Donor Name')} - Status: {status} - ID: {cust_id}")
         
         session['donations'] = deduplicated_donations
         

@@ -326,6 +326,9 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
             logger.warning(f"Returning {len(filtered_donations)} donations with {filtered_matched} matched")
             for idx, donation in enumerate(filtered_donations[:4]):
                 logger.warning(f"  Return {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}")
+                # Log full customer data if matched
+                if donation.get('qbCustomerStatus') in ['Matched', 'Matched-AddressMismatch', 'Matched-AddressNeedsReview']:
+                    logger.warning(f"    Customer data: {json.dumps({'id': donation.get('qboCustomerId'), 'name': donation.get('customerLookup'), 'method': donation.get('matchMethod'), 'confidence': donation.get('matchConfidence')})}")
             
             # Store full results in file system, return reference
             full_results = {

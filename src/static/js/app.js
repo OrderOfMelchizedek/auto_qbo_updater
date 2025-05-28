@@ -2481,6 +2481,18 @@ function uploadAndProcessFilesAsync(files) {
                             if (result.success) {
                                 // Update session with donations
                                 if (result.donations && result.donations.length > 0) {
+                                    // Log donation data to debug customer matching
+                                    console.log('[TASK RESULT] Received donations:', result.donations.length);
+                                    result.donations.slice(0, 4).forEach((donation, idx) => {
+                                        console.log(`[TASK RESULT] Donation ${idx}:`, {
+                                            donor: donation['Donor Name'],
+                                            status: donation.qbCustomerStatus,
+                                            id: donation.qboCustomerId,
+                                            matchMethod: donation.matchMethod,
+                                            matchConfidence: donation.matchConfidence
+                                        });
+                                    });
+                                    
                                     // Store donations in session via API call
                                     fetchWithCSRF('/donations/update-session', {
                                         method: 'POST',
