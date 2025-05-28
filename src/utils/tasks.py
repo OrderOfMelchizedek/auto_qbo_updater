@@ -28,14 +28,16 @@ class CallbackTask(Task):
         """Called on successful task completion."""
         session_id = kwargs.get('session_id')
         if session_id:
-            log_progress(f"Task {task_id} completed successfully", session_id=session_id)
+            progress_logger.start_session(session_id)
+            log_progress(f"Task {task_id} completed successfully")
             progress_logger.end_session(session_id)
     
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """Called on task failure."""
         session_id = kwargs.get('session_id')
         if session_id:
-            log_progress(f"Task {task_id} failed: {str(exc)}", session_id=session_id, force_summary=True)
+            progress_logger.start_session(session_id)
+            log_progress(f"Task {task_id} failed: {str(exc)}", force_summary=True)
             progress_logger.end_session(session_id)
 
 
@@ -58,7 +60,7 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
         # Initialize progress tracking
         if session_id:
             progress_logger.start_session(session_id)
-            log_progress("Starting background file processing...", session_id=session_id)
+            log_progress("Starting background file processing...")
         
         # Initialize services
         gemini_service = GeminiService(model_name=gemini_model)
@@ -111,7 +113,7 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
             for file_info in saved_files:
                 try:
                     if session_id:
-                        log_progress(f"Processing {file_info['filename']}...", session_id=session_id)
+                        log_progress(f"Processing {file_info['filename']}...")
                     
                     # Process file based on type
                     donations = file_processor.process_file(
@@ -135,14 +137,14 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
                     logger.error(error_msg)
                     processing_errors.append(error_msg)
                     if session_id:
-                        log_progress(error_msg, session_id=session_id, force_summary=True)
+                        log_progress(error_msg, force_summary=True)
                     
                 except Exception as e:
                     error_msg = f"Error processing {file_info['filename']}: {str(e)}"
                     logger.error(error_msg)
                     processing_errors.append(error_msg)
                     if session_id:
-                        log_progress(error_msg, session_id=session_id)
+                        log_progress(error_msg)
                 finally:
                     # Force garbage collection after each file
                     gc.collect()
@@ -151,7 +153,7 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
         # Validate and enhance donations
         if all_donations:
             if session_id:
-                log_progress(f"Validating {len(all_donations)} donations...", session_id=session_id)
+                log_progress(f"Validating {len(all_donations)} donations...")
             
             try:
                 from src.app import validate_and_enhance_donations
@@ -161,7 +163,7 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
             
             # Deduplicate donations
             if session_id:
-                log_progress("Removing duplicate donations...", session_id=session_id)
+                log_progress("Removing duplicate donations...")
             
             try:
                 from src.app import deduplicate_donations
@@ -172,7 +174,7 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
             # Match with QBO customers if authenticated
             if qbo_service.is_token_valid() and unique_donations:
                 if session_id:
-                    log_progress("Matching donations with QuickBooks customers...", session_id=session_id)
+                    log_progress("Matching donations with QuickBooks customers...")
                 
                 try:
                     try:
@@ -202,7 +204,6 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
             if session_id:
                 log_progress(
                     f"Processing complete! Found {len(unique_donations)} unique donations.", 
-                    session_id=session_id,
                     force_summary=True
                 )
             
@@ -218,7 +219,6 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
             if session_id:
                 log_progress(
                     "Processing complete. No valid donations found.", 
-                    session_id=session_id,
                     force_summary=True
                 )
         
@@ -227,7 +227,7 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
     except Exception as e:
         logger.error(f"Task failed: {str(e)}")
         if session_id:
-            log_progress(f"Processing failed: {str(e)}", session_id=session_id, force_summary=True)
+            log_progress(f"Processing failed: {str(e)}", force_summary=True)
         
         return {
             'success': False,

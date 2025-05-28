@@ -1196,8 +1196,8 @@ def upload_files_async():
         )
         
         # Log initial progress
-        log_progress(f"Files queued for processing. Task ID: {task.id}", session_id=session_id)
-        log_progress("Your files are being processed in the background...", session_id=session_id, force_summary=True)
+        log_progress(f"Files queued for processing. Task ID: {task.id}")
+        log_progress("Your files are being processed in the background...", force_summary=True)
         
         return jsonify({
             'success': True,
