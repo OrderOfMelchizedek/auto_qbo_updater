@@ -84,10 +84,10 @@ class FileProcessor:
         donations_to_reprocess = []
         
         # Critical fields that must be present
-        critical_fields = ['Donor Name', 'Gift Amount', 'Check Date', 'Check No.']
+        critical_fields = ['Donor Name', 'Gift Amount', 'Check No.']
         
         # Nice-to-have fields (we'll try to get these but won't reprocess just for them)
-        optional_fields = ['Address - Line 1', 'City', 'State', 'ZIP', 'First Name', 'Last Name']
+        optional_fields = ['Check Date', 'Address - Line 1', 'City', 'State', 'ZIP', 'First Name', 'Last Name']
         
         for donation in donations_list:
             # Warn if Check Date equals Deposit Date (likely extraction error)
@@ -618,7 +618,7 @@ class FileProcessor:
                 validated_donations = []
                 
                 # Critical fields that must be present
-                critical_fields = ['Donor Name', 'Gift Amount', 'Check Date', 'Check No.']
+                critical_fields = ['Donor Name', 'Gift Amount', 'Check No.']
                 
                 for donation in all_donations:
                     # Check for missing critical fields
@@ -668,7 +668,7 @@ class FileProcessor:
         unique_donations = []
         
         # Critical fields that must be present (safety check)
-        critical_fields = ['Donor Name', 'Gift Amount', 'Check Date', 'Check No.']
+        critical_fields = ['Donor Name', 'Gift Amount', 'Check No.']
         
         for donation in donations:
             # Final safety check - skip donations missing critical fields
