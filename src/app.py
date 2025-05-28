@@ -581,14 +581,17 @@ def deduplicate_and_synthesize_donations(existing_donations, new_donations):
         # Check if this key already exists
         if unique_key in unique_donations:
             # Merge with existing donation
-            print(f"Merging donation with key: {unique_key}")
+            logger.info(f"Merging donation with key: {unique_key}")
+            logger.info(f"  Existing: {unique_donations[unique_key].get('Donor Name')} - Status: {unique_donations[unique_key].get('qbCustomerStatus')} - ID: {unique_donations[unique_key].get('qboCustomerId')}")
+            logger.info(f"  New: {new_donation.get('Donor Name')} - Status: {new_donation.get('qbCustomerStatus')} - ID: {new_donation.get('qboCustomerId')}")
             unique_donations[unique_key] = synthesize_donation_data(
                 unique_donations[unique_key], new_donation
             )
             merge_count += 1
         else:
             # Add as new donation
-            print(f"Adding new donation with key: {unique_key}")
+            logger.info(f"Adding new donation with key: {unique_key}")
+            logger.info(f"  New: {new_donation.get('Donor Name')} - Status: {new_donation.get('qbCustomerStatus')} - ID: {new_donation.get('qboCustomerId')}")
             unique_donations[unique_key] = new_donation
             new_count += 1
     
@@ -600,7 +603,11 @@ def deduplicate_and_synthesize_donations(existing_donations, new_donations):
         if 'internalId' not in donation or not donation['internalId']:
             donation['internalId'] = f"donation_{i}"
     
-    print(f"Deduplication complete: {len(result)} unique donations (merged {merge_count}, added {new_count})")
+    logger.info(f"Deduplication complete: {len(result)} unique donations (merged {merge_count}, added {new_count})")
+    
+    # Log final customer match status
+    matched_count = sum(1 for d in result if d.get('qbCustomerStatus') in ['Matched', 'Matched-AddressMismatch', 'Matched-AddressNeedsReview'])
+    logger.info(f"Customer matches in final result: {matched_count} out of {len(result)} donations")
     
     return result
 
@@ -615,6 +622,9 @@ def synthesize_donation_data(existing, new):
     4. Specific fields have custom merge logic
     """
     merged = existing.copy()
+    
+    # Debug logging
+    logger.info(f"Merging donations - Existing status: {existing.get('qbCustomerStatus')}, New status: {new.get('qbCustomerStatus')}")
     
     # Initialize merge history if not present
     if 'mergeHistory' not in merged:
@@ -736,6 +746,9 @@ def synthesize_donation_data(existing, new):
             }
         })
         merged['isMerged'] = True
+    
+    # Log the final merged result
+    logger.info(f"Merge complete - Result status: {merged.get('qbCustomerStatus')} - ID: {merged.get('qboCustomerId')}")
     
     return merged
 
@@ -1921,6 +1934,11 @@ def update_donations_session():
             }), 400
         
         new_donations = data['donations']
+        
+        # Debug logging to trace customer match data
+        logger.info(f"Received {len(new_donations)} donations in update-session")
+        for idx, donation in enumerate(new_donations[:3]):  # Log first 3
+            logger.info(f"Donation {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}")
         
         # Get existing donations from session
         existing_donations = session.get('donations', [])
