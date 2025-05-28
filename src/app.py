@@ -665,12 +665,14 @@ def synthesize_donation_data(existing, new):
         else:
             merged['Memo'] = new_memo
     
-    # Preserve QBO-related fields from existing record
+    # Preserve QBO-related fields - prioritize existing record but take from new if not present
     qbo_fields = ['qboCustomerId', 'qbCustomerStatus', 'qbSyncStatus', 
-                  'matchMethod', 'matchConfidence', 'internalId']
+                  'customerLookup', 'matchMethod', 'matchConfidence', 'internalId']
     for field in qbo_fields:
-        if field in existing:
+        if field in existing and existing[field]:
             merged[field] = existing[field]
+        elif field in new and new[field]:
+            merged[field] = new[field]
     
     # Data source tracking
     if 'dataSource' in existing and 'dataSource' in new:
