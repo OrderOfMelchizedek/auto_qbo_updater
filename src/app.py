@@ -1880,8 +1880,16 @@ def update_donations_session():
         # Get existing donations from session
         existing_donations = session.get('donations', [])
         
-        # Use the existing deduplication function
-        deduplicated_donations = deduplicate_and_synthesize_donations(existing_donations, new_donations)
+        # When new donations come from task processing (with customer matching),
+        # we want to prioritize their QBO data during deduplication
+        # So we reverse the order - treat new donations as "existing" to preserve their data
+        if new_donations and any(d.get('qbCustomerStatus') for d in new_donations):
+            # New donations have customer matching data - preserve it
+            deduplicated_donations = deduplicate_and_synthesize_donations(new_donations, existing_donations)
+        else:
+            # Normal case - existing donations take precedence
+            deduplicated_donations = deduplicate_and_synthesize_donations(existing_donations, new_donations)
+        
         session['donations'] = deduplicated_donations
         
         return jsonify({
