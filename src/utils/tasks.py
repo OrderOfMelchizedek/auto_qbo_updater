@@ -6,6 +6,7 @@ import json
 import tempfile
 import logging
 import gc
+import traceback
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from werkzeug.utils import secure_filename
@@ -244,26 +245,26 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
                     except Exception as e:
                         logger.error(f"Failed to clean up S3 file {file_info['s3_key']}: {str(e)}")
         
-        # Validate and enhance donations
+        # Process donations
         if all_donations:
             if session_id:
-                log_progress(f"Validating {len(all_donations)} donations...")
-            
-            try:
-                from src.app import validate_and_enhance_donations
-            except ImportError:
-                from ..app import validate_and_enhance_donations
-            validated_donations = validate_and_enhance_donations(all_donations)
+                log_progress(f"Processing {len(all_donations)} donations...")
             
             # Deduplicate donations
             if session_id:
                 log_progress("Removing duplicate donations...")
             
             try:
-                from src.app import deduplicate_donations
+                from src.app import deduplicate_and_synthesize_donations
             except ImportError:
-                from ..app import deduplicate_donations
-            unique_donations = deduplicate_donations(validated_donations, [])
+                from ..app import deduplicate_and_synthesize_donations
+            
+            try:
+                unique_donations = deduplicate_and_synthesize_donations([], all_donations)
+            except Exception as e:
+                logger.error(f"Error deduplicating donations: {str(e)}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
             
             # Match with QBO customers if authenticated
             if qbo_service.is_token_valid() and unique_donations:
