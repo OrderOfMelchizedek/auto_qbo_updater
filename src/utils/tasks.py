@@ -194,10 +194,10 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
                     log_progress(f"Processing {file_info['filename']}...")
                 
                 # Process file based on type
-                donations = file_processor.process_file(
+                _, ext = os.path.splitext(file_info['filename'])
+                donations = file_processor.process(
                     file_info['path'],
-                    file_info['filename'],
-                    file_info['content_type']
+                    ext
                 )
                 
                 if donations:
