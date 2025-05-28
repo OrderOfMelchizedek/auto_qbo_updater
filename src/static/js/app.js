@@ -2699,7 +2699,7 @@ function checkAuthAndProcessFiles() {
                     if (useAsyncProcessing) {
                         uploadAndProcessFilesAsync(window.pendingFiles);
                     } else {
-                        uploadAndProcessFiles(window.pendingFiles);
+                        uploadAndProcessFilesAsync(window.pendingFiles);
                     }
                 }
             }
@@ -2787,7 +2787,7 @@ function checkQBOAuthStatus() {
                     if (useAsyncProcessing) {
                         uploadAndProcessFilesAsync(window.pendingFiles);
                     } else {
-                        uploadAndProcessFiles(window.pendingFiles);
+                        uploadAndProcessFilesAsync(window.pendingFiles);
                     }
                     window.pendingFiles = null; // Clear pending files
                 }
@@ -3079,7 +3079,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (useAsyncProcessing) {
                 uploadAndProcessFilesAsync(window.pendingFiles);
             } else {
-                uploadAndProcessFiles(window.pendingFiles);
+                uploadAndProcessFilesAsync(window.pendingFiles);
             }
             window.pendingFiles = null; // Clear pending files
         }
@@ -3192,13 +3192,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (useAsyncProcessing) {
                         uploadAndProcessFilesAsync(files);
                     } else {
-                        uploadAndProcessFiles(files);
+                        uploadAndProcessFilesAsync(files);
                     }
                 })
                 .catch(error => {
                     console.error("Error checking QBO auth status:", error);
                     // Proceed with file processing if there's an error checking auth
-                    uploadAndProcessFiles(files);
+                    uploadAndProcessFilesAsync(files);
                 });
         } else {
             showToast('Please select files to upload', 'warning');
