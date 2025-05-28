@@ -24,7 +24,7 @@ def make_celery(app_name=__name__):
         app_name,
         broker=redis_url,
         backend=redis_url,
-        include=['src.utils.tasks', 'src.utils.cleanup_tasks']  # Include tasks modules
+        include=['utils.tasks', 'utils.cleanup_tasks']  # Include tasks modules
     )
     
     # Update configuration
@@ -58,8 +58,8 @@ def make_celery(app_name=__name__):
         
         # Task routing
         task_routes={
-            'src.utils.tasks.process_files_task': {'queue': 'file_processing'},
-            'src.utils.tasks.process_single_file_task': {'queue': 'file_processing'},
+            'utils.tasks.process_files_task': {'queue': 'file_processing'},
+            'utils.tasks.process_single_file_task': {'queue': 'file_processing'},
         },
         
         # Broker configuration to prevent memory issues

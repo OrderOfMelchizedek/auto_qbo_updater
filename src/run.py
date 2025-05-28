@@ -41,7 +41,7 @@ os.environ['QBO_ENVIRONMENT'] = args.env
 os.environ['GEMINI_MODEL'] = model_name
 
 # Import the app after setting environment variables
-from src.app import app
+from app import app
 
 if __name__ == '__main__':    
     # Print startup info

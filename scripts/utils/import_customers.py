@@ -9,7 +9,11 @@ import threading
 from dotenv import load_dotenv
 from flask import Flask, redirect, request, url_for, render_template_string
 from tqdm import tqdm  # For progress bar
-from src.utils.qbo_service import QBOService
+import sys
+# Add the src directory to the Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
+
+from utils.qbo_service import QBOService
 
 # Load environment variables
 load_dotenv()
