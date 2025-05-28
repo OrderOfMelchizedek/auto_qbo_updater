@@ -1880,7 +1880,6 @@ def update_donations_session():
         # Use the existing deduplication function
         deduplicated_donations = deduplicate_and_synthesize_donations(existing_donations, new_donations)
         session['donations'] = deduplicated_donations
-            session['donations'] = new_donations
         
         return jsonify({
             'success': True,
