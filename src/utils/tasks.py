@@ -67,7 +67,14 @@ def process_files_task(self, file_references=None, files_data=None, session_id=N
             log_progress("Starting background file processing...")
         
         # Initialize services
-        gemini_service = GeminiService(model_name=gemini_model)
+        gemini_api_key = os.environ.get('GEMINI_API_KEY')
+        if not gemini_api_key:
+            raise ValueError("GEMINI_API_KEY environment variable not set")
+        
+        gemini_service = GeminiService(
+            api_key=gemini_api_key,
+            model_name=gemini_model or 'gemini-2.5-flash-preview-04-17'
+        )
         qbo_service = QBOService(
             environment=qbo_config.get('environment', 'sandbox') if qbo_config else 'sandbox'
         )
