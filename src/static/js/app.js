@@ -178,27 +178,7 @@ function renderDonationTable() {
             tr.classList.add('merged-donation');
         }
         
-        // Create source cell with icon
-        const sourceCell = document.createElement('td');
-        if (donation.dataSource === 'Mixed') {
-            sourceCell.innerHTML = '<i class="fas fa-code-branch source-mixed" title="Merged from multiple sources"></i>';
-        } else if (donation.dataSource === 'LLM') {
-            sourceCell.innerHTML = '<i class="fas fa-file-image source-llm" title="Extracted from Image/PDF"></i>';
-        } else if (donation.dataSource === 'CSV') {
-            sourceCell.innerHTML = '<i class="fas fa-file-csv source-csv" title="Imported from CSV"></i>';
-        }
-        
-        // Add merge indicator if present
-        if (donation.mergeHistory && donation.mergeHistory.length > 0) {
-            const mergeDetails = donation.mergeHistory.map(h => 
-                `Merged ${h.mergedFields.join(', ')} from ${h.sourceData.donor || 'Unknown'}`
-            ).join('\n');
-            sourceCell.innerHTML += ` <span class="badge bg-info" style="cursor: pointer;" title="${mergeDetails}" onclick="showMergeHistory('${donation.internalId}')">${donation.mergeHistory.length}</span>`;
-        }
-        
-        tr.appendChild(sourceCell);
-        
-        // Create other cells
+        // Create cells for all fields
         const fields = [
             'customerLookup', 'Donor Name', 'Check No.', 'Gift Amount', 
             'Check Date', 'Address - Line 1', 'City', 'State', 'ZIP', 'Memo'
@@ -464,6 +444,9 @@ function renderDonationTable() {
         } else if (donation.qbCustomerStatus === 'Unknown' && donation.qboCustomerId) {
             // If status wasn't updated but we do have a customer ID, show as matched
             statusHtml += '<span class="badge bg-success me-1">Customer Matched</span>';
+        } else {
+            // Default status if nothing is set
+            statusHtml += '<span class="badge bg-secondary me-1">Not Processed</span>';
         }
         
         // Sync status indicator
@@ -482,31 +465,28 @@ function renderDonationTable() {
         const actionsCell = document.createElement('td');
         let actionsHtml = '';
         
-        // Only show QBO actions for LLM-extracted donations
-        if (donation.dataSource === 'LLM') {
-            
-            // Create, manual match or update customer buttons, depending on status
-            if (donation.qbCustomerStatus === 'New') {
-                // Manual match button to select from existing customers
-                actionsHtml += `<button class="btn btn-sm btn-outline-primary me-1 manual-match-btn" data-id="${donation.internalId}" title="Manually select customer from QBO">
-                    <i class="fas fa-link"></i>
-                </button>`;
-                // Create new customer button
-                actionsHtml += `<button class="btn btn-sm btn-outline-info me-1 create-customer-btn" data-id="${donation.internalId}" title="Create new customer in QBO">
-                    <i class="fas fa-user-plus"></i>
-                </button>`;
-            } else if (donation.qbCustomerStatus === 'Matched-AddressMismatch') {
-                actionsHtml += `<button class="btn btn-sm btn-outline-warning me-1 update-customer-btn" data-id="${donation.internalId}" title="Update customer address in QBO">
-                    <i class="fas fa-user-edit"></i>
-                </button>`;
-            }
-            
-            // Send to QBO button (only if not already sent)
-            if (donation.qbSyncStatus !== 'Sent') {
-                actionsHtml += `<button class="btn btn-sm btn-outline-success me-1 send-to-qbo-btn" data-id="${donation.internalId}" title="Send to QuickBooks Online">
-                    <i class="fas fa-paper-plane"></i>
-                </button>`;
-            }
+        // Show QBO actions for all donations
+        // Create, manual match or update customer buttons, depending on status
+        if (donation.qbCustomerStatus === 'New' || !donation.qbCustomerStatus) {
+            // Manual match button to select from existing customers
+            actionsHtml += `<button class="btn btn-sm btn-outline-primary me-1 manual-match-btn" data-id="${donation.internalId}" title="Manually select customer from QBO">
+                <i class="fas fa-link"></i>
+            </button>`;
+            // Create new customer button
+            actionsHtml += `<button class="btn btn-sm btn-outline-info me-1 create-customer-btn" data-id="${donation.internalId}" title="Create new customer in QBO">
+                <i class="fas fa-user-plus"></i>
+            </button>`;
+        } else if (donation.qbCustomerStatus === 'Matched-AddressMismatch' || donation.qbCustomerStatus === 'Matched-AddressNeedsReview') {
+            actionsHtml += `<button class="btn btn-sm btn-outline-warning me-1 update-customer-btn" data-id="${donation.internalId}" title="Update customer address in QBO">
+                <i class="fas fa-user-edit"></i>
+            </button>`;
+        }
+        
+        // Send to QBO button (only if not already sent and customer is matched)
+        if (donation.qbSyncStatus !== 'Sent' && donation.qbCustomerStatus === 'Matched') {
+            actionsHtml += `<button class="btn btn-sm btn-outline-success me-1 send-to-qbo-btn" data-id="${donation.internalId}" title="Send to QuickBooks Online">
+                <i class="fas fa-paper-plane"></i>
+            </button>`;
         }
         
         // Delete button for all donations
