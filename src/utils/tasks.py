@@ -46,12 +46,13 @@ class CallbackTask(Task):
 @celery_app.task(base=CallbackTask, bind=True, name='src.utils.tasks.process_files_task', 
                 ignore_result=False, store_errors_even_if_ignored=True)
 @memory_monitor.monitor_function
-def process_files_task(self, file_references=None, files_data=None, session_id=None, qbo_config=None, gemini_model=None):
+def process_files_task(self, s3_references=None, file_references=None, files_data=None, session_id=None, qbo_config=None, gemini_model=None):
     """
     Process uploaded files asynchronously.
     
     Args:
-        file_references: List of file reference dicts (new method)
+        s3_references: List of S3 file reference dicts (preferred method)
+        file_references: List of file reference dicts (temp file method)
         files_data: List of dicts with file information (legacy method)
         session_id: Session ID for progress tracking
         qbo_config: QuickBooks configuration (access_token, realm_id, environment)
@@ -103,11 +104,44 @@ def process_files_task(self, file_references=None, files_data=None, session_id=N
         processing_errors = []
         warnings = []
         
-        # Handle both new (file_references) and legacy (files_data) methods
+        # Handle S3, temp file, and legacy methods
         saved_files = []
         
-        if file_references:
-            # New method: files already saved to temp storage
+        if s3_references:
+            # Preferred method: download files from S3
+            try:
+                from src.utils.s3_storage import S3Storage
+            except ImportError:
+                from utils.s3_storage import S3Storage
+            
+            s3_storage = S3Storage()
+            
+            with tempfile.TemporaryDirectory() as temp_dir:
+                for s3_ref in s3_references:
+                    try:
+                        # Download from S3
+                        file_content = s3_storage.download_file(s3_ref['s3_key'])
+                        
+                        # Save to temp file for processing
+                        filename = secure_filename(s3_ref['filename'])
+                        filepath = os.path.join(temp_dir, filename)
+                        
+                        with open(filepath, 'wb') as f:
+                            f.write(file_content)
+                        
+                        saved_files.append({
+                            'path': filepath,
+                            'filename': s3_ref['filename'],
+                            'content_type': s3_ref.get('content_type', 'application/octet-stream'),
+                            's3_key': s3_ref['s3_key']  # Keep reference for cleanup
+                        })
+                        
+                    except Exception as e:
+                        logger.error(f"Error downloading from S3: {s3_ref.get('filename', 'unknown')}: {str(e)}")
+                        processing_errors.append(f"Failed to download {s3_ref.get('filename', 'unknown')}: {str(e)}")
+        
+        elif file_references:
+            # Temp file method: files already saved to temp storage
             try:
                 from src.utils.temp_file_manager import temp_file_manager
             except ImportError:
@@ -153,9 +187,9 @@ def process_files_task(self, file_references=None, files_data=None, session_id=N
         else:
             raise ValueError("No files provided to process")
             
-            # Process each file
-            for file_info in saved_files:
-                try:
+        # Process each file
+        for file_info in saved_files:
+            try:
                     if session_id:
                         log_progress(f"Processing {file_info['filename']}...")
                     
@@ -193,6 +227,16 @@ def process_files_task(self, file_references=None, files_data=None, session_id=N
                     # Force garbage collection after each file
                     gc.collect()
                     memory_monitor.log_memory_usage(f"After processing {file_info.get('filename', 'file')}")
+        
+        # Clean up S3 files after processing
+        if s3_references and 's3_storage' in locals():
+            for file_info in saved_files:
+                if 's3_key' in file_info:
+                    try:
+                        s3_storage.delete_file(file_info['s3_key'])
+                        logger.info(f"Cleaned up S3 file: {file_info['s3_key']}")
+                    except Exception as e:
+                        logger.error(f"Failed to clean up S3 file {file_info['s3_key']}: {str(e)}")
         
         # Validate and enhance donations
         if all_donations:
@@ -304,6 +348,15 @@ def process_files_task(self, file_references=None, files_data=None, session_id=N
             except ImportError:
                 from utils.temp_file_manager import temp_file_manager
             temp_file_manager.cleanup_session(session_id)
+        
+        # Clean up S3 files if there was an error
+        if s3_references and 's3_storage' in locals():
+            for s3_ref in s3_references:
+                try:
+                    s3_storage.delete_file(s3_ref['s3_key'])
+                    logger.info(f"Cleaned up S3 file on error: {s3_ref['s3_key']}")
+                except Exception as e:
+                    logger.error(f"Failed to clean up S3 file {s3_ref['s3_key']}: {str(e)}")
             
         # Final cleanup
         gc.collect()

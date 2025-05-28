@@ -1133,10 +1133,13 @@ def upload_files_async():
         # Import dependencies
         try:
             from src.utils.tasks import process_files_task
-            from src.utils.temp_file_manager import temp_file_manager
+            from src.utils.s3_storage import S3Storage
         except ImportError:
             from utils.tasks import process_files_task
-            from utils.temp_file_manager import temp_file_manager
+            from utils.s3_storage import S3Storage
+        
+        # Initialize S3 storage
+        s3_storage = S3Storage()
         
         # Get session ID from request or create new one
         import uuid
@@ -1160,7 +1163,7 @@ def upload_files_async():
                 'message': 'No files were selected'
             }), 400
         
-        # Save files to temporary storage and prepare references
+        # Upload files to S3 and prepare references
         file_references = []
         total_size = 0
         
@@ -1168,12 +1171,45 @@ def upload_files_async():
             if file.filename == '':
                 continue
             
-            # Save file to temp storage
-            file_info = temp_file_manager.save_upload(file, session_id)
-            file_references.append(file_info)
-            total_size += file_info['size_bytes']
+            try:
+                # Read file content
+                file_content = file.read()
+                
+                # Generate S3 key
+                s3_key = s3_storage.generate_key(session_id, file.filename)
+                
+                # Upload to S3
+                s3_ref = s3_storage.upload_file(
+                    file_content,
+                    s3_key,
+                    content_type=file.content_type or 'application/octet-stream'
+                )
+                
+                # Add metadata
+                file_info = {
+                    'filename': file.filename,
+                    's3_key': s3_key,
+                    'bucket': s3_ref['bucket'],
+                    'size': s3_ref['size'],
+                    'content_type': file.content_type
+                }
+                file_references.append(file_info)
+                total_size += s3_ref['size']
+                
+            except Exception as e:
+                logger.error(f"Error uploading file {file.filename} to S3: {str(e)}")
+                # Clean up any uploaded files
+                for ref in file_references:
+                    try:
+                        s3_storage.delete_file(ref['s3_key'])
+                    except:
+                        pass
+                return jsonify({
+                    'success': False,
+                    'message': f'Error uploading file {file.filename}: {str(e)}'
+                }), 500
         
-        log_progress(f"Saved {len(file_references)} files ({total_size / 1024 / 1024:.1f} MB) to temporary storage")
+        log_progress(f"Uploaded {len(file_references)} files ({total_size / 1024 / 1024:.1f} MB) to S3")
         
         # Prepare QBO config if authenticated
         qbo_config = None
@@ -1185,11 +1221,11 @@ def upload_files_async():
                 'environment': qbo_service.environment
             }
         
-        # Queue the task with file references instead of content
+        # Queue the task with S3 references
         task = process_files_task.apply_async(
             args=[],
             kwargs={
-                'file_references': file_references,
+                's3_references': file_references,
                 'session_id': session_id,
                 'qbo_config': qbo_config,
                 'gemini_model': gemini_model
@@ -1211,9 +1247,13 @@ def upload_files_async():
         
     except Exception as e:
         logger.error(f"Error in async upload: {str(e)}")
-        # Clean up on error
-        if 'session_id' in locals():
-            temp_file_manager.cleanup_session(session_id)
+        # Clean up S3 files on error
+        if 'file_references' in locals() and 's3_storage' in locals():
+            for ref in file_references:
+                try:
+                    s3_storage.delete_file(ref['s3_key'])
+                except:
+                    pass
         return jsonify({
             'success': False,
             'message': f'Error queuing files: {str(e)}'
