@@ -52,22 +52,6 @@ except ImportError:
 # Load environment variables
 load_dotenv()
 
-# Import from new modular services
-# TODO: Complete refactoring by removing duplicate functions and using these imports
-# from services.validation import (
-#     sanitize_for_logging,
-#     validate_donation_date,
-#     validate_environment,
-#     normalize_check_number,
-#     normalize_amount,
-#     normalize_donor_name,
-#     normalize_date,
-#     log_audit_event
-# )
-# from services.deduplication import DeduplicationService
-# from config.logging_config import setup_logging
-# from config.session_config import setup_session
-
 # Configure logging
 import logging
 from logging.handlers import RotatingFileHandler
