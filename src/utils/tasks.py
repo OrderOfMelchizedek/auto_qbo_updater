@@ -299,20 +299,21 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
                         if 'qbSyncStatus' not in donation:
                             donation['qbSyncStatus'] = 'Pending'
             
-            # Filter out donations without check dates AND amounts
+            # Filter out donations without dates AND amounts
             filtered_donations = []
             for donation in unique_donations:
                 check_date = donation.get('Check Date', '').strip()
+                deposit_date = donation.get('Deposit Date', '').strip()
                 amount = donation.get('Gift Amount', '').strip()
                 
-                # Only include donations that have BOTH check date AND amount
-                if check_date and amount:
+                # Only include donations that have amount AND either check date or deposit date
+                if amount and (check_date or deposit_date):
                     filtered_donations.append(donation)
                 else:
-                    logger.warning(f"Filtering out donation without check date or amount: {donation.get('Donor Name', 'Unknown')}")
+                    logger.warning(f"Filtering out donation without date or amount: {donation.get('Donor Name', 'Unknown')}")
             
             if session_id:
-                log_progress(f"Filtered to {len(filtered_donations)} valid donations (removed {len(unique_donations) - len(filtered_donations)} without check dates)")
+                log_progress(f"Filtered to {len(filtered_donations)} valid donations (removed {len(unique_donations) - len(filtered_donations)} without dates)")
             
             # Store full results in file system, return reference
             full_results = {
