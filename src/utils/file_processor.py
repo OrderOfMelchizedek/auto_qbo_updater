@@ -428,6 +428,10 @@ class FileProcessor:
                         donation['matchMethod'] = match_method
                         donation['matchConfidence'] = verification_result.get('matchConfidence')
                         
+                        # Clear any previous rejection reason since this is a valid match
+                        if 'matchRejectionReason' in donation:
+                            del donation['matchRejectionReason']
+                        
                         if verification_result.get('addressMateriallyDifferent', False):
                             print("Address is materially different - will need user confirmation")
                             donation['qbCustomerStatus'] = 'Matched-AddressNeedsReview'
@@ -572,6 +576,10 @@ class FileProcessor:
                         donation['qboCustomerId'] = customer.get('Id')
                         donation['matchMethod'] = match_method
                         donation['matchConfidence'] = verification_result.get('matchConfidence')
+                        
+                        # Clear any previous rejection reason since this is a valid match
+                        if 'matchRejectionReason' in donation:
+                            del donation['matchRejectionReason']
                         
                         # Check if address is materially different (requiring user attention)
                         if verification_result.get('addressMateriallyDifferent', False):
