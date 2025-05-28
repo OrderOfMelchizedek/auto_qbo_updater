@@ -272,15 +272,8 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
                     log_progress("Matching donations with QuickBooks customers...")
                 
                 try:
-                    try:
-                        from src.app import match_donations_with_qbo_customers
-                    except ImportError:
-                        from ..app import match_donations_with_qbo_customers
-                    unique_donations = match_donations_with_qbo_customers(
-                        unique_donations, 
-                        qbo_service,
-                        gemini_service
-                    )
+                    # Use the file_processor instance to match customers
+                    unique_donations = file_processor.match_donations_with_qbo_customers(unique_donations)
                 except Exception as e:
                     logger.error(f"Error matching QBO customers: {str(e)}")
                     warnings.append(f"Could not match QuickBooks customers: {str(e)}")

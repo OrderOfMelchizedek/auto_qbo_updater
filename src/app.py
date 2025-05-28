@@ -1877,36 +1877,9 @@ def update_donations_session():
         # Get existing donations from session
         existing_donations = session.get('donations', [])
         
-        # Deduplicate if there are existing donations
-        if existing_donations:
-            from collections import defaultdict
-            donation_map = defaultdict(list)
-            
-            # Add existing donations to map
-            for donation in existing_donations:
-                key = generate_dedup_key(donation)
-                donation_map[key].append(donation)
-            
-            # Process new donations
-            for new_donation in new_donations:
-                key = generate_dedup_key(new_donation)
-                if key in donation_map:
-                    # Merge with existing
-                    existing = donation_map[key][0]
-                    merged = synthesize_donation_data(existing, new_donation)
-                    donation_map[key] = [merged]
-                else:
-                    # Add new donation
-                    donation_map[key].append(new_donation)
-            
-            # Flatten the map back to a list
-            deduplicated_donations = []
-            for donations_list in donation_map.values():
-                deduplicated_donations.extend(donations_list)
-            
-            session['donations'] = deduplicated_donations
-        else:
-            # No existing donations, just use new ones
+        # Use the existing deduplication function
+        deduplicated_donations = deduplicate_and_synthesize_donations(existing_donations, new_donations)
+        session['donations'] = deduplicated_donations
             session['donations'] = new_donations
         
         return jsonify({
