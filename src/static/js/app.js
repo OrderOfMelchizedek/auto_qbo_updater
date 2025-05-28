@@ -2426,9 +2426,10 @@ function uploadAndProcessFiles(files) {
 function uploadAndProcessFilesAsync(files) {
     // Create form data
     const formData = new FormData();
-    files.forEach(file => {
-        formData.append('files', file);
-    });
+    // Handle FileList (not a real array)
+    for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+    }
     
     // Show uploading indicator
     const uploadButton = document.getElementById('uploadButton');
