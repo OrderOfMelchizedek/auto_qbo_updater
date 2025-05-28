@@ -6,6 +6,7 @@ from celery import Task
 from .celery_app import celery_app
 from .redis_monitor import redis_monitor
 from .result_store import result_store
+from .temp_file_manager import temp_file_manager
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,22 @@ def cleanup_result_files():
         logger.error(f"File cleanup failed: {e}")
         return {'success': False, 'error': str(e)}
 
+@celery_app.task(name='src.utils.cleanup_tasks.cleanup_temp_files')
+def cleanup_temp_files():
+    """Periodic task to clean up old temporary upload files."""
+    try:
+        logger.info("Running temp file cleanup")
+        
+        # Cleanup files older than 2 hours
+        cleaned = temp_file_manager.cleanup_old_files(max_age_hours=2)
+        
+        logger.info(f"Temp file cleanup completed. Removed {cleaned} old sessions")
+        return {'success': True, 'cleaned_count': cleaned}
+        
+    except Exception as e:
+        logger.error(f"Temp file cleanup failed: {e}")
+        return {'success': False, 'error': str(e)}
+
 # Configure periodic tasks
 from celery.schedules import crontab
 
@@ -54,6 +71,10 @@ celery_app.conf.beat_schedule = {
     },
     'cleanup-result-files': {
         'task': 'src.utils.cleanup_tasks.cleanup_result_files',
+        'schedule': crontab(minute='*/30'),  # Every 30 minutes
+    },
+    'cleanup-temp-files': {
+        'task': 'src.utils.cleanup_tasks.cleanup_temp_files',
         'schedule': crontab(minute='*/30'),  # Every 30 minutes
     },
 }

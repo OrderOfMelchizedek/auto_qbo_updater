@@ -46,12 +46,13 @@ class CallbackTask(Task):
 @celery_app.task(base=CallbackTask, bind=True, name='src.utils.tasks.process_files_task', 
                 ignore_result=False, store_errors_even_if_ignored=True)
 @memory_monitor.monitor_function
-def process_files_task(self, files_data, session_id=None, qbo_config=None, gemini_model=None):
+def process_files_task(self, file_references=None, files_data=None, session_id=None, qbo_config=None, gemini_model=None):
     """
     Process uploaded files asynchronously.
     
     Args:
-        files_data: List of dicts with file information (filename, content, content_type)
+        file_references: List of file reference dicts (new method)
+        files_data: List of dicts with file information (legacy method)
         session_id: Session ID for progress tracking
         qbo_config: QuickBooks configuration (access_token, realm_id, environment)
         gemini_model: Gemini model to use
@@ -84,33 +85,55 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
         processing_errors = []
         warnings = []
         
-        # Create temporary directory for file processing
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Save uploaded files to temp directory
-            saved_files = []
-            for idx, file_data in enumerate(files_data):
-                try:
-                    filename = secure_filename(file_data['filename'])
-                    if not filename:
-                        filename = f"file_{idx}.dat"
-                    
-                    filepath = os.path.join(temp_dir, filename)
-                    
-                    # Write file content (base64 decoded)
-                    import base64
-                    with open(filepath, 'wb') as f:
-                        content = base64.b64decode(file_data['content'])
-                        f.write(content)
-                    
+        # Handle both new (file_references) and legacy (files_data) methods
+        saved_files = []
+        
+        if file_references:
+            # New method: files already saved to temp storage
+            try:
+                from src.utils.temp_file_manager import temp_file_manager
+            except ImportError:
+                from utils.temp_file_manager import temp_file_manager
+                
+            for file_ref in file_references:
+                if os.path.exists(file_ref['temp_path']):
                     saved_files.append({
-                        'path': filepath,
-                        'filename': filename,
-                        'content_type': file_data.get('content_type', 'application/octet-stream')
+                        'path': file_ref['temp_path'],
+                        'filename': file_ref['original_filename'],
+                        'content_type': file_ref['content_type']
                     })
-                    
-                except Exception as e:
-                    logger.error(f"Error saving file {file_data.get('filename', 'unknown')}: {str(e)}")
-                    processing_errors.append(f"Failed to save {file_data.get('filename', 'unknown')}: {str(e)}")
+                else:
+                    logger.error(f"Temp file not found: {file_ref['temp_path']}")
+                    processing_errors.append(f"File not found: {file_ref['original_filename']}")
+        
+        elif files_data:
+            # Legacy method: decode from base64 (for backward compatibility)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                for idx, file_data in enumerate(files_data):
+                    try:
+                        filename = secure_filename(file_data['filename'])
+                        if not filename:
+                            filename = f"file_{idx}.dat"
+                        
+                        filepath = os.path.join(temp_dir, filename)
+                        
+                        # Write file content (base64 decoded)
+                        import base64
+                        with open(filepath, 'wb') as f:
+                            content = base64.b64decode(file_data['content'])
+                            f.write(content)
+                        
+                        saved_files.append({
+                            'path': filepath,
+                            'filename': filename,
+                            'content_type': file_data.get('content_type', 'application/octet-stream')
+                        })
+                        
+                    except Exception as e:
+                        logger.error(f"Error saving file {file_data.get('filename', 'unknown')}: {str(e)}")
+                        processing_errors.append(f"Failed to save {file_data.get('filename', 'unknown')}: {str(e)}")
+        else:
+            raise ValueError("No files provided to process")
             
             # Process each file
             for file_info in saved_files:
@@ -256,6 +279,14 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
             'errors': [str(e)]
         }
     finally:
+        # Clean up temp files if using file references
+        if file_references and session_id:
+            try:
+                from src.utils.temp_file_manager import temp_file_manager
+            except ImportError:
+                from utils.temp_file_manager import temp_file_manager
+            temp_file_manager.cleanup_session(session_id)
+            
         # Final cleanup
         gc.collect()
         memory_monitor.log_memory_usage("Task completion")

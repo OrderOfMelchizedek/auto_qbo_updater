@@ -1130,15 +1130,16 @@ def upload_start():
 def upload_files_async():
     """Handle file uploads asynchronously using Celery."""
     try:
-        # Import Celery task
+        # Import dependencies
         try:
             from src.utils.tasks import process_files_task
+            from src.utils.temp_file_manager import temp_file_manager
         except ImportError:
             from utils.tasks import process_files_task
+            from utils.temp_file_manager import temp_file_manager
         
         # Get session ID from request or create new one
         import uuid
-        import base64
         session_id = request.form.get('sessionId')
         
         if not session_id:
@@ -1159,20 +1160,20 @@ def upload_files_async():
                 'message': 'No files were selected'
             }), 400
         
-        # Prepare files for Celery task
-        files_data = []
+        # Save files to temporary storage and prepare references
+        file_references = []
+        total_size = 0
+        
         for file in files:
             if file.filename == '':
                 continue
             
-            # Read file content and encode as base64
-            file_content = file.read()
-            file_data = {
-                'filename': file.filename,
-                'content': base64.b64encode(file_content).decode('utf-8'),
-                'content_type': file.content_type or 'application/octet-stream'
-            }
-            files_data.append(file_data)
+            # Save file to temp storage
+            file_info = temp_file_manager.save_upload(file, session_id)
+            file_references.append(file_info)
+            total_size += file_info['size_bytes']
+        
+        log_progress(f"Saved {len(file_references)} files ({total_size / 1024 / 1024:.1f} MB) to temporary storage")
         
         # Prepare QBO config if authenticated
         qbo_config = None
@@ -1184,10 +1185,11 @@ def upload_files_async():
                 'environment': qbo_service.environment
             }
         
-        # Queue the task
+        # Queue the task with file references instead of content
         task = process_files_task.apply_async(
-            args=[files_data],
+            args=[],
             kwargs={
+                'file_references': file_references,
                 'session_id': session_id,
                 'qbo_config': qbo_config,
                 'gemini_model': gemini_model
@@ -1209,6 +1211,9 @@ def upload_files_async():
         
     except Exception as e:
         logger.error(f"Error in async upload: {str(e)}")
+        # Clean up on error
+        if 'session_id' in locals():
+            temp_file_manager.cleanup_session(session_id)
         return jsonify({
             'success': False,
             'message': f'Error queuing files: {str(e)}'
