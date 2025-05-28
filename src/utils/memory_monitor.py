@@ -1,29 +1,56 @@
 import gc
 import os
-import psutil
 import tracemalloc
 from functools import wraps
 from typing import Callable, Any
+
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    print("[Memory Monitor] Warning: psutil not available, memory monitoring disabled")
 
 class MemoryMonitor:
     """Monitor and manage memory usage in the application."""
     
     def __init__(self):
-        self.process = psutil.Process(os.getpid())
+        if PSUTIL_AVAILABLE:
+            self.process = psutil.Process(os.getpid())
+        else:
+            self.process = None
         self.high_memory_threshold_mb = 400  # Threshold for high memory warning
         self.critical_memory_threshold_mb = 450  # Threshold for critical memory
         
     def get_memory_usage(self) -> dict:
         """Get current memory usage statistics."""
-        memory_info = self.process.memory_info()
-        memory_percent = self.process.memory_percent()
+        if not PSUTIL_AVAILABLE or not self.process:
+            return {
+                'rss_mb': 0,
+                'vms_mb': 0,
+                'percent': 0,
+                'available_mb': 0,
+                'error': 'psutil not available'
+            }
         
-        return {
-            'rss_mb': memory_info.rss / 1024 / 1024,
-            'vms_mb': memory_info.vms / 1024 / 1024,
-            'percent': memory_percent,
-            'available_mb': psutil.virtual_memory().available / 1024 / 1024
-        }
+        try:
+            memory_info = self.process.memory_info()
+            memory_percent = self.process.memory_percent()
+            
+            return {
+                'rss_mb': memory_info.rss / 1024 / 1024,
+                'vms_mb': memory_info.vms / 1024 / 1024,
+                'percent': memory_percent,
+                'available_mb': psutil.virtual_memory().available / 1024 / 1024
+            }
+        except Exception as e:
+            return {
+                'rss_mb': 0,
+                'vms_mb': 0,
+                'percent': 0,
+                'available_mb': 0,
+                'error': str(e)
+            }
     
     def log_memory_usage(self, context: str = ""):
         """Log current memory usage."""
@@ -45,6 +72,10 @@ class MemoryMonitor:
     
     def monitor_function(self, func: Callable) -> Callable:
         """Decorator to monitor memory usage of a function."""
+        if not PSUTIL_AVAILABLE:
+            # Return the function unchanged if psutil is not available
+            return func
+            
         @wraps(func)
         def wrapper(*args, **kwargs):
             # Log memory before
@@ -59,7 +90,7 @@ class MemoryMonitor:
                 
                 # Check if we should run garbage collection
                 stats = self.get_memory_usage()
-                if stats['rss_mb'] > self.high_memory_threshold_mb:
+                if not stats.get('error') and stats['rss_mb'] > self.high_memory_threshold_mb:
                     self.force_cleanup()
                     self.log_memory_usage(f"After cleanup in {func.__name__}")
                 

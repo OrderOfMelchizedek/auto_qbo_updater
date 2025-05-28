@@ -891,8 +891,17 @@ def health_check():
     # Calculate token expiration time
     if qbo_service.token_expires_at:
         try:
-            expires_at = datetime.fromisoformat(qbo_service.token_expires_at.replace('Z', '+00:00'))
-            time_diff = expires_at - datetime.now().replace(tzinfo=expires_at.tzinfo)
+            # Handle both integer timestamp and string formats
+            if isinstance(qbo_service.token_expires_at, int):
+                expires_at = datetime.fromtimestamp(qbo_service.token_expires_at)
+            else:
+                expires_at = datetime.fromisoformat(str(qbo_service.token_expires_at).replace('Z', '+00:00'))
+            
+            current_time = datetime.now()
+            if expires_at.tzinfo:
+                current_time = current_time.replace(tzinfo=expires_at.tzinfo)
+            
+            time_diff = expires_at - current_time
             health_status['auth']['qbo_token_expires_in_hours'] = round(time_diff.total_seconds() / 3600, 1)
         except Exception as e:
             logger.warning(f"Error calculating token expiration: {e}")
