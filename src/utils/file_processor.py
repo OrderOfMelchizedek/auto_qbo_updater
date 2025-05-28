@@ -394,8 +394,30 @@ class FileProcessor:
                 if customer:
                     print(f"Verifying match between {donation.get('Donor Name')} and {customer.get('DisplayName')}")
                     
-                    # Use Gemini to verify the match and enhance the data
-                    verification_result = self.gemini_service.verify_customer_match(donation, customer)
+                    try:
+                        # Use Gemini to verify the match and enhance the data
+                        verification_result = self.gemini_service.verify_customer_match(donation, customer)
+                    except Exception as verify_error:
+                        print(f"Error during verification: {str(verify_error)}")
+                        # If verification fails, still mark as matched but needs review
+                        donation['customerLookup'] = customer.get('DisplayName', '')
+                        donation['qboCustomerId'] = customer.get('Id')
+                        donation['matchMethod'] = match_method
+                        donation['qbCustomerStatus'] = 'Matched-AddressNeedsReview'
+                        donation['matchRejectionReason'] = f"Error during verification: {str(verify_error)}"
+                        
+                        # Include QBO address if available
+                        if 'BillAddr' in customer:
+                            bill_addr = customer.get('BillAddr', {})
+                            donation['qboAddress'] = {
+                                'Line1': bill_addr.get('Line1', ''),
+                                'City': bill_addr.get('City', ''),
+                                'State': bill_addr.get('CountrySubDivisionCode', ''),
+                                'ZIP': bill_addr.get('PostalCode', '')
+                            }
+                        
+                        matched_donations.append(donation)
+                        continue
                     
                     # Process verification result (same logic as before)
                     if verification_result.get('validMatch', False):
@@ -447,6 +469,9 @@ class FileProcessor:
                 
             except Exception as e:
                 print(f"Error matching donation: {str(e)}")
+                # Ensure status is set even on error
+                if 'qbCustomerStatus' not in donation:
+                    donation['qbCustomerStatus'] = 'New'
                 matched_donations.append(donation)
         
         return matched_donations[0] if is_single else matched_donations
@@ -513,8 +538,30 @@ class FileProcessor:
                 if customer:
                     print(f"Verifying match between {donation.get('Donor Name')} and {customer.get('DisplayName')}")
                     
-                    # Use Gemini to verify the match and enhance the data
-                    verification_result = self.gemini_service.verify_customer_match(donation, customer)
+                    try:
+                        # Use Gemini to verify the match and enhance the data
+                        verification_result = self.gemini_service.verify_customer_match(donation, customer)
+                    except Exception as verify_error:
+                        print(f"Error during verification: {str(verify_error)}")
+                        # If verification fails, still mark as matched but needs review
+                        donation['customerLookup'] = customer.get('DisplayName', '')
+                        donation['qboCustomerId'] = customer.get('Id')
+                        donation['matchMethod'] = match_method
+                        donation['qbCustomerStatus'] = 'Matched-AddressNeedsReview'
+                        donation['matchRejectionReason'] = f"Error during verification: {str(verify_error)}"
+                        
+                        # Include QBO address if available
+                        if 'BillAddr' in customer:
+                            bill_addr = customer.get('BillAddr', {})
+                            donation['qboAddress'] = {
+                                'Line1': bill_addr.get('Line1', ''),
+                                'City': bill_addr.get('City', ''),
+                                'State': bill_addr.get('CountrySubDivisionCode', ''),
+                                'ZIP': bill_addr.get('PostalCode', '')
+                            }
+                        
+                        matched_donations.append(donation)
+                        continue
                     
                     # First, check if this is a valid match according to Gemini
                     if verification_result.get('validMatch', False):
@@ -579,7 +626,9 @@ class FileProcessor:
                 
             except Exception as e:
                 print(f"Error matching donation: {str(e)}")
-                # If matching fails, keep the original donation
+                # If matching fails, ensure status is set and keep the original donation
+                if 'qbCustomerStatus' not in donation:
+                    donation['qbCustomerStatus'] = 'New'
                 matched_donations.append(donation)
         
         # Return in the same format as input
