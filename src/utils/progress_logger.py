@@ -240,14 +240,14 @@ IMPORTANT: Output exactly 2 lines of text, nothing else."""
                     yield f"data: {json.dumps(progress_data)}\n\n"
                     
                 except Empty:
-                    # Send heartbeat if no activity for 10 seconds
+                    # Send heartbeat every 5 seconds to keep connection alive
                     current_time = time.time()
-                    if current_time - last_activity > 10:
+                    if current_time - last_activity > 5:
                         yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': current_time})}\n\n"
                         last_activity = current_time
                     
-                    # Stop if session is inactive for too long
-                    if current_time - last_activity > 30:
+                    # Stop if session is inactive for too long (5 minutes)
+                    if current_time - last_activity > 300:
                         break
                         
         except Exception as e:

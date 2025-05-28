@@ -1655,6 +1655,8 @@ def progress_stream(session_id):
     response.headers['Cache-Control'] = 'no-cache'
     response.headers['X-Accel-Buffering'] = 'no'
     response.headers['Connection'] = 'keep-alive'
+    response.headers['Content-Type'] = 'text/event-stream'
+    response.headers['Transfer-Encoding'] = 'chunked'
     return response
 
 @app.route('/test-progress')
