@@ -190,43 +190,43 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
         # Process each file
         for file_info in saved_files:
             try:
+                if session_id:
+                    log_progress(f"Processing {file_info['filename']}...")
+                
+                # Process file based on type
+                donations = file_processor.process_file(
+                    file_info['path'],
+                    file_info['filename'],
+                    file_info['content_type']
+                )
+                
+                if donations:
+                    all_donations.extend(donations)
                     if session_id:
-                        log_progress(f"Processing {file_info['filename']}...")
+                        log_progress(
+                            f"Found {len(donations)} donations in {file_info['filename']}", 
+                            session_id=session_id
+                        )
+                else:
+                    warnings.append(f"No donations found in {file_info['filename']}")
                     
-                    # Process file based on type
-                    donations = file_processor.process_file(
-                        file_info['path'],
-                        file_info['filename'],
-                        file_info['content_type']
-                    )
-                    
-                    if donations:
-                        all_donations.extend(donations)
-                        if session_id:
-                            log_progress(
-                                f"Found {len(donations)} donations in {file_info['filename']}", 
-                                session_id=session_id
-                            )
-                    else:
-                        warnings.append(f"No donations found in {file_info['filename']}")
-                        
-                except SoftTimeLimitExceeded:
-                    error_msg = f"Processing timeout for {file_info['filename']}"
-                    logger.error(error_msg)
-                    processing_errors.append(error_msg)
-                    if session_id:
-                        log_progress(error_msg, force_summary=True)
-                    
-                except Exception as e:
-                    error_msg = f"Error processing {file_info['filename']}: {str(e)}"
-                    logger.error(error_msg)
-                    processing_errors.append(error_msg)
-                    if session_id:
-                        log_progress(error_msg)
-                finally:
-                    # Force garbage collection after each file
-                    gc.collect()
-                    memory_monitor.log_memory_usage(f"After processing {file_info.get('filename', 'file')}")
+            except SoftTimeLimitExceeded:
+                error_msg = f"Processing timeout for {file_info['filename']}"
+                logger.error(error_msg)
+                processing_errors.append(error_msg)
+                if session_id:
+                    log_progress(error_msg, force_summary=True)
+                
+            except Exception as e:
+                error_msg = f"Error processing {file_info['filename']}: {str(e)}"
+                logger.error(error_msg)
+                processing_errors.append(error_msg)
+                if session_id:
+                    log_progress(error_msg)
+            finally:
+                # Force garbage collection after each file
+                gc.collect()
+                memory_monitor.log_memory_usage(f"After processing {file_info.get('filename', 'file')}")
         
         # Clean up S3 files after processing
         if s3_references and 's3_storage' in locals():
