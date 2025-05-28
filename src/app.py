@@ -1131,7 +1131,10 @@ def upload_files_async():
     """Handle file uploads asynchronously using Celery."""
     try:
         # Import Celery task
-        from utils.tasks import process_files_task
+        try:
+            from src.utils.tasks import process_files_task
+        except ImportError:
+            from utils.tasks import process_files_task
         
         # Get session ID from request or create new one
         import uuid
@@ -1215,7 +1218,10 @@ def upload_files_async():
 def get_task_status(task_id):
     """Get the status of a Celery task."""
     try:
-        from utils.tasks import celery_app
+        try:
+            from src.utils.tasks import celery_app
+        except ImportError:
+            from utils.tasks import celery_app
         from celery.result import AsyncResult
         
         result = AsyncResult(task_id, app=celery_app)

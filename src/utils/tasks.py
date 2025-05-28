@@ -153,14 +153,20 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
             if session_id:
                 log_progress(f"Validating {len(all_donations)} donations...", session_id=session_id)
             
-            from ..app import validate_and_enhance_donations
+            try:
+                from src.app import validate_and_enhance_donations
+            except ImportError:
+                from ..app import validate_and_enhance_donations
             validated_donations = validate_and_enhance_donations(all_donations)
             
             # Deduplicate donations
             if session_id:
                 log_progress("Removing duplicate donations...", session_id=session_id)
             
-            from ..app import deduplicate_donations
+            try:
+                from src.app import deduplicate_donations
+            except ImportError:
+                from ..app import deduplicate_donations
             unique_donations = deduplicate_donations(validated_donations, [])
             
             # Match with QBO customers if authenticated
@@ -169,7 +175,10 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
                     log_progress("Matching donations with QuickBooks customers...", session_id=session_id)
                 
                 try:
-                    from ..app import match_donations_with_qbo_customers
+                    try:
+                        from src.app import match_donations_with_qbo_customers
+                    except ImportError:
+                        from ..app import match_donations_with_qbo_customers
                     unique_donations = match_donations_with_qbo_customers(
                         unique_donations, 
                         qbo_service,
