@@ -2695,7 +2695,7 @@ function checkAuthAndProcessFiles() {
                 // Process the files
                 showToast("Connected to QuickBooks successfully! Processing your files now.", "success");
                 if (window.pendingFiles && window.pendingFiles.length > 0) {
-                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || false;
+                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || true;
                     if (useAsyncProcessing) {
                         uploadAndProcessFilesAsync(window.pendingFiles);
                     } else {
@@ -2783,7 +2783,7 @@ function checkQBOAuthStatus() {
                 if (data.justConnected && window.pendingFiles && window.pendingFiles.length > 0) {
                     console.log("Just connected to QBO and have pending files - processing them now");
                     showToast("Connected to QuickBooks successfully! Processing your files now.", "success");
-                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || false;
+                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || true;
                     if (useAsyncProcessing) {
                         uploadAndProcessFilesAsync(window.pendingFiles);
                     } else {
@@ -3075,7 +3075,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // If we have pending files, process them
         if (window.pendingFiles && window.pendingFiles.length > 0) {
             showToast("Processing without QuickBooks connection. Customer matching will be unavailable.", "warning");
-            const useAsyncProcessing = window.USE_ASYNC_PROCESSING || false;
+            const useAsyncProcessing = window.USE_ASYNC_PROCESSING || true;
             if (useAsyncProcessing) {
                 uploadAndProcessFilesAsync(window.pendingFiles);
             } else {
@@ -3188,7 +3188,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     // If QBO is already connected, proceed with file processing
                     // Check if we should use async processing (can be configured)
-                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || false;
+                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || true;
                     if (useAsyncProcessing) {
                         uploadAndProcessFilesAsync(files);
                     } else {
