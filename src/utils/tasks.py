@@ -106,6 +106,8 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
         
         # Handle S3, temp file, and legacy methods
         saved_files = []
+        temp_dir_context = None
+        temp_dir = None
         
         if s3_references:
             # Preferred method: download files from S3
@@ -116,29 +118,32 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
             
             s3_storage = S3Storage()
             
-            with tempfile.TemporaryDirectory() as temp_dir:
-                for s3_ref in s3_references:
-                    try:
-                        # Download from S3
-                        file_content = s3_storage.download_file(s3_ref['s3_key'])
-                        
-                        # Save to temp file for processing
-                        filename = secure_filename(s3_ref['filename'])
-                        filepath = os.path.join(temp_dir, filename)
-                        
-                        with open(filepath, 'wb') as f:
-                            f.write(file_content)
-                        
-                        saved_files.append({
-                            'path': filepath,
-                            'filename': s3_ref['filename'],
-                            'content_type': s3_ref.get('content_type', 'application/octet-stream'),
-                            's3_key': s3_ref['s3_key']  # Keep reference for cleanup
-                        })
-                        
-                    except Exception as e:
-                        logger.error(f"Error downloading from S3: {s3_ref.get('filename', 'unknown')}: {str(e)}")
-                        processing_errors.append(f"Failed to download {s3_ref.get('filename', 'unknown')}: {str(e)}")
+            # Create temp directory that will persist through processing
+            temp_dir_context = tempfile.TemporaryDirectory()
+            temp_dir = temp_dir_context.__enter__()
+            
+            for s3_ref in s3_references:
+                try:
+                    # Download from S3
+                    file_content = s3_storage.download_file(s3_ref['s3_key'])
+                    
+                    # Save to temp file for processing
+                    filename = secure_filename(s3_ref['filename'])
+                    filepath = os.path.join(temp_dir, filename)
+                    
+                    with open(filepath, 'wb') as f:
+                        f.write(file_content)
+                    
+                    saved_files.append({
+                        'path': filepath,
+                        'filename': s3_ref['filename'],
+                        'content_type': s3_ref.get('content_type', 'application/octet-stream'),
+                        's3_key': s3_ref['s3_key']  # Keep reference for cleanup
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error downloading from S3: {s3_ref.get('filename', 'unknown')}: {str(e)}")
+                    processing_errors.append(f"Failed to download {s3_ref.get('filename', 'unknown')}: {str(e)}")
         
         elif file_references:
             # Temp file method: files already saved to temp storage
@@ -160,30 +165,32 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
         
         elif files_data:
             # Legacy method: decode from base64 (for backward compatibility)
-            with tempfile.TemporaryDirectory() as temp_dir:
-                for idx, file_data in enumerate(files_data):
-                    try:
-                        filename = secure_filename(file_data['filename'])
-                        if not filename:
-                            filename = f"file_{idx}.dat"
-                        
-                        filepath = os.path.join(temp_dir, filename)
-                        
-                        # Write file content (base64 decoded)
-                        import base64
-                        with open(filepath, 'wb') as f:
-                            content = base64.b64decode(file_data['content'])
-                            f.write(content)
-                        
-                        saved_files.append({
-                            'path': filepath,
-                            'filename': filename,
-                            'content_type': file_data.get('content_type', 'application/octet-stream')
-                        })
-                        
-                    except Exception as e:
-                        logger.error(f"Error saving file {file_data.get('filename', 'unknown')}: {str(e)}")
-                        processing_errors.append(f"Failed to save {file_data.get('filename', 'unknown')}: {str(e)}")
+            temp_dir_context = tempfile.TemporaryDirectory()
+            temp_dir = temp_dir_context.__enter__()
+            
+            for idx, file_data in enumerate(files_data):
+                try:
+                    filename = secure_filename(file_data['filename'])
+                    if not filename:
+                        filename = f"file_{idx}.dat"
+                    
+                    filepath = os.path.join(temp_dir, filename)
+                    
+                    # Write file content (base64 decoded)
+                    import base64
+                    with open(filepath, 'wb') as f:
+                        content = base64.b64decode(file_data['content'])
+                        f.write(content)
+                    
+                    saved_files.append({
+                        'path': filepath,
+                        'filename': filename,
+                        'content_type': file_data.get('content_type', 'application/octet-stream')
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error saving file {file_data.get('filename', 'unknown')}: {str(e)}")
+                    processing_errors.append(f"Failed to save {file_data.get('filename', 'unknown')}: {str(e)}")
         else:
             raise ValueError("No files provided to process")
             
@@ -341,6 +348,13 @@ def process_files_task(self, s3_references=None, file_references=None, files_dat
             'errors': [str(e)]
         }
     finally:
+        # Clean up temp directory
+        if temp_dir_context:
+            try:
+                temp_dir_context.__exit__(None, None, None)
+            except:
+                pass
+        
         # Clean up temp files if using file references
         if file_references and session_id:
             try:
