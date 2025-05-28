@@ -1176,7 +1176,7 @@ def upload_files_async():
         
         # Prepare QBO config if authenticated
         qbo_config = None
-        if qbo_service.is_authenticated():
+        if qbo_service.is_token_valid():
             qbo_config = {
                 'access_token': qbo_service.access_token,
                 'refresh_token': qbo_service.refresh_token,
@@ -1204,7 +1204,7 @@ def upload_files_async():
             'message': 'Files queued for processing',
             'task_id': task.id,
             'progressSessionId': session_id,
-            'qboAuthenticated': qbo_service.is_authenticated()
+            'qboAuthenticated': qbo_service.is_token_valid()
         })
         
     except Exception as e:

@@ -170,7 +170,7 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
             unique_donations = deduplicate_donations(validated_donations, [])
             
             # Match with QBO customers if authenticated
-            if qbo_service.is_authenticated() and unique_donations:
+            if qbo_service.is_token_valid() and unique_donations:
                 if session_id:
                     log_progress("Matching donations with QuickBooks customers...", session_id=session_id)
                 
@@ -195,7 +195,7 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
                 'total_processed': len(unique_donations),
                 'warnings': warnings,
                 'errors': processing_errors,
-                'qboAuthenticated': qbo_service.is_authenticated(),
+                'qboAuthenticated': qbo_service.is_token_valid(),
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -212,7 +212,7 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
                 'message': 'No valid donations found in uploaded files',
                 'warnings': warnings,
                 'errors': processing_errors,
-                'qboAuthenticated': qbo_service.is_authenticated()
+                'qboAuthenticated': qbo_service.is_token_valid()
             }
             
             if session_id:
