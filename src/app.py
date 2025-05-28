@@ -21,6 +21,7 @@ try:
     from src.utils.qbo_service import QBOService
     from src.utils.file_processor import FileProcessor
     from src.utils.progress_logger import progress_logger, init_progress_logger, log_progress
+    from src.utils.memory_monitor import memory_monitor
     from src.utils.exceptions import (
         FOMQBOException, QBOAPIException, GeminiAPIException, 
         FileProcessingException, ValidationException
@@ -31,6 +32,7 @@ except ModuleNotFoundError:
     from utils.qbo_service import QBOService
     from utils.file_processor import FileProcessor
     from utils.progress_logger import progress_logger, init_progress_logger, log_progress
+    from utils.memory_monitor import memory_monitor
     from utils.exceptions import (
         FOMQBOException, QBOAPIException, GeminiAPIException,
         FileProcessingException, ValidationException
@@ -373,11 +375,14 @@ def validate_file_content(file_path):
         return False, f"Error validating file: {str(e)}"
 
 def cleanup_uploaded_file(file_path):
-    """Safely remove uploaded file."""
+    """Safely remove uploaded file and trigger garbage collection."""
     try:
         if os.path.exists(file_path):
             os.remove(file_path)
             print(f"Cleaned up file: {file_path}")
+            # Force garbage collection after file cleanup
+            import gc
+            gc.collect()
     except Exception as e:
         print(f"Error cleaning up file {file_path}: {str(e)}")
 
@@ -872,6 +877,7 @@ def health_check():
         },
         'system': {
             'memory_usage_mb': round(psutil.Process().memory_info().rss / 1024 / 1024, 1),
+            'memory_monitor': memory_monitor.get_memory_usage(),
             'cpu_percent': psutil.Process().cpu_percent(),
             'disk_free_gb': round(psutil.disk_usage('/').free / 1024**3, 1)
         },
@@ -1238,9 +1244,12 @@ def get_task_status(task_id):
 
 @app.route('/upload', methods=['POST'])
 @limiter.limit("10 per hour")
+@memory_monitor.monitor_function
 def upload_files():
     """Handle file uploads (images, PDFs, CSV)."""
     try:
+        # Log memory at start of request
+        memory_monitor.log_memory_usage("Start of upload request")
         # Get session ID from request or create new one
         import uuid
         import time
@@ -1610,6 +1619,13 @@ def upload_files():
         # Clean up all uploaded files
         for file_path in uploaded_files:
             cleanup_uploaded_file(file_path)
+        
+        # Log memory after cleanup
+        memory_monitor.log_memory_usage("End of upload request")
+        
+        # Force final garbage collection
+        import gc
+        gc.collect()
 
 @app.route('/progress-stream/<session_id>')
 def progress_stream(session_id):

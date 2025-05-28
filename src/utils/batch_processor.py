@@ -1,6 +1,7 @@
 """Concurrent batch processor for file processing."""
 import os
 import io
+import gc
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional, Tuple, Union
@@ -11,6 +12,7 @@ from PIL import Image
 
 from .gemini_service import GeminiService
 from .progress_logger import ProgressLogger
+from .memory_monitor import memory_monitor
 
 
 @dataclass
@@ -89,6 +91,7 @@ class BatchProcessor:
             List of ProcessingBatch objects for the PDF
         """
         batches = []
+        pdf_doc = None
         
         try:
             # Open PDF to get page count
@@ -110,10 +113,14 @@ class BatchProcessor:
                 )
                 batches.append(batch)
                 
-            pdf_doc.close()
-            
         except Exception as e:
             print(f"Error preparing PDF batches for {pdf_path}: {str(e)}")
+        finally:
+            # Always close the PDF document
+            if pdf_doc:
+                pdf_doc.close()
+                del pdf_doc
+                gc.collect()
             
         return batches
     
@@ -225,6 +232,7 @@ class BatchProcessor:
                 
         return donations, errors
     
+    @memory_monitor.monitor_function
     def _process_pdf_batch(self, batch: ProcessingBatch) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
         """Process a PDF batch with its pages, images, and text.
         
@@ -234,6 +242,10 @@ class BatchProcessor:
         Returns:
             Extracted donation data or None
         """
+        pdf_doc = None
+        pdf_reader = None
+        images = []
+        
         try:
             # Open PDF document
             pdf_doc = fitz.open(batch.file_path)
@@ -249,9 +261,12 @@ class BatchProcessor:
                             batch_text += f"\n--- Page {page_num + 1} ---\n{page_text}\n"
             except Exception as e:
                 print(f"Error extracting text from PDF pages: {str(e)}")
+            finally:
+                # Clean up PDF reader
+                if pdf_reader:
+                    del pdf_reader
             
             # Convert pages to images
-            images = []
             for page_num in batch.page_numbers:
                 page = pdf_doc[page_num]
                 # Convert page to image with good resolution
@@ -259,8 +274,9 @@ class BatchProcessor:
                 img_data = pix.tobytes("png")
                 image = Image.open(io.BytesIO(img_data))
                 images.append(image)
-            
-            pdf_doc.close()
+                # Clean up pixmap immediately
+                del pix
+                del img_data
             
             # Prepare content for Gemini
             content = {
@@ -270,12 +286,30 @@ class BatchProcessor:
             }
             
             # Call Gemini with the prepared content
-            return self.gemini_service.extract_donation_data_from_content(
+            result = self.gemini_service.extract_donation_data_from_content(
                 content,
                 file_type='pdf_batch',
                 batch_info=batch.batch_id
             )
             
+            return result
+            
         except Exception as e:
             print(f"Error processing PDF batch {batch.batch_id}: {str(e)}")
             return None
+        finally:
+            # Clean up resources
+            if pdf_doc:
+                pdf_doc.close()
+                del pdf_doc
+            
+            # Clean up images
+            for img in images:
+                if hasattr(img, 'close'):
+                    img.close()
+            del images
+            
+            # Force garbage collection
+            gc.collect()
+            
+            print(f"Batch {batch.batch_id} processed - memory cleaned up")

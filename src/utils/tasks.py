@@ -5,6 +5,7 @@ import os
 import json
 import tempfile
 import logging
+import gc
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from werkzeug.utils import secure_filename
@@ -15,6 +16,7 @@ from .file_processor import FileProcessor
 from .gemini_service import GeminiService
 from .qbo_service import QBOService
 from .progress_logger import log_progress, progress_logger
+from .memory_monitor import memory_monitor
 from .exceptions import FOMQBOException, ValidationException, FileProcessingException
 
 logger = logging.getLogger(__name__)
@@ -38,6 +40,7 @@ class CallbackTask(Task):
 
 
 @celery_app.task(base=CallbackTask, bind=True, name='src.utils.tasks.process_files_task')
+@memory_monitor.monitor_function
 def process_files_task(self, files_data, session_id=None, qbo_config=None, gemini_model=None):
     """
     Process uploaded files asynchronously.
@@ -140,6 +143,10 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
                     processing_errors.append(error_msg)
                     if session_id:
                         log_progress(error_msg, session_id=session_id)
+                finally:
+                    # Force garbage collection after each file
+                    gc.collect()
+                    memory_monitor.log_memory_usage(f"After processing {file_info.get('filename', 'file')}")
         
         # Validate and enhance donations
         if all_donations:
@@ -218,6 +225,10 @@ def process_files_task(self, files_data, session_id=None, qbo_config=None, gemin
             'message': f'Processing failed: {str(e)}',
             'errors': [str(e)]
         }
+    finally:
+        # Final cleanup
+        gc.collect()
+        memory_monitor.log_memory_usage("Task completion")
 
 
 @celery_app.task(bind=True, name='src.utils.tasks.process_single_file_task')

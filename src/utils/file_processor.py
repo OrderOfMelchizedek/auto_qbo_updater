@@ -1,5 +1,6 @@
 import os
 import json
+import gc
 from typing import Dict, Any, Optional, List, Union, Tuple
 import PyPDF2
 from PIL import Image
@@ -11,12 +12,14 @@ try:
     from src.utils.prompt_manager import PromptManager
     from src.utils.batch_processor import BatchProcessor
     from src.utils.progress_logger import ProgressLogger
+    from src.utils.memory_monitor import memory_monitor
 except ModuleNotFoundError:
     # Fall back to relative imports if running directly
     from utils.gemini_service import GeminiService
     from utils.prompt_manager import PromptManager
     from utils.batch_processor import BatchProcessor
     from utils.progress_logger import ProgressLogger
+    from utils.memory_monitor import memory_monitor
 
 class FileProcessor:
     """Service for processing different file types (images, PDFs) for donation extraction."""
@@ -222,6 +225,7 @@ class FileProcessor:
             print(f"Error processing image {image_path}: {str(e)}")
             return None
     
+    @memory_monitor.monitor_function
     def _process_pdf(self, pdf_path: str) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
         """Process a PDF file.
         
@@ -236,11 +240,18 @@ class FileProcessor:
         try:
             # Send PDF directly to Gemini for processing
             donation_data = self.gemini_service.extract_donation_data(pdf_path)
+            
+            # Force garbage collection after PDF processing
+            gc.collect()
+            
             return donation_data
         
         except Exception as e:
             print(f"Error processing PDF {pdf_path}: {str(e)}")
             return None
+        finally:
+            # Ensure cleanup happens even on error
+            gc.collect()
             
     def _process_csv(self, csv_path: str) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
         """Process a CSV file using Gemini.
@@ -574,6 +585,7 @@ class FileProcessor:
         # Return in the same format as input
         return matched_donations[0] if is_single else matched_donations
     
+    @memory_monitor.monitor_function
     def process_files_concurrently(self, files: List[Tuple[str, str]], task_id: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[str]]:
         """Process multiple files concurrently using batch processing.
         
@@ -585,6 +597,9 @@ class FileProcessor:
             Tuple of (all_donations, all_errors)
         """
         try:
+            # Log initial memory state
+            memory_monitor.log_memory_usage("Start of concurrent processing")
+            
             # Prepare batches from all files
             print(f"Preparing batches for {len(files)} files")
             batches = self.batch_processor.prepare_batches(files)
@@ -592,6 +607,10 @@ class FileProcessor:
             
             # Process all batches concurrently
             all_donations, all_errors = self.batch_processor.process_batches_concurrently(batches, task_id)
+            
+            # Force cleanup after batch processing
+            gc.collect()
+            memory_monitor.log_memory_usage("After batch processing")
             
             # Perform validation and reprocessing on all donations
             if all_donations:
@@ -631,6 +650,10 @@ class FileProcessor:
             error_msg = f"Error in concurrent file processing: {str(e)}"
             print(error_msg)
             return [], [error_msg]
+        finally:
+            # Always cleanup after processing
+            gc.collect()
+            memory_monitor.log_memory_usage("End of concurrent processing")
     
     def _deduplicate_donations(self, donations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Deduplicate donations based on key fields.
