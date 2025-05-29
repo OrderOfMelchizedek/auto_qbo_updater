@@ -92,14 +92,16 @@ class TestValidateDonationDate:
 
     def test_future_date_within_limit(self):
         """Test validation of future date within allowed limit."""
-        future_date = datetime.now() + timedelta(days=15)
+        # Use a date that's within the limit but still future (half the limit)
+        days_future = max(1, FUTURE_DATE_LIMIT_DAYS // 2)
+        future_date = datetime.now() + timedelta(days=days_future)
         date_str = future_date.strftime("%Y-%m-%d")
 
         is_valid, warning, parsed_date = validate_donation_date(date_str)
 
         assert is_valid is True
         assert warning is not None
-        assert "15 days in the future" in warning
+        assert f"{days_future} days in the future" in warning
         assert parsed_date is not None
 
     def test_future_date_exceeds_limit(self):
