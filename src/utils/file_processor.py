@@ -103,19 +103,13 @@ class FileProcessor:
 
             if missing_critical:
                 # Critical fields are missing - must reprocess
-                print(
-                    f"Donation has missing CRITICAL fields: {', '.join(missing_critical)}. Queuing for reprocessing."
-                )
-                donations_to_reprocess.append(
-                    {"donation": donation, "missing_fields": missing_critical}
-                )
+                print(f"Donation has missing CRITICAL fields: {', '.join(missing_critical)}. Queuing for reprocessing.")
+                donations_to_reprocess.append({"donation": donation, "missing_fields": missing_critical})
             else:
                 # Check optional fields just for logging
                 missing_optional = [field for field in optional_fields if not donation.get(field)]
                 if missing_optional:
-                    print(
-                        f"Donation missing optional fields: {', '.join(missing_optional)}. Skipping reprocessing."
-                    )
+                    print(f"Donation missing optional fields: {', '.join(missing_optional)}. Skipping reprocessing.")
 
                 # All critical fields are present - add to complete list
                 complete_donations.append(donation)
@@ -139,13 +133,9 @@ class FileProcessor:
 
                 # Reprocess the document with focused prompt
                 if file_ext in [".jpg", ".jpeg", ".png"]:
-                    reprocessed = self.gemini_service.extract_donation_data(
-                        file_path, custom_prompt=reprocess_prompt
-                    )
+                    reprocessed = self.gemini_service.extract_donation_data(file_path, custom_prompt=reprocess_prompt)
                 elif file_ext == ".pdf":
-                    reprocessed = self.gemini_service.extract_donation_data(
-                        file_path, custom_prompt=reprocess_prompt
-                    )
+                    reprocessed = self.gemini_service.extract_donation_data(file_path, custom_prompt=reprocess_prompt)
 
                 if reprocessed:
                     # If reprocessing returned a list, we need to find the matching donation
@@ -170,15 +160,11 @@ class FileProcessor:
                         if matched_reprocessed:
                             reprocessed = matched_reprocessed
                         else:
-                            print(
-                                f"Could not match reprocessed donation to original for {donation.get('Donor Name')}"
-                            )
+                            print(f"Could not match reprocessed donation to original for {donation.get('Donor Name')}")
                             reprocessed = None
 
                     # Only use the reprocessed data if it found the missing fields
-                    still_missing = [
-                        field for field in missing_fields if not reprocessed.get(field)
-                    ]
+                    still_missing = [field for field in missing_fields if not reprocessed.get(field)]
 
                     if len(still_missing) < len(missing_fields):
                         print(
@@ -205,11 +191,7 @@ class FileProcessor:
         if isinstance(donation_data, list):
             return complete_donations
         elif complete_donations:
-            return (
-                complete_donations[0]
-                if isinstance(complete_donations, list)
-                else complete_donations
-            )
+            return complete_donations[0] if isinstance(complete_donations, list) else complete_donations
         else:
             return None
 
@@ -304,16 +286,12 @@ class FileProcessor:
                     continue
 
             if not csv_content:
-                raise ValueError(
-                    f"Unable to read CSV file with any of these encodings: {encodings}"
-                )
+                raise ValueError(f"Unable to read CSV file with any of these encodings: {encodings}")
 
             print(f"CSV content sample: {csv_content[:500]}")
 
             # Use prompt manager to get CSV extraction prompt with placeholder replaced
-            csv_prompt = self.prompt_manager.get_prompt(
-                "simplified_csv_prompt", {"csv_content": csv_content}
-            )
+            csv_prompt = self.prompt_manager.get_prompt("simplified_csv_prompt", {"csv_content": csv_content})
 
             # Send CSV text to Gemini for processing
             donation_data = self.gemini_service.extract_text_data(csv_prompt)
@@ -416,15 +394,11 @@ class FileProcessor:
                         break
 
                 if customer:
-                    print(
-                        f"Verifying match between {donation.get('Donor Name')} and {customer.get('DisplayName')}"
-                    )
+                    print(f"Verifying match between {donation.get('Donor Name')} and {customer.get('DisplayName')}")
 
                     try:
                         # Use Gemini to verify the match and enhance the data
-                        verification_result = self.gemini_service.verify_customer_match(
-                            donation, customer
-                        )
+                        verification_result = self.gemini_service.verify_customer_match(donation, customer)
                     except Exception as verify_error:
                         print(f"Error during verification: {str(verify_error)}")
                         # If verification fails, still mark as matched but needs review
@@ -432,9 +406,7 @@ class FileProcessor:
                         donation["qboCustomerId"] = customer.get("Id")
                         donation["matchMethod"] = match_method
                         donation["qbCustomerStatus"] = "Matched-AddressNeedsReview"
-                        donation["matchRejectionReason"] = (
-                            f"Error during verification: {str(verify_error)}"
-                        )
+                        donation["matchRejectionReason"] = f"Error during verification: {str(verify_error)}"
 
                         # Include QBO address if available
                         if "BillAddr" in customer:
@@ -483,9 +455,7 @@ class FileProcessor:
                             if "enhancedData" in verification_result:
                                 preserved_fields = ["Gift Amount", "Gift Date", "Check No", "Memo"]
                                 preserved_values = {
-                                    field: donation.get(field)
-                                    for field in preserved_fields
-                                    if field in donation
+                                    field: donation.get(field) for field in preserved_fields if field in donation
                                 }
 
                                 enhanced_data = verification_result["enhancedData"]
@@ -497,9 +467,7 @@ class FileProcessor:
 
                                 donation["customerLookup"] = customer.get("DisplayName", "")
                     else:
-                        mismatch_reason = verification_result.get(
-                            "mismatchReason", "No specific reason provided"
-                        )
+                        mismatch_reason = verification_result.get("mismatchReason", "No specific reason provided")
                         print(f"Not a valid match: {mismatch_reason}")
                         donation["qbCustomerStatus"] = "New"
                         donation["matchRejectionReason"] = mismatch_reason
@@ -531,9 +499,7 @@ class FileProcessor:
             print("QBO service not available - customer matching skipped")
             return donations
 
-        print(
-            f"Matching {len(donations) if isinstance(donations, list) else 1} donation(s) with QBO API"
-        )
+        print(f"Matching {len(donations) if isinstance(donations, list) else 1} donation(s) with QBO API")
 
         # Handle both single donation and list of donations
         is_single = not isinstance(donations, list)
@@ -573,21 +539,15 @@ class FileProcessor:
                         if potential_customer:
                             customer = potential_customer
                             match_method = strategy["description"]
-                            print(
-                                f"Customer found using {match_method}: {customer.get('DisplayName')}"
-                            )
+                            print(f"Customer found using {match_method}: {customer.get('DisplayName')}")
                             break
 
                 if customer:
-                    print(
-                        f"Verifying match between {donation.get('Donor Name')} and {customer.get('DisplayName')}"
-                    )
+                    print(f"Verifying match between {donation.get('Donor Name')} and {customer.get('DisplayName')}")
 
                     try:
                         # Use Gemini to verify the match and enhance the data
-                        verification_result = self.gemini_service.verify_customer_match(
-                            donation, customer
-                        )
+                        verification_result = self.gemini_service.verify_customer_match(donation, customer)
                     except Exception as verify_error:
                         print(f"Error during verification: {str(verify_error)}")
                         # If verification fails, still mark as matched but needs review
@@ -595,9 +555,7 @@ class FileProcessor:
                         donation["qboCustomerId"] = customer.get("Id")
                         donation["matchMethod"] = match_method
                         donation["qbCustomerStatus"] = "Matched-AddressNeedsReview"
-                        donation["matchRejectionReason"] = (
-                            f"Error during verification: {str(verify_error)}"
-                        )
+                        donation["matchRejectionReason"] = f"Error during verification: {str(verify_error)}"
 
                         # Include QBO address if available
                         if "BillAddr" in customer:
@@ -653,9 +611,7 @@ class FileProcessor:
                                 # any fields that should always come from the extracted data
                                 preserved_fields = ["Gift Amount", "Gift Date", "Check No", "Memo"]
                                 preserved_values = {
-                                    field: donation.get(field)
-                                    for field in preserved_fields
-                                    if field in donation
+                                    field: donation.get(field) for field in preserved_fields if field in donation
                                 }
 
                                 # Update with enhanced data
@@ -672,9 +628,7 @@ class FileProcessor:
                                 donation["customerLookup"] = customer.get("DisplayName", "")
                     else:
                         # This is not a valid match despite the fuzzy matching
-                        mismatch_reason = verification_result.get(
-                            "mismatchReason", "No specific reason provided"
-                        )
+                        mismatch_reason = verification_result.get("mismatchReason", "No specific reason provided")
                         print(f"Not a valid match: {mismatch_reason}")
                         donation["qbCustomerStatus"] = "New"
                         donation["matchRejectionReason"] = mismatch_reason
@@ -718,9 +672,7 @@ class FileProcessor:
             print(f"Created {len(batches)} batches for concurrent processing")
 
             # Process all batches concurrently
-            all_donations, all_errors = self.batch_processor.process_batches_concurrently(
-                batches, task_id
-            )
+            all_donations, all_errors = self.batch_processor.process_batches_concurrently(batches, task_id)
 
             # Force cleanup after batch processing
             gc.collect()
@@ -736,9 +688,7 @@ class FileProcessor:
 
                 for donation in all_donations:
                     # Check for missing critical fields
-                    missing_critical = [
-                        field for field in critical_fields if not donation.get(field)
-                    ]
+                    missing_critical = [field for field in critical_fields if not donation.get(field)]
 
                     if missing_critical:
                         # Critical fields are missing - reject this donation

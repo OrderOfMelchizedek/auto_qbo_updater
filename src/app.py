@@ -16,17 +16,7 @@ import pandas as pd
 import redis
 import requests
 from dotenv import load_dotenv
-from flask import (
-    Flask,
-    Response,
-    flash,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    session,
-    url_for,
-)
+from flask import Flask, Response, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_session import Session
@@ -212,9 +202,7 @@ def process_single_file(file_data, qbo_authenticated):
         file_storage.seek(0)
 
         if file_size > MAX_FILE_SIZE:
-            result["error"] = (
-                f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB)"
-            )
+            result["error"] = f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB)"
             return result
 
         # Generate secure filename and save
@@ -256,9 +244,7 @@ def process_single_file(file_data, qbo_authenticated):
                             donation["matchConfidence"] = "High"
 
             result["success"] = True
-            log_progress(
-                f"Successfully processed {original_filename}: {len(result['donations'])} donations found"
-            )
+            log_progress(f"Successfully processed {original_filename}: {len(result['donations'])} donations found")
         else:
             result["error"] = f"No donation data extracted from {original_filename}"
 

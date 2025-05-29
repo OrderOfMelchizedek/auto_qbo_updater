@@ -109,15 +109,11 @@ class ProgressLogger:
             if self.session_id in self.recent_summaries:
                 self.recent_summaries[self.session_id].append(message)
                 # Keep only last 10 summaries
-                self.recent_summaries[self.session_id] = self.recent_summaries[self.session_id][
-                    -10:
-                ]
+                self.recent_summaries[self.session_id] = self.recent_summaries[self.session_id][-10:]
 
             # Send to subscribers
             if self.session_id in self.subscribers:
-                print(
-                    f"[ProgressLogger] Sending summary to subscriber for session {self.session_id}"
-                )
+                print(f"[ProgressLogger] Sending summary to subscriber for session {self.session_id}")
                 self.subscribers[self.session_id].put(message)
             else:
                 print(f"[ProgressLogger] No subscriber found for session {self.session_id}")
@@ -196,9 +192,7 @@ IMPORTANT: Output exactly 2 lines of text, nothing else."""
         elif "customer" in recent_msg or "quickbooks" in recent_msg:
             return "Matching donations with customers in QuickBooks...\nVerifying donor information and addresses."
         elif "deduplication" in recent_msg or "duplicate" in recent_msg:
-            return (
-                "Checking for duplicate donations...\nEnsuring each donation is counted only once."
-            )
+            return "Checking for duplicate donations...\nEnsuring each donation is counted only once."
         elif "extract" in recent_msg or "donation" in recent_msg:
             return "Found donations in your files...\nProcessing donor information and amounts."
         else:
@@ -216,9 +210,7 @@ IMPORTANT: Output exactly 2 lines of text, nothing else."""
                         current_time = time.time()
                         if current_time - self.last_summary_time >= 3.0:
                             if self.logs:
-                                print(
-                                    f"[ProgressLogger] Forcing periodic update for session {session_id}"
-                                )
+                                print(f"[ProgressLogger] Forcing periodic update for session {session_id}")
                                 self._create_summary()
                                 self.last_summary_time = current_time
 

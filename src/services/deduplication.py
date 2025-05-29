@@ -9,12 +9,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .validation import (
-    normalize_amount,
-    normalize_check_number,
-    normalize_date,
-    normalize_donor_name,
-)
+from .validation import normalize_amount, normalize_check_number, normalize_date, normalize_donor_name
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +63,7 @@ class DeduplicationService:
             check_no = normalize_check_number(new_donation.get("Check No.", ""))
             if check_no and len(check_no) <= 3 and check_no.isdigit():
                 # Check numbers like "195" are suspicious - real checks are usually 4+ digits
-                print(
-                    f"WARNING: Suspicious check number '{check_no}' - may be a page number or reference"
-                )
+                print(f"WARNING: Suspicious check number '{check_no}' - may be a page number or reference")
                 # Still process it but log the warning
 
             # Check if this key already exists
@@ -111,20 +104,16 @@ class DeduplicationService:
                 donation["internalId"] = f"donation_{i}"
 
         logger.info(
-            f"Deduplication complete: {len(result)} unique donations "
-            f"(merged {merge_count}, added {new_count})"
+            f"Deduplication complete: {len(result)} unique donations " f"(merged {merge_count}, added {new_count})"
         )
 
         # Log final customer match status
         matched_count = sum(
             1
             for d in result
-            if d.get("qbCustomerStatus")
-            in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]
+            if d.get("qbCustomerStatus") in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]
         )
-        logger.info(
-            f"Customer matches in final result: {matched_count} out of {len(result)} donations"
-        )
+        logger.info(f"Customer matches in final result: {matched_count} out of {len(result)} donations")
 
         return result
 
@@ -219,12 +208,7 @@ class DeduplicationService:
                 merged[field] = new_val
                 merged_fields.append(field)
             # Take longer/more complete value for text fields
-            elif (
-                existing_val
-                and new_val
-                and isinstance(existing_val, str)
-                and isinstance(new_val, str)
-            ):
+            elif existing_val and new_val and isinstance(existing_val, str) and isinstance(new_val, str):
                 # Safely strip whitespace
                 existing_stripped = existing_val.strip() if existing_val else ""
                 new_stripped = new_val.strip() if new_val else ""
@@ -282,16 +266,13 @@ class DeduplicationService:
 
         # Log the final merged result
         logger.info(
-            f"Merge complete - Result status: {merged.get('qbCustomerStatus')} - "
-            f"ID: {merged.get('qboCustomerId')}"
+            f"Merge complete - Result status: {merged.get('qbCustomerStatus')} - " f"ID: {merged.get('qboCustomerId')}"
         )
 
         return merged
 
     @staticmethod
-    def _merge_customer_fields(
-        merged: Dict[str, Any], existing: Dict[str, Any], new: Dict[str, Any]
-    ) -> None:
+    def _merge_customer_fields(merged: Dict[str, Any], existing: Dict[str, Any], new: Dict[str, Any]) -> None:
         """
         Merge customer-related fields intelligently.
 

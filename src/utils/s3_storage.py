@@ -25,14 +25,10 @@ class S3Storage:
         )
         self.bucket_name = os.environ.get("S3_BUCKET_NAME", "fom-qbo-uploads")
 
-    def upload_file(
-        self, file_content: bytes, key: str, content_type: str = "application/octet-stream"
-    ) -> Dict:
+    def upload_file(self, file_content: bytes, key: str, content_type: str = "application/octet-stream") -> Dict:
         """Upload a file to S3 and return the reference."""
         try:
-            self.s3_client.put_object(
-                Bucket=self.bucket_name, Key=key, Body=file_content, ContentType=content_type
-            )
+            self.s3_client.put_object(Bucket=self.bucket_name, Key=key, Body=file_content, ContentType=content_type)
 
             logger.info(f"Uploaded file to S3: {key}")
 

@@ -103,9 +103,7 @@ class TestDeduplicationService:
 
     def test_suspicious_check_number_warning(self, capsys):
         """Test warning for suspicious check numbers."""
-        donations = [
-            {"Check No.": "195", "Gift Amount": "100.00", "Donor Name": "Test Donor"}
-        ]  # Suspiciously short
+        donations = [{"Check No.": "195", "Gift Amount": "100.00", "Donor Name": "Test Donor"}]  # Suspiciously short
 
         DeduplicationService.deduplicate_donations([], donations)
 

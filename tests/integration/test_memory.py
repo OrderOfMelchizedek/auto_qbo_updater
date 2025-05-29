@@ -65,9 +65,7 @@ def test_file_processor():
             tmp.write(
                 b"3 0 obj<</Type/Page/Parent 2 0 R/Resources<</Font<</F1<</Type/Font/Subtype/Type1/BaseFont/Times-Roman>>>>>>/MediaBox[0 0 612 792]/Contents 4 0 R>>endobj\n"
             )
-            tmp.write(
-                b"4 0 obj<</Length 44>>stream\nBT /F1 12 Tf 100 700 Td (Test PDF) Tj ET\nendstream\nendobj\n"
-            )
+            tmp.write(b"4 0 obj<</Length 44>>stream\nBT /F1 12 Tf 100 700 Td (Test PDF) Tj ET\nendstream\nendobj\n")
             tmp.write(
                 b"xref\n0 5\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\n0000000115 00000 n\n0000000330 00000 n\n"
             )

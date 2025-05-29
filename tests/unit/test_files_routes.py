@@ -16,9 +16,7 @@ from werkzeug.datastructures import FileStorage
 def mock_file():
     """Create a mock file for upload testing."""
     file_content = b"Test file content"
-    file = FileStorage(
-        stream=io.BytesIO(file_content), filename="test_donation.csv", content_type="text/csv"
-    )
+    file = FileStorage(stream=io.BytesIO(file_content), filename="test_donation.csv", content_type="text/csv")
     return file
 
 
@@ -168,9 +166,7 @@ class TestFilesRoutes:
             return {
                 "success": True,
                 "filename": file_data["filename"],
-                "donations": [
-                    {"Donor Name": "John Doe", "Gift Amount": "100.00", "Check No.": "1234"}
-                ],
+                "donations": [{"Donor Name": "John Doe", "Gift Amount": "100.00", "Check No.": "1234"}],
                 "file_path": "/tmp/test.csv",
                 "processing_time": 0.5,
             }
@@ -220,9 +216,7 @@ class TestFilesRoutes:
 
             # Set up existing donations in session (already has check 1234)
             with client.session_transaction() as sess:
-                sess["donations"] = [
-                    {"Check No.": "1234", "Gift Amount": "100.00", "Donor Name": "John Doe"}
-                ]
+                sess["donations"] = [{"Check No.": "1234", "Gift Amount": "100.00", "Donor Name": "John Doe"}]
 
             # Mock process_single_file function that returns duplicate and new donation
             def mock_process_single_file(file_data, qbo_authenticated):

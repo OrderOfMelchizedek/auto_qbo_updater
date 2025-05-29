@@ -63,13 +63,9 @@ class QBOAPIException(ExternalAPIException):
             if status_code == 401:
                 user_message = "QuickBooks authentication expired. Please reconnect to QuickBooks."
             elif status_code == 429:
-                user_message = (
-                    "Too many requests to QuickBooks. Please wait a moment and try again."
-                )
+                user_message = "Too many requests to QuickBooks. Please wait a moment and try again."
             elif status_code and status_code >= 500:
-                user_message = (
-                    "QuickBooks service is temporarily unavailable. Please try again later."
-                )
+                user_message = "QuickBooks service is temporarily unavailable. Please try again later."
             else:
                 user_message = "Error communicating with QuickBooks. Please try again."
 

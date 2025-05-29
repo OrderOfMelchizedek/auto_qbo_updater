@@ -121,9 +121,7 @@ class TestOAuthFlow:
         # Set the mock on the app
         app.qbo_service = mock_qbo_service
 
-        response = client.get(
-            "/qbo/callback?error=access_denied&error_description=User+denied+access"
-        )
+        response = client.get("/qbo/callback?error=access_denied&error_description=User+denied+access")
 
         assert response.status_code == 302  # Redirect to index
         assert "/" in response.location
@@ -175,9 +173,7 @@ class TestOAuthFlow:
             sess["qbo_authenticated"] = True
             sess["qbo_company_id"] = "test_realm"
 
-        response = client.post(
-            "/qbo/disconnect", headers={"Content-Type": "application/json"}, data=json.dumps({})
-        )
+        response = client.post("/qbo/disconnect", headers={"Content-Type": "application/json"}, data=json.dumps({}))
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -200,9 +196,7 @@ class TestOAuthFlow:
             sess["qbo_authenticated"] = True
             sess["qbo_company_id"] = "test_realm"
 
-        response = client.post(
-            "/qbo/disconnect", headers={"Content-Type": "application/json"}, data=json.dumps({})
-        )
+        response = client.post("/qbo/disconnect", headers={"Content-Type": "application/json"}, data=json.dumps({}))
 
         assert response.status_code == 200
         data = json.loads(response.data)

@@ -48,9 +48,7 @@ class TestSanitizeForLogging:
 
     def test_sanitize_nested_dict(self):
         """Test sanitizing nested dictionaries."""
-        data = {
-            "user": {"name": "John", "credentials": {"password": "secret", "auth_token": "xyz123"}}
-        }
+        data = {"user": {"name": "John", "credentials": {"password": "secret", "auth_token": "xyz123"}}}
 
         result = sanitize_for_logging(data)
 
@@ -295,9 +293,7 @@ class TestLogAuditEvent:
 
         sensitive_details = {"action": "login", "password": "secret123", "token": "abc123"}
 
-        event_data = log_audit_event(
-            event_type="login", details=sensitive_details, audit_logger=mock_logger
-        )
+        event_data = log_audit_event(event_type="login", details=sensitive_details, audit_logger=mock_logger)
 
         # Check that sensitive data was sanitized
         assert event_data["details"]["action"] == "login"

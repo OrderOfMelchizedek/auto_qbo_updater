@@ -38,9 +38,7 @@ class TestBatchProcessingIntegration(unittest.TestCase):
         progress_logger = ProgressLogger()
 
         # Create batch processor
-        batch_processor = BatchProcessor(
-            gemini_service=gemini_service, progress_logger=progress_logger
-        )
+        batch_processor = BatchProcessor(gemini_service=gemini_service, progress_logger=progress_logger)
 
         # Create test image files instead of PDFs for simpler testing
         image_path = os.path.join(self.temp_dir, "test.jpg")
@@ -123,9 +121,7 @@ class TestBatchProcessingIntegration(unittest.TestCase):
         )
 
         # Mock the GeminiService method to raise an exception
-        with patch.object(
-            GeminiService, "extract_donation_data", side_effect=Exception("Processing failed")
-        ):
+        with patch.object(GeminiService, "extract_donation_data", side_effect=Exception("Processing failed")):
             donations, errors = batch_processor.process_batches_concurrently([batch])
 
         # Verify error was captured

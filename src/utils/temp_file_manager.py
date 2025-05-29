@@ -65,9 +65,7 @@ class TempFileManager:
             with open(metadata_path, "w") as f:
                 json.dump(metadata, f)
 
-            logger.info(
-                f"Saved file {file.filename} to {temp_path} ({metadata['size_bytes']} bytes)"
-            )
+            logger.info(f"Saved file {file.filename} to {temp_path} ({metadata['size_bytes']} bytes)")
 
             return metadata
 

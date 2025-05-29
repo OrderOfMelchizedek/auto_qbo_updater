@@ -61,15 +61,11 @@ class MemoryMonitor:
         )
 
         if stats["rss_mb"] > self.critical_memory_threshold_mb:
-            print(
-                f"[Memory Monitor] CRITICAL: Memory usage exceeds {self.critical_memory_threshold_mb}MB!"
-            )
+            print(f"[Memory Monitor] CRITICAL: Memory usage exceeds {self.critical_memory_threshold_mb}MB!")
             # Force garbage collection
             self.force_cleanup()
         elif stats["rss_mb"] > self.high_memory_threshold_mb:
-            print(
-                f"[Memory Monitor] WARNING: Memory usage exceeds {self.high_memory_threshold_mb}MB"
-            )
+            print(f"[Memory Monitor] WARNING: Memory usage exceeds {self.high_memory_threshold_mb}MB")
 
     def log_memory(self, context: str = ""):
         """Alias for log_memory_usage for backward compatibility."""

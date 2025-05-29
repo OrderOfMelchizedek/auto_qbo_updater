@@ -35,9 +35,7 @@ class CSVParser:
                     continue
 
             if sample is None:
-                raise ValueError(
-                    f"Could not read file with any of the attempted encodings: {encodings}"
-                )
+                raise ValueError(f"Could not read file with any of the attempted encodings: {encodings}")
 
             # Try to detect common delimiters in order of likelihood
             possible_delimiters = [",", ";", "\t", "|"]
@@ -139,13 +137,9 @@ class CSVParser:
                     # Generate customerLookup field if missing
                     if "customerLookup" not in donation:
                         if "Last Name" in donation and "First Name" in donation:
-                            donation["customerLookup"] = (
-                                f"{donation['Last Name']}, {donation['First Name']}"
-                            )
+                            donation["customerLookup"] = f"{donation['Last Name']}, {donation['First Name']}"
                         elif "Organization Name" in donation and "City" in donation:
-                            donation["customerLookup"] = (
-                                f"{donation['Organization Name']} {donation['City']}"
-                            )
+                            donation["customerLookup"] = f"{donation['Organization Name']} {donation['City']}"
                         elif "Donor Name" in donation:
                             parts = donation["Donor Name"].split()
                             if len(parts) > 1:

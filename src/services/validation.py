@@ -15,12 +15,8 @@ import dateutil.parser
 import pandas as pd
 
 # Constants for date validation
-FUTURE_DATE_LIMIT_DAYS = int(
-    os.environ.get("FUTURE_DATE_LIMIT_DAYS", "30")
-)  # Allow dates up to N days in the future
-DATE_WARNING_DAYS = int(
-    os.environ.get("DATE_WARNING_DAYS", "730")
-)  # Warn for dates older than N days
+FUTURE_DATE_LIMIT_DAYS = int(os.environ.get("FUTURE_DATE_LIMIT_DAYS", "30"))  # Allow dates up to N days in the future
+DATE_WARNING_DAYS = int(os.environ.get("DATE_WARNING_DAYS", "730"))  # Warn for dates older than N days
 
 
 def sanitize_for_logging(data: Union[Dict, str, List, Any]) -> Union[Dict, str, List, Any]:
@@ -41,9 +37,7 @@ def sanitize_for_logging(data: Union[Dict, str, List, Any]) -> Union[Dict, str, 
             if isinstance(value, dict):
                 sanitized[key] = sanitize_for_logging(value)
             elif isinstance(value, list):
-                sanitized[key] = [
-                    sanitize_for_logging(item) if isinstance(item, dict) else item for item in value
-                ]
+                sanitized[key] = [sanitize_for_logging(item) if isinstance(item, dict) else item for item in value]
             # Sensitive field patterns - only redact if not a dict/list
             elif any(
                 pattern in key_lower
@@ -165,18 +159,12 @@ def validate_environment():
     # Validate QBO_ENVIRONMENT value if set
     qbo_env = os.environ.get("QBO_ENVIRONMENT")
     if qbo_env and qbo_env not in ["sandbox", "production"]:
-        raise ValueError(
-            f"Invalid QBO_ENVIRONMENT: '{qbo_env}'. Must be 'sandbox' or 'production'."
-        )
+        raise ValueError(f"Invalid QBO_ENVIRONMENT: '{qbo_env}'. Must be 'sandbox' or 'production'.")
 
     # Validate URL format for redirect URI
     redirect_uri = os.environ.get("QBO_REDIRECT_URI")
-    if redirect_uri and not (
-        redirect_uri.startswith("http://") or redirect_uri.startswith("https://")
-    ):
-        raise ValueError(
-            f"Invalid QBO_REDIRECT_URI: '{redirect_uri}'. Must start with http:// or https://"
-        )
+    if redirect_uri and not (redirect_uri.startswith("http://") or redirect_uri.startswith("https://")):
+        raise ValueError(f"Invalid QBO_REDIRECT_URI: '{redirect_uri}'. Must start with http:// or https://")
 
 
 def normalize_check_number(check_no: Optional[str]) -> Optional[str]:

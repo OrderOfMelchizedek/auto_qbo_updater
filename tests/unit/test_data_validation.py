@@ -23,9 +23,7 @@ class TestDataValidation(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         # Mock environment variables for date validation
-        self.env_patcher = patch.dict(
-            os.environ, {"DATE_WARNING_DAYS": "365", "FUTURE_DATE_LIMIT_DAYS": "7"}
-        )
+        self.env_patcher = patch.dict(os.environ, {"DATE_WARNING_DAYS": "365", "FUTURE_DATE_LIMIT_DAYS": "7"})
         self.env_patcher.start()
 
         # Reload the validation module to pick up new env vars

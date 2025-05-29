@@ -123,9 +123,7 @@ def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}", exc_info=True)
         return (
-            jsonify(
-                {"status": "error", "error": str(e), "timestamp": datetime.utcnow().isoformat()}
-            ),
+            jsonify({"status": "error", "error": str(e), "timestamp": datetime.utcnow().isoformat()}),
             503,
         )
 

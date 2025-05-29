@@ -115,9 +115,7 @@ class TestGeminiService(unittest.TestCase):
     @patch("PyPDF2.PdfReader")
     @patch("fitz.open")
     @patch("src.utils.gemini_service.Image.open")
-    def test_extract_donation_data_pdf(
-        self, mock_image_open, mock_fitz_open, mock_pdf_reader, mock_splitext
-    ):
+    def test_extract_donation_data_pdf(self, mock_image_open, mock_fitz_open, mock_pdf_reader, mock_splitext):
         """Test extraction from a PDF file."""
         # Mock file extension check
         mock_splitext.return_value = ["test", ".pdf"]

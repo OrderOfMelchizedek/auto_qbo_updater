@@ -240,9 +240,7 @@ class TestQBORoutes:
             sess["qbo_authenticated"] = True
             sess["session_id"] = "test-session"
 
-        response = client.post(
-            "/qbo/customer/create/donation_123", headers={"X-CSRFToken": "test-token"}, json={}
-        )
+        response = client.post("/qbo/customer/create/donation_123", headers={"X-CSRFToken": "test-token"}, json={})
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -264,9 +262,7 @@ class TestQBORoutes:
             assert donation["qbCustomerStatus"] == "Created"
             assert donation["matchMethod"] == "Created"
 
-    def test_create_qbo_customer_with_custom_data(
-        self, client, app, sample_donation, sample_customer
-    ):
+    def test_create_qbo_customer_with_custom_data(self, client, app, sample_donation, sample_customer):
         """Test creating customer with custom data."""
         mock_qbo_service = Mock()
         mock_qbo_service.create_customer.return_value = sample_customer
@@ -357,9 +353,7 @@ class TestQBORoutes:
             sess["qbo_authenticated"] = True
             sess["session_id"] = "test-session"
 
-        response = client.post(
-            "/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"}, json={}
-        )
+        response = client.post("/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"}, json={})
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -381,9 +375,7 @@ class TestQBORoutes:
             sess["donations"] = [sample_donation]  # No qboCustomerId
             sess["qbo_authenticated"] = True
 
-        response = client.post(
-            "/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"}, json={}
-        )
+        response = client.post("/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"}, json={})
 
         assert response.status_code == 400
         data = json.loads(response.data)
@@ -400,9 +392,7 @@ class TestQBORoutes:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
 
-        response = client.post(
-            "/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"}, json={}
-        )
+        response = client.post("/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"}, json={})
 
         assert response.status_code == 500
         data = json.loads(response.data)
