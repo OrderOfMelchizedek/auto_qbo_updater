@@ -21,9 +21,21 @@ class TestDeduplicationService:
     def test_deduplicate_no_duplicates(self):
         """Test deduplication when there are no duplicates."""
         existing = [
-            {"Check No.": "1001", "Gift Amount": "100.00", "Donor Name": "John Doe", "internalId": "donation_0"}
+            {
+                "Check No.": "1001",
+                "Gift Amount": "100.00",
+                "Donor Name": "John Doe",
+                "internalId": "donation_0",
+            }
         ]
-        new = [{"Check No.": "1002", "Gift Amount": "200.00", "Donor Name": "Jane Smith", "internalId": "donation_1"}]
+        new = [
+            {
+                "Check No.": "1002",
+                "Gift Amount": "200.00",
+                "Donor Name": "Jane Smith",
+                "internalId": "donation_1",
+            }
+        ]
 
         result = DeduplicationService.deduplicate_donations(existing, new)
 
@@ -33,7 +45,14 @@ class TestDeduplicationService:
 
     def test_deduplicate_with_duplicates(self):
         """Test deduplication with duplicate check numbers and amounts."""
-        existing = [{"Check No.": "1001", "Gift Amount": "100.00", "Donor Name": "John Doe", "qbCustomerStatus": "New"}]
+        existing = [
+            {
+                "Check No.": "1001",
+                "Gift Amount": "100.00",
+                "Donor Name": "John Doe",
+                "qbCustomerStatus": "New",
+            }
+        ]
         new = [
             {
                 "Check No.": "1001",
@@ -84,7 +103,9 @@ class TestDeduplicationService:
 
     def test_suspicious_check_number_warning(self, capsys):
         """Test warning for suspicious check numbers."""
-        donations = [{"Check No.": "195", "Gift Amount": "100.00", "Donor Name": "Test Donor"}]  # Suspiciously short
+        donations = [
+            {"Check No.": "195", "Gift Amount": "100.00", "Donor Name": "Test Donor"}
+        ]  # Suspiciously short
 
         DeduplicationService.deduplicate_donations([], donations)
 
@@ -218,7 +239,12 @@ class TestDeduplicationService:
         """Test that merge history is properly tracked."""
         existing = [{"Check No.": "1001", "Gift Amount": "100.00", "Donor Name": "John Doe"}]
         new = [
-            {"Check No.": "1001", "Gift Amount": "100.00", "Donor Name": "John Doe", "Address - Line 1": "123 Main St"}
+            {
+                "Check No.": "1001",
+                "Gift Amount": "100.00",
+                "Donor Name": "John Doe",
+                "Address - Line 1": "123 Main St",
+            }
         ]
 
         with patch("src.services.deduplication.logger") as mock_logger:

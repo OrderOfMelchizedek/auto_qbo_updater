@@ -1,5 +1,5 @@
-"""
-Alternative result storage to avoid Redis memory issues.
+"""Alternative result storage to avoid Redis memory issues.
+
 Store large results in temporary files and only keep references in Redis.
 """
 
@@ -17,6 +17,12 @@ class ResultStore:
     """Store large task results in temp files instead of Redis."""
 
     def __init__(self, temp_dir=None):
+        """Initialize the result store.
+
+        Args:
+            temp_dir: Optional custom temporary directory path. If not provided,
+                     uses the system's default temp directory.
+        """
         self.temp_dir = temp_dir or tempfile.gettempdir()
         self.results_dir = os.path.join(self.temp_dir, "fom_qbo_results")
         os.makedirs(self.results_dir, exist_ok=True)
@@ -93,10 +99,10 @@ class ResultStore:
 
     def get_task_metadata(self, task_id):
         """Get metadata for a task.
-        
+
         Args:
             task_id: The task ID to get metadata for
-            
+
         Returns:
             Dictionary with task metadata or None if not found
         """
@@ -105,31 +111,31 @@ class ResultStore:
             for filename in os.listdir(self.results_dir):
                 if f"result_{task_id}_" in filename:
                     filepath = os.path.join(self.results_dir, filename)
-                    
+
                     # Get file stats
                     stats = os.stat(filepath)
                     mtime = datetime.fromtimestamp(stats.st_mtime)
-                    
+
                     return {
                         "task_id": task_id,
                         "filename": filename,
                         "filepath": filepath,
                         "size_bytes": stats.st_size,
                         "created_at": mtime.isoformat(),
-                        "age_seconds": (datetime.now() - mtime).total_seconds()
+                        "age_seconds": (datetime.now() - mtime).total_seconds(),
                     }
         except Exception as e:
             logger.error(f"Error getting task metadata for {task_id}: {e}")
-        
+
         return None
-    
+
     def store_task_metadata(self, task_id, metadata):
         """Store metadata for a task.
-        
+
         Args:
             task_id: The task ID
             metadata: Dictionary of metadata to store
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -137,15 +143,15 @@ class ResultStore:
             # Store metadata in a separate file
             metadata_filename = f"metadata_{task_id}.json"
             metadata_filepath = os.path.join(self.results_dir, metadata_filename)
-            
+
             # Add timestamp
             metadata["stored_at"] = datetime.now().isoformat()
-            
+
             with open(metadata_filepath, "w") as f:
                 json.dump(metadata, f)
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error storing task metadata for {task_id}: {e}")
             return False

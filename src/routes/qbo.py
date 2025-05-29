@@ -1,3 +1,5 @@
+"""Routes for QuickBooks Online integration and customer management."""
+
 import logging
 from datetime import datetime
 
@@ -66,7 +68,14 @@ def search_qbo_customer(donation_id):
             session["donations"] = donations
             session.modified = True
 
-            return jsonify({"success": True, "found": True, "customer": customer_data, "matchConfidence": "High"})
+            return jsonify(
+                {
+                    "success": True,
+                    "found": True,
+                    "customer": customer_data,
+                    "matchConfidence": "High",
+                }
+            )
         else:
             # No match found
             donation["qbCustomerStatus"] = "Not Found"
@@ -75,7 +84,13 @@ def search_qbo_customer(donation_id):
             session["donations"] = donations
             session.modified = True
 
-            return jsonify({"success": True, "found": False, "message": f'No customer found for "{donor_name}"'})
+            return jsonify(
+                {
+                    "success": True,
+                    "found": False,
+                    "message": f'No customer found for "{donor_name}"',
+                }
+            )
 
     except Exception as e:
         logger.error(f"Error searching QBO customer: {str(e)}", exc_info=True)
@@ -168,7 +183,11 @@ def manual_match_customer(donation_id):
         log_audit_event(
             "qbo_manual_customer_match",
             user_id=session.get("session_id"),
-            details={"donation_id": donation_id, "customer_id": customer_id, "donor_name": donation.get("Donor Name")},
+            details={
+                "donation_id": donation_id,
+                "customer_id": customer_id,
+                "donor_name": donation.get("Donor Name"),
+            },
             request_ip=request.remote_addr,
         )
 
@@ -318,7 +337,11 @@ def update_qbo_customer(donation_id):
             log_audit_event(
                 "qbo_customer_updated",
                 user_id=session.get("session_id"),
-                details={"donation_id": donation_id, "customer_id": customer_id, "updated_fields": list(data.keys())},
+                details={
+                    "donation_id": donation_id,
+                    "customer_id": customer_id,
+                    "updated_fields": list(data.keys()),
+                },
                 request_ip=request.remote_addr,
             )
 

@@ -74,7 +74,7 @@ fom_to_qbo_automation/
    ```
    # Production dependencies
    make install
-   
+
    # Development dependencies (includes testing tools)
    make install-dev
    ```
@@ -90,16 +90,16 @@ fom_to_qbo_automation/
    ```
    # Run with default settings (Sandbox QBO, Gemini Flash model)
    make run
-   
+
    # Or use the Python script directly:
    python src/run.py
-   
+
    # Run with Gemini Pro model (better quality but slower)
    python src/run.py --model gemini-pro
-   
+
    # Run with Production environment
    python src/run.py --env production
-   
+
    # Full model names can also be used
    python src/run.py --model gemini-2.5-flash-preview-05-20
    python src/run.py --model gemini-2.5-pro-preview-05-06

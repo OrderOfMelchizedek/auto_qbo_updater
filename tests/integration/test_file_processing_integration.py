@@ -1,12 +1,13 @@
 """Integration tests for end-to-end file processing."""
 
+import io
 import os
 import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
+
 from PIL import Image
-import io
 
 # Add src to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src")))
@@ -51,22 +52,22 @@ Jane Doe,250.50,2024-01-16,1235
             f.write(csv_content)
 
         # Mock the extract_text_data method directly
-        with patch.object(GeminiService, 'extract_text_data') as mock_extract:
+        with patch.object(GeminiService, "extract_text_data") as mock_extract:
             mock_extract.return_value = [
                 {
                     "Donor Name": "John Smith",
                     "Gift Amount": "100.00",
                     "Gift Date": "2024-01-15",
                     "Check No.": "1234",
-                    "customerLookup": "Smith, John"
+                    "customerLookup": "Smith, John",
                 },
                 {
                     "Donor Name": "Jane Doe",
                     "Gift Amount": "250.50",
                     "Gift Date": "2024-01-16",
                     "Check No.": "1235",
-                    "customerLookup": "Doe, Jane"
-                }
+                    "customerLookup": "Doe, Jane",
+                },
             ]
 
             # Create services and process file
@@ -88,19 +89,19 @@ Jane Doe,250.50,2024-01-16,1235
         """Test complete flow from image file to donation data."""
         # Create a real test image file (1x1 pixel PNG)
         image_path = os.path.join(self.temp_dir, "test_donation.jpg")
-        
+
         # Create a minimal 1x1 pixel image
-        img = Image.new('RGB', (1, 1), color='white')
-        img.save(image_path, 'JPEG')
+        img = Image.new("RGB", (1, 1), color="white")
+        img.save(image_path, "JPEG")
 
         # Mock the extract_donation_data method directly
-        with patch.object(GeminiService, 'extract_donation_data') as mock_extract:
+        with patch.object(GeminiService, "extract_donation_data") as mock_extract:
             mock_extract.return_value = {
                 "Donor Name": "Test Donor",
                 "Gift Amount": "500.00",
                 "Gift Date": "2024-01-20",
                 "Check No.": "5678",
-                "customerLookup": "Donor, Test"
+                "customerLookup": "Donor, Test",
             }
 
             # Create services and process file
@@ -131,16 +132,18 @@ Jane Doe,250.50,2024-01-16,1235
             # Extract the file index from the CSV content in the prompt
             for i in range(3):
                 if f"Donor {i}" in prompt_text:
-                    return [{
-                        "Donor Name": f"Donor {i}",
-                        "Gift Amount": "100.00",
-                        "Gift Date": f"2024-01-{i+1:02d}",
-                        "Check No.": str(i+1000),
-                        "customerLookup": f"{i}, Donor"
-                    }]
+                    return [
+                        {
+                            "Donor Name": f"Donor {i}",
+                            "Gift Amount": "100.00",
+                            "Gift Date": f"2024-01-{i+1:02d}",
+                            "Check No.": str(i + 1000),
+                            "customerLookup": f"{i}, Donor",
+                        }
+                    ]
             return []
 
-        with patch.object(GeminiService, 'extract_text_data', side_effect=mock_extract_side_effect):
+        with patch.object(GeminiService, "extract_text_data", side_effect=mock_extract_side_effect):
             # Create services
             gemini_service = GeminiService(api_key="test-key")
             file_processor = FileProcessor(gemini_service)

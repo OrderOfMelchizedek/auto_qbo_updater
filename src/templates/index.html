@@ -58,7 +58,7 @@
                                 </button>
                             </div>
                         </form>
-                        
+
                         <!-- Progress Display -->
                         <div id="progressDisplay" class="alert alert-info mt-3 d-none">
                             <div class="d-flex align-items-center">
@@ -195,7 +195,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Manual Customer Match Modal -->
         <div class="modal fade" id="customerMatchModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-lg">
@@ -239,7 +239,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- QuickBooks Connection Modal -->
         <div class="modal fade" id="qboConnectionModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog">
@@ -253,9 +253,9 @@
                             <i class="fas fa-link fa-3x text-primary mb-3"></i>
                             <h4>Enhance Your Donation Processing</h4>
                         </div>
-                        
+
                         <p>Connecting to QuickBooks Online enables these powerful features:</p>
-                        
+
                         <ul class="list-group mb-4">
                             <li class="list-group-item d-flex">
                                 <i class="fas fa-check-circle text-success me-2 mt-1"></i>
@@ -279,7 +279,7 @@
                                 </div>
                             </li>
                         </ul>
-                        
+
                         <div class="alert alert-warning">
                             <i class="fas fa-exclamation-triangle me-2"></i>
                             Without QBO connection, you'll need to manually match donors and create receipts.
@@ -294,7 +294,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- QuickBooks Setup Modal -->
         <div class="modal fade" id="qboSetupModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog">
@@ -307,15 +307,15 @@
                         <input type="hidden" id="setupDonationId">
                         <input type="hidden" id="setupType">
                         <input type="hidden" id="setupInvalidId">
-                        
+
                         <div class="alert alert-warning">
                             <i class="fas fa-exclamation-triangle me-2"></i>
                             <span id="setupErrorMessage">A required QuickBooks element is missing.</span>
                         </div>
-                        
+
                         <div id="accountSetupSection" class="d-none">
                             <p>The account ID <strong id="missingAccountId">12000</strong> (typically "Undeposited Funds") doesn't exist in your QuickBooks company.</p>
-                            
+
                             <ul class="nav nav-tabs mb-3" id="accountSetupTabs" role="tablist">
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link active" id="existing-account-tab" data-bs-toggle="tab" data-bs-target="#existing-account" type="button" role="tab">
@@ -328,7 +328,7 @@
                                     </button>
                                 </li>
                             </ul>
-                            
+
                             <div class="tab-content" id="accountSetupTabContent">
                                 <!-- Use Existing Account -->
                                 <div class="tab-pane fade show active" id="existing-account" role="tabpanel">
@@ -340,7 +340,7 @@
                                         </select>
                                     </div>
                                 </div>
-                                
+
                                 <!-- Create New Account -->
                                 <div class="tab-pane fade" id="new-account" role="tabpanel">
                                     <p>Create a new account in QuickBooks:</p>
@@ -377,10 +377,10 @@
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div id="itemSetupSection" class="d-none">
                             <p>The product/service item ID <strong id="missingItemId">1</strong> (typically "Gift - General - 503") doesn't exist in your QuickBooks company.</p>
-                            
+
                             <ul class="nav nav-tabs mb-3" id="itemSetupTabs" role="tablist">
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link active" id="existing-item-tab" data-bs-toggle="tab" data-bs-target="#existing-item" type="button" role="tab">
@@ -393,7 +393,7 @@
                                     </button>
                                 </li>
                             </ul>
-                            
+
                             <div class="tab-content" id="itemSetupTabContent">
                                 <!-- Use Existing Item -->
                                 <div class="tab-pane fade show active" id="existing-item" role="tabpanel">
@@ -405,7 +405,7 @@
                                         </select>
                                     </div>
                                 </div>
-                                
+
                                 <!-- Create New Item -->
                                 <div class="tab-pane fade" id="new-item" role="tabpanel">
                                     <p>Create a new product/service in QuickBooks:</p>
@@ -443,10 +443,10 @@
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div id="paymentMethodSetupSection" class="d-none">
                             <p>The payment method "CHECK" doesn't exist in your QuickBooks company.</p>
-                            
+
                             <ul class="nav nav-tabs mb-3" id="paymentMethodSetupTabs" role="tablist">
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link active" id="existing-payment-method-tab" data-bs-toggle="tab" data-bs-target="#existing-payment-method" type="button" role="tab">
@@ -459,7 +459,7 @@
                                     </button>
                                 </li>
                             </ul>
-                            
+
                             <div class="tab-content" id="paymentMethodSetupTabContent">
                                 <!-- Use Existing Payment Method -->
                                 <div class="tab-pane fade show active" id="existing-payment-method" role="tabpanel">
@@ -471,7 +471,7 @@
                                         </select>
                                     </div>
                                 </div>
-                                
+
                                 <!-- Create New Payment Method -->
                                 <div class="tab-pane fade" id="new-payment-method" role="tabpanel">
                                     <p>Create a new payment method in QuickBooks:</p>
@@ -486,7 +486,7 @@
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div id="generalSetupSection" class="d-none">
                             <p>QuickBooks has reported an error with a required reference. Please check your QuickBooks setup.</p>
                             <p>Error details: <span id="setupErrorDetail"></span></p>
@@ -501,7 +501,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Sales Receipt Preview Modal -->
         <div class="modal fade" id="salesReceiptPreviewModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-lg">
@@ -512,7 +512,7 @@
                     </div>
                     <div class="modal-body">
                         <input type="hidden" id="previewDonationId">
-                        
+
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Customer:</label>
@@ -523,7 +523,7 @@
                                 <div id="previewAmount"></div>
                             </div>
                         </div>
-                        
+
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label for="previewPaymentMethodRef" class="form-label fw-bold">Payment Method:</label>
@@ -537,7 +537,7 @@
                                 <div id="previewReferenceNo"></div>
                             </div>
                         </div>
-                        
+
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Sales Receipt Date:</label>
@@ -551,7 +551,7 @@
                                 <div id="previewDepositTo" class="d-none"></div>
                             </div>
                         </div>
-                        
+
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Service Date:</label>
@@ -562,7 +562,7 @@
                                 <div id="previewDocNumber"></div>
                             </div>
                         </div>
-                        
+
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label for="previewItemRef" class="form-label fw-bold">Product/Service:</label>
@@ -575,7 +575,7 @@
                                 <div id="previewMessage"></div>
                             </div>
                         </div>
-                        
+
                         <div class="row mb-3">
                             <div class="col-md-12">
                                 <label class="form-label fw-bold">Description:</label>
@@ -592,7 +592,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Batch Sales Receipt Modal -->
         <div class="modal fade" id="batchReceiptModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog">
@@ -608,14 +608,14 @@
                             <li>Have a matched customer</li>
                             <li>Have a valid gift amount</li>
                         </ul>
-                        
+
                         <div class="mb-3">
                             <label for="batchItemRef" class="form-label">Default Product/Service for all receipts:</label>
                             <select id="batchItemRef" class="form-select">
                                 <!-- Options will be populated dynamically -->
                             </select>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="batchDepositToAccount" class="form-label">Default Deposit To Account:</label>
                             <select id="batchDepositToAccount" class="form-select">
@@ -623,14 +623,14 @@
                             </select>
                             <small class="text-muted">Select the account to be debited for these donations.</small>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="batchPaymentMethodRef" class="form-label">Default Payment Method:</label>
                             <select id="batchPaymentMethodRef" class="form-select">
                                 <!-- Options will be populated dynamically -->
                             </select>
                         </div>
-                        
+
                         <div class="alert alert-info">
                             <i class="fas fa-info-circle me-2"></i>
                             You can preview and send individual sales receipts by clicking the send button for each donation.

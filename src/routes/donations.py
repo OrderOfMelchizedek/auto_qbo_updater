@@ -1,3 +1,5 @@
+"""Routes for managing donation data in the session."""
+
 import json
 import logging
 from datetime import datetime
@@ -26,7 +28,8 @@ def get_donations():
         matched_count = sum(
             1
             for d in donations
-            if d.get("qbCustomerStatus") in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]
+            if d.get("qbCustomerStatus")
+            in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]
         )
 
         return jsonify(
@@ -75,7 +78,11 @@ def update_donation(donation_id):
         )
 
         return jsonify(
-            {"success": True, "message": "Donation updated successfully", "donation": donations[donation_index]}
+            {
+                "success": True,
+                "message": "Donation updated successfully",
+                "donation": donations[donation_index],
+            }
         )
 
     except Exception as e:
@@ -106,7 +113,13 @@ def remove_invalid_donations():
             request_ip=request.remote_addr,
         )
 
-        return jsonify({"success": True, "removed_count": removed_count, "remaining_count": len(valid_donations)})
+        return jsonify(
+            {
+                "success": True,
+                "removed_count": removed_count,
+                "remaining_count": len(valid_donations),
+            }
+        )
 
     except Exception as e:
         logger.error(f"Error removing invalid donations: {str(e)}")
@@ -136,7 +149,9 @@ def update_session_donations():
             request_ip=request.remote_addr,
         )
 
-        return jsonify({"success": True, "message": "Session donations updated", "count": len(new_donations)})
+        return jsonify(
+            {"success": True, "message": "Session donations updated", "count": len(new_donations)}
+        )
 
     except Exception as e:
         logger.error(f"Error updating session donations: {str(e)}")

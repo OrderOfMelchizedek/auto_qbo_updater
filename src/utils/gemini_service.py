@@ -11,16 +11,10 @@ from typing import Any, Dict, List, Optional, Union
 import google.generativeai as genai
 from PIL import Image
 
-from .prompt_manager import PromptManager
-
 # Import custom exceptions and retry logic
-try:
-    from .exceptions import GeminiAPIException, RetryableException
-    from .retry import retry_on_failure
-except ImportError:
-    # For standalone testing
-    from exceptions import GeminiAPIException, RetryableException
-    from retry import retry_on_failure
+from .exceptions import GeminiAPIException, RetryableException
+from .prompt_manager import PromptManager
+from .retry import retry_on_failure
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -47,8 +41,8 @@ class GeminiService:
         print(f"Initialized Gemini service with model: {self.model_name}")
 
         # Rate limiting state
-        self._minute_calls = []
-        self._hour_calls = []
+        self._minute_calls: List[datetime] = []
+        self._hour_calls: List[datetime] = []
         self._rate_limit_lock = threading.Lock()
 
     def _check_rate_limit(self):
@@ -125,7 +119,9 @@ class GeminiService:
                 print(f"Error extracting JSON from text: {str(e)}")
                 return None
 
-    def extract_text_data(self, prompt_text: str) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
+    def extract_text_data(
+        self, prompt_text: str
+    ) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
         """Extract structured data from text using Gemini with schema.
 
         Args:
@@ -162,9 +158,13 @@ class GeminiService:
                 suspicious_date = f"{current_year}-06-01"
 
                 if suspicious_date in text_response:
-                    print(f"WARNING: Found date '{suspicious_date}' in response - this may be a misread date")
+                    print(
+                        f"WARNING: Found date '{suspicious_date}' in response - this may be a misread date"
+                    )
                 if "6/1" in text_response or "6-1" in text_response:
-                    print("WARNING: Found date pattern '6/1' or '6-1' - possible source of June 1st date")
+                    print(
+                        "WARNING: Found date pattern '6/1' or '6-1' - possible source of June 1st date"
+                    )
 
                 # Use the helper method to extract JSON
                 parsed_json = self._extract_json_from_text(text_response)
@@ -183,7 +183,9 @@ class GeminiService:
             print(f"Error calling Gemini API: {str(e)}")
             return None
 
-    def verify_customer_match(self, extracted_donor: Dict[str, Any], qbo_customer: Dict[str, Any]) -> Dict[str, Any]:
+    def verify_customer_match(
+        self, extracted_donor: Dict[str, Any], qbo_customer: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Verify if the QuickBooks customer is a match for the extracted donor data.
 
         This uses Gemini to intelligently verify the match and enrich the donor data
@@ -245,9 +247,13 @@ class GeminiService:
                                 "matchConfidence": "none",
                             }
 
-                    print(f"Match verification result: valid match = {verification_result.get('validMatch', False)}")
+                    print(
+                        f"Match verification result: valid match = {verification_result.get('validMatch', False)}"
+                    )
                     if verification_result.get("validMatch") == False:
-                        print(f"Mismatch reason: {verification_result.get('mismatchReason', 'No reason provided')}")
+                        print(
+                            f"Mismatch reason: {verification_result.get('mismatchReason', 'No reason provided')}"
+                        )
                     if verification_result.get("addressMateriallyDifferent"):
                         print("Address is materially different - will need user input")
                     return verification_result
@@ -268,7 +274,9 @@ class GeminiService:
                 "matchConfidence": "none",
             }
 
-    def extract_donation_data(self, file_path: str, custom_prompt: str = None) -> Optional[Dict[str, Any]]:
+    def extract_donation_data(
+        self, file_path: str, custom_prompt: str = None
+    ) -> Optional[Dict[str, Any]]:
         """Extract donation data from an image or PDF using Gemini.
 
         Args:
@@ -341,7 +349,9 @@ class GeminiService:
                                     if page_num < len(pdf_reader.pages):
                                         page_text = pdf_reader.pages[page_num].extract_text()
                                         if page_text:
-                                            batch_text += f"\n--- Page {page_num + 1} ---\n{page_text}\n"
+                                            batch_text += (
+                                                f"\n--- Page {page_num + 1} ---\n{page_text}\n"
+                                            )
                             except Exception as e:
                                 print(f"Error extracting text from batch pages: {str(e)}")
 
@@ -350,7 +360,9 @@ class GeminiService:
 
                         # Add text context only from this batch's pages
                         if batch_text.strip():
-                            print(f"Batch {batch_num + 1} contains extractable text - adding as context")
+                            print(
+                                f"Batch {batch_num + 1} contains extractable text - adding as context"
+                            )
                             pdf_context = self.prompt_manager.get_prompt(
                                 "simplified_pdf_context", {"pdf_text": batch_text}
                             )
@@ -367,7 +379,9 @@ class GeminiService:
                             page = pdf_doc[page_num]
 
                             # Convert page to image with good resolution
-                            pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))  # 1.5x zoom for better resolution
+                            pix = page.get_pixmap(
+                                matrix=fitz.Matrix(1.5, 1.5)
+                            )  # 1.5x zoom for better resolution
                             img_data = pix.tobytes("png")
 
                             # Load image data
@@ -397,18 +411,24 @@ class GeminiService:
                                     if batch_json:
                                         # Add to results (could be a single object or array)
                                         if isinstance(batch_json, list):
-                                            print(f"Batch {batch_num + 1} extracted {len(batch_json)} donations")
+                                            print(
+                                                f"Batch {batch_num + 1} extracted {len(batch_json)} donations"
+                                            )
                                             for idx, donation in enumerate(batch_json):
                                                 print(
                                                     f"  - Donation {idx + 1}: {donation.get('Donor Name', 'Unknown')} - Check #{donation.get('Check No.', 'N/A')} - ${donation.get('Gift Amount', '0')}"
                                                 )
                                             all_results.extend(batch_json)
-                                            print(f"Added {len(batch_json)} donations from batch {batch_num + 1}")
+                                            print(
+                                                f"Added {len(batch_json)} donations from batch {batch_num + 1}"
+                                            )
                                         else:
                                             all_results.append(batch_json)
                                             print(f"Added 1 donation from batch {batch_num + 1}")
                                 except Exception as e:
-                                    print(f"Error processing data from batch {batch_num + 1}: {str(e)}")
+                                    print(
+                                        f"Error processing data from batch {batch_num + 1}: {str(e)}"
+                                    )
                         except Exception as e:
                             print(f"Error processing batch {batch_num + 1}: {str(e)}")
 
@@ -455,7 +475,9 @@ class GeminiService:
                         content_parts = [text_fallback_prompt]
                     else:
                         # If we have no text and the visual approach failed, we can't process this PDF
-                        raise ValueError("Cannot process this PDF - no extractable text and visual processing failed")
+                        raise ValueError(
+                            "Cannot process this PDF - no extractable text and visual processing failed"
+                        )
 
             elif file_ext in [".jpg", ".jpeg", ".png"]:
                 try:
@@ -504,9 +526,13 @@ class GeminiService:
                 suspicious_date = f"{current_year}-06-01"
 
                 if suspicious_date in text_response:
-                    print(f"WARNING: Found date '{suspicious_date}' in response - this may be a misread date")
+                    print(
+                        f"WARNING: Found date '{suspicious_date}' in response - this may be a misread date"
+                    )
                 if "6/1" in text_response or "6-1" in text_response:
-                    print("WARNING: Found date pattern '6/1' or '6-1' - possible source of June 1st date")
+                    print(
+                        "WARNING: Found date pattern '6/1' or '6-1' - possible source of June 1st date"
+                    )
 
                 # Use the helper method to extract JSON
                 parsed_json = self._extract_json_from_text(text_response)
@@ -515,12 +541,16 @@ class GeminiService:
                     if isinstance(parsed_json, list):
                         print(f"Found array of {len(parsed_json)} donations, returning all items")
                         # Debug: Check if all donations have the same date
-                        check_dates = [d.get("Check Date") for d in parsed_json if d.get("Check Date")]
+                        check_dates = [
+                            d.get("Check Date") for d in parsed_json if d.get("Check Date")
+                        ]
                         if len(set(check_dates)) == 1 and len(check_dates) > 1:
                             print(
                                 f"WARNING: All {len(check_dates)} donations have the same Check Date: {check_dates[0]}"
                             )
-                            print("This suggests Gemini may be incorrectly applying one date to all checks")
+                            print(
+                                "This suggests Gemini may be incorrectly applying one date to all checks"
+                            )
                         return parsed_json
                     else:
                         # Wrap single donation in a list for consistency
@@ -558,7 +588,9 @@ class GeminiService:
 
             # Add text context if available
             if content.get("text"):
-                pdf_context = self.prompt_manager.get_prompt("simplified_pdf_context", {"pdf_text": content["text"]})
+                pdf_context = self.prompt_manager.get_prompt(
+                    "simplified_pdf_context", {"pdf_text": content["text"]}
+                )
                 content_parts[0] += f"\n\n{pdf_context}"
 
             # Add page info if available
@@ -591,7 +623,9 @@ class GeminiService:
                 parsed_json = self._extract_json_from_text(response.text)
                 if parsed_json:
                     if isinstance(parsed_json, list):
-                        print(f"Batch {batch_info or 'unknown'} extracted {len(parsed_json)} donations")
+                        print(
+                            f"Batch {batch_info or 'unknown'} extracted {len(parsed_json)} donations"
+                        )
                         return parsed_json
                     else:
                         return [parsed_json]
@@ -622,7 +656,9 @@ class GeminiService:
             # Call Gemini API with prompt text
             response = model.generate_content(
                 contents=[prompt],
-                generation_config=genai.GenerationConfig(temperature=0.7),  # Slightly higher for more natural text
+                generation_config=genai.GenerationConfig(
+                    temperature=0.7
+                ),  # Slightly higher for more natural text
             )
 
             # Return the generated text

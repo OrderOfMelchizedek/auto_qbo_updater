@@ -2,16 +2,18 @@
 """
 Standalone app to import customers from CSV into QuickBooks Online Sandbox.
 """
-import os
 import csv
-import time
-import threading
-from dotenv import load_dotenv
-from flask import Flask, redirect, request, url_for, render_template_string
-from tqdm import tqdm  # For progress bar
+import os
 import sys
+import threading
+import time
+
+from dotenv import load_dotenv
+from flask import Flask, redirect, render_template_string, request, url_for
+from tqdm import tqdm  # For progress bar
+
 # Add the src directory to the Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 from utils.qbo_service import QBOService
 
@@ -28,7 +30,7 @@ import_status = {
     "errors": 0,
     "logs": [],
     "is_running": False,
-    "is_complete": False
+    "is_complete": False,
 }
 
 # Create Flask app
@@ -58,14 +60,14 @@ STATUS_TEMPLATE = """
         <h1>QuickBooks Customer Import</h1>
         <div class="alert {% if is_authenticated %}alert-info{% else %}alert-warning{% endif %} mb-4">
             <p><strong>Environment:</strong> {{ environment }}</p>
-            <p><strong>QuickBooks:</strong> 
+            <p><strong>QuickBooks:</strong>
                 {% if is_authenticated %}
                     <span class="badge bg-success">Connected</span>
                 {% else %}
                     <span class="badge bg-warning">Not Connected</span>
                 {% endif %}
             </p>
-            <p><strong>Status:</strong> 
+            <p><strong>Status:</strong>
                 {% if is_complete %}
                     <span class="badge bg-success">Complete</span>
                 {% elif is_running %}
@@ -75,7 +77,7 @@ STATUS_TEMPLATE = """
                 {% endif %}
             </p>
         </div>
-        
+
         {% if total > 0 %}
         <div class="card mb-4">
             <div class="card-header">
@@ -83,13 +85,13 @@ STATUS_TEMPLATE = """
             </div>
             <div class="card-body">
                 <div class="progress">
-                    <div class="progress-bar" role="progressbar" 
-                         style="width: {{ (imported / total) * 100 }}%;" 
+                    <div class="progress-bar" role="progressbar"
+                         style="width: {{ (imported / total) * 100 }}%;"
                          aria-valuenow="{{ imported }}" aria-valuemin="0" aria-valuemax="{{ total }}">
                         {{ imported }} / {{ total }}
                     </div>
                 </div>
-                
+
                 <div class="row mt-3">
                     <div class="col-md-4">
                         <div class="card text-white bg-success">
@@ -119,7 +121,7 @@ STATUS_TEMPLATE = """
             </div>
         </div>
         {% endif %}
-        
+
         <div class="card">
             <div class="card-header">
                 Log Messages
@@ -132,7 +134,7 @@ STATUS_TEMPLATE = """
                 </div>
             </div>
         </div>
-        
+
         {% if not is_running and not is_complete %}
         <div class="mt-4">
             {% if is_authenticated %}
@@ -143,7 +145,7 @@ STATUS_TEMPLATE = """
             {% endif %}
         </div>
         {% endif %}
-        
+
         {% if is_complete %}
         <div class="alert alert-success mt-4">
             <p>Import process complete!</p>
@@ -155,13 +157,12 @@ STATUS_TEMPLATE = """
 </html>
 """
 
+
 def add_log(message, log_type="info"):
     """Add a log message to the status"""
-    import_status["logs"].append({
-        "message": message,
-        "type": log_type
-    })
+    import_status["logs"].append({"message": message, "type": log_type})
     print(message)
+
 
 def create_customer_from_csv_row(row):
     """Create a QBO customer object from a CSV row."""
@@ -178,92 +179,101 @@ def create_customer_from_csv_row(row):
             "Line1": row.get("Bill street", ""),
             "City": row.get("Bill city", ""),
             "CountrySubDivisionCode": row.get("Bill state", ""),
-            "PostalCode": row.get("Bill zip", "")
+            "PostalCode": row.get("Bill zip", ""),
         },
-        "Notes": row.get("Note", "")
+        "Notes": row.get("Note", ""),
     }
 
     # Remove empty fields to avoid QBO validation errors
     if not customer_data["PrimaryPhone"]["FreeFormNumber"]:
         customer_data.pop("PrimaryPhone")
-    
+
     if not customer_data["PrimaryEmailAddr"]["Address"]:
         customer_data.pop("PrimaryEmailAddr")
-    
+
     # Check if BillAddr is completely empty
     bill_addr = customer_data["BillAddr"]
-    if not any([bill_addr["Line1"], bill_addr["City"], 
-               bill_addr["CountrySubDivisionCode"], bill_addr["PostalCode"]]):
+    if not any(
+        [
+            bill_addr["Line1"],
+            bill_addr["City"],
+            bill_addr["CountrySubDivisionCode"],
+            bill_addr["PostalCode"],
+        ]
+    ):
         customer_data.pop("BillAddr")
-        
+
     return customer_data
+
 
 def import_customers_thread():
     """Import customers from CSV in a separate thread"""
     global import_status
-    
+
     try:
         # Mark as running
         import_status["is_running"] = True
-        
+
         csv_file = "Friends of Mwangaza_Customer Contact List - All Fields.csv"
-        
+
         if not os.path.exists(csv_file):
             add_log(f"CSV file not found: {csv_file}", "error")
             import_status["is_running"] = False
             return
-        
+
         add_log(f"Reading customers from {csv_file}...")
-        
+
         # Read customers from CSV
         customers = []
-        with open(csv_file, 'r', encoding='utf-8') as f:
+        with open(csv_file, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 customers.append(row)
-        
+
         add_log(f"Found {len(customers)} customers in CSV file.")
-        
+
         # Get existing customers to avoid duplicates
         add_log("Fetching existing customers from QBO Sandbox...")
         existing_customers = qbo_service.get_all_customers()
-        existing_names = [customer.get("DisplayName", "").lower() for customer in existing_customers]
+        existing_names = [
+            customer.get("DisplayName", "").lower() for customer in existing_customers
+        ]
         add_log(f"Found {len(existing_customers)} existing customers in QBO Sandbox.")
-        
+
         # Create a list of customers to import (excluding those to skip)
         customers_to_import = []
         for row in customers:
             display_name = row.get("Customer", "")
-            
+
             # Skip empty names
             if not display_name:
                 add_log(f"Skipping: Empty customer name", "warning")
                 import_status["skipped"] += 1
                 continue
-            
+
             # Skip if customer already exists (case-insensitive check)
             if display_name.lower() in existing_names:
                 add_log(f"Skipping: {display_name} (already exists in QBO)", "warning")
                 import_status["skipped"] += 1
                 continue
-                
+
             customers_to_import.append(row)
-        
+
         import_status["total"] = len(customers_to_import)
         add_log(f"Found {len(customers_to_import)} new customers to import")
         add_log(f"Skipping {import_status['skipped']} customers that already exist")
-        
+
         # Import customers
         for row in customers_to_import:
             display_name = row.get("Customer", "")
-            
+
             # Create customer data
             customer_data = create_customer_from_csv_row(row)
-            
+
             try:
                 # Create customer in QBO
                 result = qbo_service.create_customer(customer_data)
-                
+
                 if result and "Id" in result:
                     add_log(f"✓ Created: {display_name} (ID: {result['Id']})", "success")
                     import_status["imported"] += 1
@@ -272,36 +282,37 @@ def import_customers_thread():
                 else:
                     add_log(f"✗ Failed: {display_name}", "error")
                     import_status["errors"] += 1
-                    
+
                 # Add a small delay to avoid rate limits
                 time.sleep(0.5)
-                
+
             except Exception as e:
                 add_log(f"✗ Error: {display_name} - {str(e)}", "error")
                 import_status["errors"] += 1
                 # Continue with next customer even if one fails
-        
+
         add_log("\nImport Summary:")
         add_log("=" * 50)
         add_log(f"Total customers in CSV: {len(customers)}")
         add_log(f"Successfully imported: {import_status['imported']}")
         add_log(f"Skipped (already exists): {import_status['skipped']}")
         add_log(f"Errors: {import_status['errors']}")
-        
+
         # Mark as complete
         import_status["is_complete"] = True
         import_status["is_running"] = False
-        
+
     except Exception as e:
         add_log(f"Error in import process: {str(e)}", "error")
         import_status["is_running"] = False
 
-@app.route('/')
+
+@app.route("/")
 def index():
     """Render the status page"""
     # Check if we're authenticated with QBO
     is_authenticated = qbo_service.access_token is not None and qbo_service.realm_id is not None
-    
+
     return render_template_string(
         STATUS_TEMPLATE,
         environment=QBO_ENVIRONMENT,
@@ -312,10 +323,11 @@ def index():
         logs=import_status["logs"],
         is_running=import_status["is_running"],
         is_complete=import_status["is_complete"],
-        is_authenticated=is_authenticated
+        is_authenticated=is_authenticated,
     )
 
-@app.route('/start-import')
+
+@app.route("/start-import")
 def start_import():
     """Start the import process"""
     if not import_status["is_running"] and not import_status["is_complete"]:
@@ -323,23 +335,25 @@ def start_import():
         thread = threading.Thread(target=import_customers_thread)
         thread.daemon = True
         thread.start()
-    
-    return redirect(url_for('index'))
 
-@app.route('/qbo/authorize')
+    return redirect(url_for("index"))
+
+
+@app.route("/qbo/authorize")
 def authorize_qbo():
     """Start QBO OAuth flow."""
     global qbo_service
     authorization_url = qbo_service.get_authorization_url()
     return redirect(authorization_url)
 
-@app.route('/qbo/callback')
+
+@app.route("/qbo/callback")
 def qbo_callback():
     """Handle QBO OAuth callback."""
     global qbo_service
-    code = request.args.get('code')
-    realmId = request.args.get('realmId')
-    
+    code = request.args.get("code")
+    realmId = request.args.get("realmId")
+
     if code and realmId:
         success = qbo_service.get_tokens(code, realmId)
         if success:
@@ -348,26 +362,30 @@ def qbo_callback():
             add_log("Failed to authenticate with QBO", "error")
     else:
         add_log("Missing code or realmId in callback", "error")
-        
-    return redirect(url_for('index'))
+
+    return redirect(url_for("index"))
+
 
 if __name__ == "__main__":
     # Initialize QBO service
     qbo_service = QBOService(
-        client_id=os.getenv('QBO_CLIENT_ID'),
-        client_secret=os.getenv('QBO_CLIENT_SECRET'),
+        client_id=os.getenv("QBO_CLIENT_ID"),
+        client_secret=os.getenv("QBO_CLIENT_SECRET"),
         redirect_uri="http://localhost:5000/qbo/callback",  # Must match the app's callback URL
-        environment=QBO_ENVIRONMENT
+        environment=QBO_ENVIRONMENT,
     )
-    
+
     add_log(f"Starting QBO Customer Import App (Environment: {QBO_ENVIRONMENT})")
     add_log("Open your browser to http://localhost:5000/ to continue")
-    
+
     # Check if we're already authenticated
     if qbo_service.access_token and qbo_service.realm_id:
         add_log("Already authenticated with QBO", "success")
     else:
-        add_log("Not authenticated with QBO. Please click 'Connect to QBO' in the web interface.", "warning")
-    
+        add_log(
+            "Not authenticated with QBO. Please click 'Connect to QBO' in the web interface.",
+            "warning",
+        )
+
     # Start the Flask app
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000)

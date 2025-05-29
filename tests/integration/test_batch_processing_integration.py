@@ -5,14 +5,15 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
+
 from PIL import Image
 
 # Add src to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src")))
 
 from utils.batch_processor import BatchProcessor, ProcessingBatch
-from utils.progress_logger import ProgressLogger
 from utils.gemini_service import GeminiService
+from utils.progress_logger import ProgressLogger
 
 
 class TestBatchProcessingIntegration(unittest.TestCase):
@@ -37,12 +38,14 @@ class TestBatchProcessingIntegration(unittest.TestCase):
         progress_logger = ProgressLogger()
 
         # Create batch processor
-        batch_processor = BatchProcessor(gemini_service=gemini_service, progress_logger=progress_logger)
+        batch_processor = BatchProcessor(
+            gemini_service=gemini_service, progress_logger=progress_logger
+        )
 
         # Create test image files instead of PDFs for simpler testing
         image_path = os.path.join(self.temp_dir, "test.jpg")
-        img = Image.new('RGB', (1, 1), color='white')
-        img.save(image_path, 'JPEG')
+        img = Image.new("RGB", (1, 1), color="white")
+        img.save(image_path, "JPEG")
 
         # Test batch preparation
         batches = batch_processor.prepare_batches([(image_path, ".jpg")])
@@ -64,18 +67,27 @@ class TestBatchProcessingIntegration(unittest.TestCase):
         image_paths = []
         for i in range(3):
             image_path = os.path.join(self.temp_dir, f"image_{i}.jpg")
-            img = Image.new('RGB', (1, 1), color='white')
-            img.save(image_path, 'JPEG')
+            img = Image.new("RGB", (1, 1), color="white")
+            img.save(image_path, "JPEG")
             image_paths.append(image_path)
 
         # Mock the extract_donation_data method
-        with patch.object(GeminiService, 'extract_donation_data') as mock_extract:
-            mock_extract.return_value = {"Donor Name": "Test Donor", "Gift Amount": "100.00", "Check No.": "123"}
+        with patch.object(GeminiService, "extract_donation_data") as mock_extract:
+            mock_extract.return_value = {
+                "Donor Name": "Test Donor",
+                "Gift Amount": "100.00",
+                "Check No.": "123",
+            }
 
             # Process images concurrently
             batches = [
                 ProcessingBatch(
-                    batch_id=f"image_{i}", batch_type="image", file_path=path, page_numbers=[], content=None, metadata={}
+                    batch_id=f"image_{i}",
+                    batch_type="image",
+                    file_path=path,
+                    page_numbers=[],
+                    content=None,
+                    metadata={},
                 )
                 for i, path in enumerate(image_paths)
             ]
@@ -97,8 +109,8 @@ class TestBatchProcessingIntegration(unittest.TestCase):
 
         # Create a test image file for the batch
         image_path = os.path.join(self.temp_dir, "test.jpg")
-        img = Image.new('RGB', (1, 1), color='white')
-        img.save(image_path, 'JPEG')
+        img = Image.new("RGB", (1, 1), color="white")
+        img.save(image_path, "JPEG")
 
         # Create a test batch
         batch = ProcessingBatch(
@@ -111,7 +123,9 @@ class TestBatchProcessingIntegration(unittest.TestCase):
         )
 
         # Mock the GeminiService method to raise an exception
-        with patch.object(GeminiService, 'extract_donation_data', side_effect=Exception("Processing failed")):
+        with patch.object(
+            GeminiService, "extract_donation_data", side_effect=Exception("Processing failed")
+        ):
             donations, errors = batch_processor.process_batches_concurrently([batch])
 
         # Verify error was captured

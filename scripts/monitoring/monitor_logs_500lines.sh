@@ -24,20 +24,20 @@ echo "Writing to: $current_log_file"
 heroku logs --tail --app auto-qbo-updater | while IFS= read -r line; do
     # Write the log line to current file
     echo "$line" >> "$current_log_file"
-    
+
     # Increment line counter
     ((line_count++))
-    
+
     # Check if we've reached 500 lines
     if [ $line_count -ge $max_lines ]; then
         # Add closing marker
         echo "=== Log capture ended at $(date) - $line_count lines ===" >> "$current_log_file"
         echo "Completed file: $current_log_file ($line_count lines)"
-        
+
         # Reset counter and create new file
         line_count=0
         current_log_file=$(get_log_filename)
-        
+
         echo "=== Log capture started at $(date) ===" >> "$current_log_file"
         echo "Switching to new log file: $current_log_file"
     fi

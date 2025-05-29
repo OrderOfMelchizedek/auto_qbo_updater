@@ -16,7 +16,9 @@ from werkzeug.datastructures import FileStorage
 def mock_file():
     """Create a mock file for upload testing."""
     file_content = b"Test file content"
-    file = FileStorage(stream=io.BytesIO(file_content), filename="test_donation.csv", content_type="text/csv")
+    file = FileStorage(
+        stream=io.BytesIO(file_content), filename="test_donation.csv", content_type="text/csv"
+    )
     return file
 
 
@@ -33,7 +35,12 @@ def mock_file_processor():
     """Create a mock file processor."""
     mock_processor = Mock()
     mock_processor.process.return_value = [
-        {"Donor Name": "John Doe", "Gift Amount": "100.00", "Check No.": "1234", "Gift Date": "2024-01-15"}
+        {
+            "Donor Name": "John Doe",
+            "Gift Amount": "100.00",
+            "Check No.": "1234",
+            "Gift Date": "2024-01-15",
+        }
     ]
     return mock_processor
 
@@ -83,7 +90,10 @@ class TestFilesRoutes:
             # Upload file
             data = {"files": (mock_file, "test_donation.csv")}
             response = client.post(
-                "/upload-async", data=data, content_type="multipart/form-data", headers={"X-CSRFToken": "test-token"}
+                "/upload-async",
+                data=data,
+                content_type="multipart/form-data",
+                headers={"X-CSRFToken": "test-token"},
             )
 
             assert response.status_code == 200
@@ -101,7 +111,10 @@ class TestFilesRoutes:
     def test_upload_async_no_files(self, client):
         """Test async upload with no files."""
         response = client.post(
-            "/upload-async", data={}, content_type="multipart/form-data", headers={"X-CSRFToken": "test-token"}
+            "/upload-async",
+            data={},
+            content_type="multipart/form-data",
+            headers={"X-CSRFToken": "test-token"},
         )
 
         assert response.status_code == 400
@@ -119,7 +132,10 @@ class TestFilesRoutes:
             data.add("files", file)
 
         response = client.post(
-            "/upload-async", data=data, content_type="multipart/form-data", headers={"X-CSRFToken": "test-token"}
+            "/upload-async",
+            data=data,
+            content_type="multipart/form-data",
+            headers={"X-CSRFToken": "test-token"},
         )
 
         assert response.status_code == 400
@@ -129,31 +145,40 @@ class TestFilesRoutes:
     @patch("src.utils.progress_logger.log_progress")
     @patch("src.services.validation.log_audit_event")
     def test_upload_sync_success(
-        self, mock_audit, mock_progress, client, app, mock_file, mock_qbo_service, mock_file_processor
+        self,
+        mock_audit,
+        mock_progress,
+        client,
+        app,
+        mock_file,
+        mock_qbo_service,
+        mock_file_processor,
     ):
         """Test synchronous file upload."""
         # Mock memory monitor directly on app
         mock_monitor = Mock()
         app.memory_monitor = mock_monitor
-        
+
         # Set services on app
         app.qbo_service = mock_qbo_service
         app.file_processor = mock_file_processor
-        
+
         # Mock process_single_file function
         def mock_process_single_file(file_data, qbo_authenticated):
             return {
                 "success": True,
                 "filename": file_data["filename"],
-                "donations": [{"Donor Name": "John Doe", "Gift Amount": "100.00", "Check No.": "1234"}],
+                "donations": [
+                    {"Donor Name": "John Doe", "Gift Amount": "100.00", "Check No.": "1234"}
+                ],
                 "file_path": "/tmp/test.csv",
                 "processing_time": 0.5,
             }
-        
+
         # Mock cleanup function
         def mock_cleanup_uploaded_file(file_path):
             pass
-        
+
         # Set functions on app
         app.process_single_file = mock_process_single_file
         app.cleanup_uploaded_file = mock_cleanup_uploaded_file
@@ -165,7 +190,10 @@ class TestFilesRoutes:
         # Upload file
         data = {"files": (mock_file, "test_donation.csv")}
         response = client.post(
-            "/upload", data=data, content_type="multipart/form-data", headers={"X-CSRFToken": "test-token"}
+            "/upload",
+            data=data,
+            content_type="multipart/form-data",
+            headers={"X-CSRFToken": "test-token"},
         )
 
         assert response.status_code == 200
@@ -192,7 +220,9 @@ class TestFilesRoutes:
 
             # Set up existing donations in session (already has check 1234)
             with client.session_transaction() as sess:
-                sess["donations"] = [{"Check No.": "1234", "Gift Amount": "100.00", "Donor Name": "John Doe"}]
+                sess["donations"] = [
+                    {"Check No.": "1234", "Gift Amount": "100.00", "Donor Name": "John Doe"}
+                ]
 
             # Mock process_single_file function that returns duplicate and new donation
             def mock_process_single_file(file_data, qbo_authenticated):
@@ -200,17 +230,25 @@ class TestFilesRoutes:
                     "success": True,
                     "filename": "test.csv",
                     "donations": [
-                        {"Check No.": "1234", "Gift Amount": "100.00", "Donor Name": "John Doe"},  # Duplicate
-                        {"Check No.": "5678", "Gift Amount": "200.00", "Donor Name": "Jane Smith"},  # New
+                        {
+                            "Check No.": "1234",
+                            "Gift Amount": "100.00",
+                            "Donor Name": "John Doe",
+                        },  # Duplicate
+                        {
+                            "Check No.": "5678",
+                            "Gift Amount": "200.00",
+                            "Donor Name": "Jane Smith",
+                        },  # New
                     ],
                     "file_path": "/tmp/test.csv",
                     "processing_time": 0.5,
                 }
-            
+
             # Mock cleanup function
             def mock_cleanup_uploaded_file(file_path):
                 pass
-            
+
             # Set functions on app
             app.process_single_file = mock_process_single_file
             app.cleanup_uploaded_file = mock_cleanup_uploaded_file
@@ -242,13 +280,15 @@ class TestFilesRoutes:
             # Simulate processing error
             def mock_process_single_file_error(file_data, qbo_authenticated):
                 raise Exception("Processing error")
-            
+
             # Set error function on app
             app.process_single_file = mock_process_single_file_error
 
             response = client.post(
-                "/upload", data={"files": (mock_file, "test.csv")}, content_type="multipart/form-data",
-                headers={"X-CSRFToken": "test-token"}
+                "/upload",
+                data={"files": (mock_file, "test.csv")},
+                content_type="multipart/form-data",
+                headers={"X-CSRFToken": "test-token"},
             )
 
             # The route returns 200 even with individual file errors

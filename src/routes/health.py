@@ -1,3 +1,5 @@
+"""Routes for health checks and system monitoring."""
+
 import json
 import logging
 import os
@@ -120,7 +122,12 @@ def health_check():
 
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}", exc_info=True)
-        return jsonify({"status": "error", "error": str(e), "timestamp": datetime.utcnow().isoformat()}), 503
+        return (
+            jsonify(
+                {"status": "error", "error": str(e), "timestamp": datetime.utcnow().isoformat()}
+            ),
+            503,
+        )
 
 
 @health_bp.route("/ready", methods=["GET"])
@@ -218,7 +225,10 @@ def readiness_check():
 
     except Exception as e:
         logger.error(f"Readiness check failed: {str(e)}", exc_info=True)
-        return jsonify({"ready": False, "error": str(e), "timestamp": datetime.utcnow().isoformat()}), 503
+        return (
+            jsonify({"ready": False, "error": str(e), "timestamp": datetime.utcnow().isoformat()}),
+            503,
+        )
 
 
 @health_bp.route("/session-info", methods=["GET"])

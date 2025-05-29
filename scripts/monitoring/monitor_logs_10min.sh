@@ -30,19 +30,19 @@ echo "Writing to: $current_log_file"
 heroku logs --tail --app auto-qbo-updater | while IFS= read -r line; do
     # Check if we've moved to a new 10-minute block
     new_10min_mark=$(get_10min_mark)
-    
+
     if [ "$new_10min_mark" != "$current_10min_mark" ]; then
         # We've entered a new 10-minute block
         echo "=== Log capture ended at $(date) ===" >> "$current_log_file"
-        
+
         # Update to new file
         current_10min_mark=$new_10min_mark
         current_log_file=$(get_log_filename)
-        
+
         echo "=== Log capture started at $(date) ===" >> "$current_log_file"
         echo "Switching to new log file: $current_log_file"
     fi
-    
+
     # Write the log line to current file
     echo "$line" >> "$current_log_file"
 done

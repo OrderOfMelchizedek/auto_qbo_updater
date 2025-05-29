@@ -7,7 +7,7 @@ This branch (`simple-qbo-matching`) implements a simpler approach to customer ma
 1. **Removed Gemini AI-based matching**:
    - Removed `match_donation_with_customers` method from GeminiService
    - Removed dependency on the `fom_contact_list_assistant.md` prompt
-   
+
 2. **Simplified FileProcessor**:
    - Replaced complex AI matching with direct QBO API lookup
    - Removed code for pre-loading all customers

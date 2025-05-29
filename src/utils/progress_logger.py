@@ -11,6 +11,12 @@ class ProgressLogger:
     """Captures debug output and periodically summarizes it with AI for user-friendly progress updates."""
 
     def __init__(self, gemini_service=None, summary_interval=2.0):
+        """Initialize the progress logger.
+
+        Args:
+            gemini_service: Optional Gemini service instance for AI-powered summaries.
+            summary_interval: Time interval (in seconds) between automatic summaries. Defaults to 2.0.
+        """
         self.gemini_service = gemini_service
         self.summary_interval = summary_interval
         self.logs = []
@@ -103,11 +109,15 @@ class ProgressLogger:
             if self.session_id in self.recent_summaries:
                 self.recent_summaries[self.session_id].append(message)
                 # Keep only last 10 summaries
-                self.recent_summaries[self.session_id] = self.recent_summaries[self.session_id][-10:]
+                self.recent_summaries[self.session_id] = self.recent_summaries[self.session_id][
+                    -10:
+                ]
 
             # Send to subscribers
             if self.session_id in self.subscribers:
-                print(f"[ProgressLogger] Sending summary to subscriber for session {self.session_id}")
+                print(
+                    f"[ProgressLogger] Sending summary to subscriber for session {self.session_id}"
+                )
                 self.subscribers[self.session_id].put(message)
             else:
                 print(f"[ProgressLogger] No subscriber found for session {self.session_id}")
@@ -186,7 +196,9 @@ IMPORTANT: Output exactly 2 lines of text, nothing else."""
         elif "customer" in recent_msg or "quickbooks" in recent_msg:
             return "Matching donations with customers in QuickBooks...\nVerifying donor information and addresses."
         elif "deduplication" in recent_msg or "duplicate" in recent_msg:
-            return "Checking for duplicate donations...\nEnsuring each donation is counted only once."
+            return (
+                "Checking for duplicate donations...\nEnsuring each donation is counted only once."
+            )
         elif "extract" in recent_msg or "donation" in recent_msg:
             return "Found donations in your files...\nProcessing donor information and amounts."
         else:
@@ -204,7 +216,9 @@ IMPORTANT: Output exactly 2 lines of text, nothing else."""
                         current_time = time.time()
                         if current_time - self.last_summary_time >= 3.0:
                             if self.logs:
-                                print(f"[ProgressLogger] Forcing periodic update for session {session_id}")
+                                print(
+                                    f"[ProgressLogger] Forcing periodic update for session {session_id}"
+                                )
                                 self._create_summary()
                                 self.last_summary_time = current_time
 
@@ -277,19 +291,19 @@ def log_progress(message: str, force_summary: bool = False):
 def get_progress_messages(session_id: str, last_index: int = 0):
     """Get progress messages for a session since the last index."""
     global progress_logger
-    
+
     if session_id not in progress_logger.recent_summaries:
         return []
-    
+
     messages = progress_logger.recent_summaries[session_id]
     # Add index to messages if not present
     result = []
     for i, msg in enumerate(messages[last_index:], start=last_index):
         msg_copy = msg.copy()
-        msg_copy['index'] = i
+        msg_copy["index"] = i
         # Convert summary to message for compatibility
-        if 'summary' in msg_copy:
-            msg_copy['message'] = msg_copy['summary']
+        if "summary" in msg_copy:
+            msg_copy["message"] = msg_copy["summary"]
         result.append(msg_copy)
-    
+
     return result

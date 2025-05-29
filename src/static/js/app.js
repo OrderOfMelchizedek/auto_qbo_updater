@@ -12,12 +12,12 @@ function getCSRFToken() {
 function fetchWithCSRF(url, options = {}) {
     options.headers = options.headers || {};
     options.headers['X-CSRFToken'] = getCSRFToken();
-    
+
     // Add timeout support (default 60 seconds for most requests)
     const timeout = options.timeout || 60000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
-    
+
     return fetch(url, { ...options, signal: controller.signal })
         .then(response => {
             clearTimeout(timeoutId);
@@ -36,9 +36,9 @@ function fetchWithCSRF(url, options = {}) {
 function showMergeHistory(donationId) {
     const donation = donations.find(d => d.internalId === donationId);
     if (!donation || !donation.mergeHistory) return;
-    
+
     let historyHtml = '<h6>Merge History</h6><ul class="list-unstyled">';
-    
+
     donation.mergeHistory.forEach((merge, index) => {
         historyHtml += `
             <li class="mb-3">
@@ -49,9 +49,9 @@ function showMergeHistory(donationId) {
             </li>
         `;
     });
-    
+
     historyHtml += '</ul>';
-    
+
     // Show in a simple alert for now (could be improved with a modal)
     const alertDiv = document.createElement('div');
     alertDiv.className = 'alert alert-info alert-dismissible fade show position-fixed top-50 start-50 translate-middle';
@@ -72,46 +72,46 @@ function formatCurrency(amount) {
         // Remove any existing currency symbols and commas
         value = parseFloat(amount.replace(/[$,]/g, ''));
     }
-    
+
     // Check if parsing resulted in a valid number
     if (isNaN(value)) {
         return '$0.00';
     }
-    
+
     return '$' + value.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
 }
 
 // Convert all caps text to proper case
 function toProperCase(str) {
     if (!str) return str;
-    
+
     // List of words that should remain uppercase
     const keepUppercase = ['LLC', 'INC', 'II', 'III', 'IV', 'PO', 'USA'];
-    
+
     // List of words that should be lowercase (unless at start)
     const lowercase = ['and', 'or', 'the', 'of', 'in', 'on', 'at', 'to', 'for', 'a', 'an'];
-    
+
     // Check if string is all caps (more than 80% uppercase letters)
     const upperCount = (str.match(/[A-Z]/g) || []).length;
     const letterCount = (str.match(/[A-Za-z]/g) || []).length;
-    
+
     if (letterCount === 0 || upperCount / letterCount < 0.8) {
         // Not all caps, return as is
         return str;
     }
-    
+
     // Convert to proper case
     return str.toLowerCase().replace(/\b\w+/g, (word, index) => {
         // Keep certain words uppercase
         if (keepUppercase.includes(word.toUpperCase())) {
             return word.toUpperCase();
         }
-        
+
         // Keep certain words lowercase (unless first word)
         if (index > 0 && lowercase.includes(word)) {
             return word;
         }
-        
+
         // Capitalize first letter
         return word.charAt(0).toUpperCase() + word.slice(1);
     });
@@ -121,16 +121,16 @@ function toProperCase(str) {
 function formatDonationData(donation) {
     // Fields that should be converted from all caps
     const fieldsToFormat = ['Donor Name', 'customerLookup', 'Address - Line 1', 'City'];
-    
+
     fieldsToFormat.forEach(field => {
         if (donation[field]) {
             donation[field] = toProperCase(donation[field]);
         }
     });
-    
+
     // State should always be uppercase (already is)
     // Memo can remain as original (per requirements)
-    
+
     return donation;
 }
 
@@ -141,24 +141,24 @@ function showToast(message, type = 'success') {
         toastContainer.className = 'toast-container';
         document.body.appendChild(toastContainer);
     }
-    
+
     // Create toast element
     const toast = document.createElement('div');
     toast.className = `toast show alert alert-${type}`;
     toast.setAttribute('role', 'alert');
     toast.setAttribute('aria-live', 'assertive');
     toast.setAttribute('aria-atomic', 'true');
-    
+
     toast.innerHTML = `
         <div class="d-flex">
             <div class="toast-body">${message}</div>
             <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
     `;
-    
+
     // Add to container
     document.querySelector('.toast-container').appendChild(toast);
-    
+
     // Auto-remove after 5 seconds
     setTimeout(() => {
         toast.remove();
@@ -168,34 +168,34 @@ function showToast(message, type = 'success') {
 function renderDonationTable() {
     const tbody = document.querySelector('#donationTable tbody');
     tbody.innerHTML = '';
-    
+
     donations.forEach(donation => {
         const tr = document.createElement('tr');
         tr.dataset.id = donation.internalId;
-        
+
         // Add class for merged donations
         if (donation.isMerged) {
             tr.classList.add('merged-donation');
         }
-        
+
         // Create cells for all fields
         const fields = [
-            'customerLookup', 'Donor Name', 'Check No.', 'Gift Amount', 
+            'customerLookup', 'Donor Name', 'Check No.', 'Gift Amount',
             'Check Date', 'Address - Line 1', 'City', 'State', 'ZIP', 'Memo'
         ];
-        
+
         fields.forEach(field => {
             const td = document.createElement('td');
             td.className = 'editable-cell';
             td.dataset.field = field;
-            
+
             // Format currency for Gift Amount
             if (field === 'Gift Amount' && donation[field]) {
                 td.textContent = formatCurrency(donation[field]);
             } else {
                 td.textContent = donation[field] || '';
             }
-            
+
             // Set up in-place editing
             td.addEventListener('click', function() {
                 // Create searchable autocomplete for customerLookup field
@@ -203,13 +203,13 @@ function renderDonationTable() {
                     // Create container for input and suggestions
                     const container = document.createElement('div');
                     container.style.position = 'relative';
-                    
+
                     const input = document.createElement('input');
                     input.type = 'text';
                     input.value = donation[field] || '';
                     input.className = 'form-control form-control-sm';
                     input.placeholder = 'Start typing to search customers...';
-                    
+
                     // Create suggestions dropdown
                     const suggestions = document.createElement('div');
                     suggestions.className = 'customer-suggestions';
@@ -228,24 +228,24 @@ function renderDonationTable() {
                         z-index: 1000;
                         display: none;
                     `;
-                    
+
                     let selectedIndex = -1;
-                    
+
                     // Filter and show suggestions
                     function showSuggestions(searchTerm) {
                         suggestions.innerHTML = '';
                         selectedIndex = -1;
-                        
+
                         if (!searchTerm) {
                             suggestions.style.display = 'none';
                             return;
                         }
-                        
-                        const filtered = qboCustomers.filter(customer => 
+
+                        const filtered = qboCustomers.filter(customer =>
                             customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             customer.address.toLowerCase().includes(searchTerm.toLowerCase())
                         ).slice(0, 10); // Limit to 10 suggestions
-                        
+
                         // Always add 'Create New Customer' option if there's a search term
                         const createNewItem = document.createElement('div');
                         createNewItem.style.cssText = `
@@ -262,18 +262,18 @@ function renderDonationTable() {
                                 "${searchTerm}" - Click to add as new customer
                             </div>
                         `;
-                        
+
                         createNewItem.addEventListener('mouseenter', () => {
                             selectedIndex = -1; // Special index for create new
                             updateSelection();
                         });
-                        
+
                         createNewItem.addEventListener('click', () => {
                             createNewCustomerInline(searchTerm, donation);
                         });
-                        
+
                         suggestions.appendChild(createNewItem);
-                        
+
                         filtered.forEach((customer, index) => {
                             const item = document.createElement('div');
                             item.style.cssText = `
@@ -285,22 +285,22 @@ function renderDonationTable() {
                                 <div style="font-weight: 500;">${customer.name}</div>
                                 <div style="font-size: 0.85em; color: #666;">${customer.address}</div>
                             `;
-                            
+
                             item.addEventListener('mouseenter', () => {
                                 selectedIndex = index;
                                 updateSelection();
                             });
-                            
+
                             item.addEventListener('click', () => {
                                 selectCustomer(customer);
                             });
-                            
+
                             suggestions.appendChild(item);
                         });
-                        
+
                         suggestions.style.display = 'block';
                     }
-                    
+
                     function updateSelection() {
                         const items = suggestions.querySelectorAll('div');
                         items.forEach((item, index) => {
@@ -315,24 +315,24 @@ function renderDonationTable() {
                             }
                         });
                     }
-                    
+
                     function selectCustomer(customer) {
                         input.value = customer.name;
                         donation[field] = customer.name;
                         suggestions.style.display = 'none';
-                        
+
                         // Call manual match endpoint
                         manualMatchCustomer(donation.internalId, customer.id);
                     }
-                    
+
                     // Handle input events
                     input.addEventListener('input', function() {
                         showSuggestions(this.value);
                     });
-                    
+
                     input.addEventListener('keydown', function(e) {
                         const items = suggestions.querySelectorAll('div');
-                        
+
                         if (e.key === 'ArrowDown') {
                             e.preventDefault();
                             selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
@@ -347,7 +347,7 @@ function renderDonationTable() {
                                 // Create new customer option selected
                                 createNewCustomerInline(this.value, donation);
                             } else {
-                                const filtered = qboCustomers.filter(customer => 
+                                const filtered = qboCustomers.filter(customer =>
                                     customer.name.toLowerCase().includes(this.value.toLowerCase()) ||
                                     customer.address.toLowerCase().includes(this.value.toLowerCase())
                                 ).slice(0, 10);
@@ -359,7 +359,7 @@ function renderDonationTable() {
                             suggestions.style.display = 'none';
                         }
                     });
-                    
+
                     input.addEventListener('blur', function() {
                         // Delay to allow click on suggestion
                         setTimeout(() => {
@@ -372,10 +372,10 @@ function renderDonationTable() {
                             saveChanges();
                         }, 200);
                     });
-                    
+
                     container.appendChild(input);
                     container.appendChild(suggestions);
-                    
+
                     td.innerHTML = '';
                     td.appendChild(container);
                     input.focus();
@@ -385,50 +385,50 @@ function renderDonationTable() {
                     input.type = 'text';
                     input.value = donation[field] || '';
                     input.className = 'form-control form-control-sm';
-                    
+
                     input.addEventListener('blur', function() {
                         // Save the value back to the donation object
                         donation[field] = this.value;
-                        
+
                         // Apply formatting to fix all caps (except for Memo and State)
                         if (field !== 'Memo' && field !== 'State') {
                             donation = formatDonationData(donation);
                         }
-                        
+
                         // If it's Gift Amount, format as currency
                         if (field === 'Gift Amount') {
                             td.textContent = formatCurrency(donation[field]);
                         } else {
                             td.textContent = donation[field] || this.value;
                         }
-                        
+
                         // Replace input with text
                         td.innerHTML = td.textContent;
-                        
+
                         // Save changes to backend
                         saveChanges();
                     });
-                    
+
                     input.addEventListener('keyup', function(e) {
                         if (e.key === 'Enter') {
                             this.blur();
                         }
                     });
-                    
+
                     td.innerHTML = '';
                     td.appendChild(input);
                     input.focus();
                     input.select();
                 }
             });
-            
+
             tr.appendChild(td);
         });
-        
+
         // QBO Status cell
         const statusCell = document.createElement('td');
         let statusHtml = '';
-        
+
         // Customer status indicator
         if (donation.qbCustomerStatus === 'New') {
             statusHtml += '<span class="badge bg-info me-1">New Customer</span>';
@@ -445,7 +445,7 @@ function renderDonationTable() {
             // If status wasn't updated but we do have a customer ID, show as matched
             statusHtml += '<span class="badge bg-success me-1">Customer Matched</span>';
         }
-        
+
         // Sync status indicator
         if (donation.qbSyncStatus === 'Pending') {
             statusHtml += '<span class="badge bg-warning">Not Sent</span>';
@@ -454,14 +454,14 @@ function renderDonationTable() {
         } else if (donation.qbSyncStatus === 'Error') {
             statusHtml += '<span class="badge bg-danger">Error</span>';
         }
-        
+
         statusCell.innerHTML = statusHtml;
         tr.appendChild(statusCell);
-        
+
         // Actions cell
         const actionsCell = document.createElement('td');
         let actionsHtml = '';
-        
+
         // Show QBO actions for all donations
         // Create, manual match or update customer buttons, depending on status
         if (donation.qbCustomerStatus === 'New' || !donation.qbCustomerStatus) {
@@ -478,28 +478,28 @@ function renderDonationTable() {
                 <i class="fas fa-user-edit"></i>
             </button>`;
         }
-        
+
         // Send to QBO button (only if not already sent and customer is matched)
         if (donation.qbSyncStatus !== 'Sent' && donation.qbCustomerStatus === 'Matched') {
             actionsHtml += `<button class="btn btn-sm btn-outline-success me-1 send-to-qbo-btn" data-id="${donation.internalId}" title="Send to QuickBooks Online">
                 <i class="fas fa-paper-plane"></i>
             </button>`;
         }
-        
+
         // Delete button for all donations
         actionsHtml += `<button class="btn btn-sm btn-outline-danger delete-donation-btn" data-id="${donation.internalId}" title="Delete donation">
             <i class="fas fa-trash"></i>
         </button>`;
-        
+
         actionsCell.innerHTML = actionsHtml;
         tr.appendChild(actionsCell);
-        
+
         tbody.appendChild(tr);
     });
-    
+
     // Show the donations section
     document.getElementById('donationsSection').classList.remove('d-none');
-    
+
     // Attach event listeners for action buttons
     attachActionButtonListeners();
 }
@@ -512,7 +512,7 @@ function attachActionButtonListeners() {
             showManualMatchModal(donationId);
         });
     });
-    
+
     // Create customer button
     document.querySelectorAll('.create-customer-btn').forEach(button => {
         button.addEventListener('click', function() {
@@ -520,7 +520,7 @@ function attachActionButtonListeners() {
             showCustomerModal(donationId, 'create');
         });
     });
-    
+
     // Update customer button
     document.querySelectorAll('.update-customer-btn').forEach(button => {
         button.addEventListener('click', function() {
@@ -528,7 +528,7 @@ function attachActionButtonListeners() {
             showCustomerModal(donationId, 'update');
         });
     });
-    
+
     // Send to QBO button
     document.querySelectorAll('.send-to-qbo-btn').forEach(button => {
         button.addEventListener('click', function() {
@@ -536,7 +536,7 @@ function attachActionButtonListeners() {
             sendToQBO(donationId);
         });
     });
-    
+
     // Delete donation button
     document.querySelectorAll('.delete-donation-btn').forEach(button => {
         button.addEventListener('click', function() {
@@ -552,11 +552,11 @@ function showCustomerModal(donationId, mode) {
     // Find the donation
     const donation = donations.find(d => d.internalId === donationId);
     if (!donation) return;
-    
+
     // Set modal title based on mode
     const modalTitle = mode === 'create' ? 'Create New Customer' : 'Update Customer Address';
     document.getElementById('customerModalTitle').textContent = modalTitle;
-    
+
     // Set form fields
     document.getElementById('customerDonationId').value = donationId;
     document.getElementById('customerName').value = donation.customerLookup || '';
@@ -564,11 +564,11 @@ function showCustomerModal(donationId, mode) {
     document.getElementById('customerCity').value = donation.City || '';
     document.getElementById('customerState').value = donation.State || '';
     document.getElementById('customerZip').value = donation.ZIP || '';
-    
+
     // Set button text based on mode
     const saveBtn = document.getElementById('saveCustomerBtn');
     saveBtn.textContent = mode === 'create' ? 'Create in QBO' : 'Update in QBO';
-    
+
     // Set action on save button
     saveBtn.onclick = function() {
         if (mode === 'create') {
@@ -577,7 +577,7 @@ function showCustomerModal(donationId, mode) {
             updateCustomer(donationId);
         }
     };
-    
+
     // Show the modal
     customerModal.show();
 }
@@ -594,14 +594,14 @@ function checkCustomer(donationId) {
                     if (data.customerFound) {
                         donation.qbCustomerStatus = data.addressMatch ? 'Matched' : 'Matched-AddressMismatch';
                         donation.qboCustomerId = data.customer.Id;
-                        showToast(data.addressMatch ? 
-                            'Customer found in QBO with matching address' : 
+                        showToast(data.addressMatch ?
+                            'Customer found in QBO with matching address' :
                             'Customer found in QBO with address mismatch');
                     } else {
                         donation.qbCustomerStatus = 'New';
                         showToast('Customer not found in QBO');
                     }
-                    
+
                     // Re-render the table
                     renderDonationTable();
                 }
@@ -624,7 +624,7 @@ function createCustomer(donationId) {
         state: document.getElementById('customerState').value,
         zip: document.getElementById('customerZip').value
     };
-    
+
     // Send request to create customer
     fetchWithCSRF(`/qbo/customer/create/${donationId}`, {
         method: 'POST',
@@ -641,13 +641,13 @@ function createCustomer(donationId) {
                 if (donation) {
                     donation.qbCustomerStatus = 'Matched';
                     donation.qboCustomerId = data.customer.Id;
-                    
+
                     // Re-render the table
                     renderDonationTable();
-                    
+
                     // Hide the modal
                     customerModal.hide();
-                    
+
                     showToast('Customer created successfully in QBO');
                 }
             } else {
@@ -669,7 +669,7 @@ function updateCustomer(donationId) {
         state: document.getElementById('customerState').value,
         zip: document.getElementById('customerZip').value
     };
-    
+
     // Send request to update customer
     fetchWithCSRF(`/qbo/customer/update/${donationId}`, {
         method: 'PUT',
@@ -685,13 +685,13 @@ function updateCustomer(donationId) {
                 const donation = donations.find(d => d.internalId === donationId);
                 if (donation) {
                     donation.qbCustomerStatus = 'Matched';
-                    
+
                     // Re-render the table
                     renderDonationTable();
-                    
+
                     // Hide the modal
                     customerModal.hide();
-                    
+
                     showToast('Customer updated successfully in QBO');
                 }
             } else {
@@ -719,10 +719,10 @@ function fetchQBOItems() {
         .then(data => {
             if (data.success && data.items) {
                 qboItems = data.items;
-                
+
                 // Populate all item select dropdowns
                 populateItemSelects();
-                
+
                 // Set default item if available
                 if (data.default_item) {
                     defaultItemId = data.default_item.id;
@@ -746,19 +746,19 @@ function fetchQBOAccounts() {
         .then(data => {
             if (data.success && data.accounts) {
                 qboAccounts = data.accounts;
-                
+
                 // Populate all account select dropdowns
                 populateAccountSelects();
-                
+
                 // Set default account (Undeposited Funds) if available
                 if (data.undepositedFunds) {
                     defaultAccountId = data.undepositedFunds.id;
                     console.log(`Using default account: ${data.undepositedFunds.name} (${defaultAccountId})`);
                 }
-                
+
                 // Also populate the income accounts dropdown for item creation
                 populateIncomeAccountSelect();
-                
+
                 return data.accounts;
             } else {
                 console.error("Error in fetchQBOAccounts response:", data.message || "Unknown error");
@@ -777,10 +777,10 @@ function fetchQBOPaymentMethods() {
         .then(data => {
             if (data.success && data.paymentMethods) {
                 qboPaymentMethods = data.paymentMethods;
-                
+
                 // Populate payment method select dropdown
                 populatePaymentMethodSelects();
-                
+
                 // Set default payment method (Check) if available
                 if (data.checkMethod) {
                     defaultPaymentMethodId = data.checkMethod.id;
@@ -852,10 +852,10 @@ function createNewCustomerInline(customerName, donation) {
     if (suggestions) {
         suggestions.style.display = 'none';
     }
-    
+
     // Update the donation's customerLookup field first
     donation.customerLookup = customerName;
-    
+
     // Save the updated donation to session before creating customer
     fetchWithCSRF('/save', {
         method: 'POST',
@@ -869,10 +869,10 @@ function createNewCustomerInline(customerName, donation) {
         if (!saveResult.success) {
             throw new Error('Failed to save donation data');
         }
-        
+
         // Show loading
         showToast('Creating new customer...', 'info');
-        
+
         // Now create the customer
         return fetchWithCSRF(`/qbo/customer/create/${donation.internalId}`, {
             method: 'POST',
@@ -891,20 +891,20 @@ function createNewCustomerInline(customerName, donation) {
                 address: 'No address on file'
             };
             qboCustomers.push(newCustomer);
-            
+
             // Update the donation with the new customer
             donation.qbCustomerStatus = 'Matched';
             donation.qboCustomerId = data.customer.Id;
-            
+
             // Update the input field
             const activeCell = document.querySelector('td .form-control');
             if (activeCell && activeCell.value !== undefined) {
                 activeCell.value = customerName;
             }
-            
+
             // Re-render the table
             renderDonationTable();
-            
+
             showToast(`Customer "${customerName}" created and matched successfully`, 'success');
         } else {
             showToast('Error creating customer: ' + (data.message || 'Unknown error'), 'danger');
@@ -923,13 +923,13 @@ function populateItemSelects() {
         document.getElementById('batchItemRef'),
         document.getElementById('alternativeItemSelect')
     ];
-    
+
     // Process each select that exists
     selects.forEach(select => {
         if (select) {
             // Clear existing options
             select.innerHTML = '';
-            
+
             // Check if we have items
             if (qboItems.length === 0) {
                 const option = document.createElement('option');
@@ -938,27 +938,27 @@ function populateItemSelects() {
                 select.appendChild(option);
                 return;
             }
-            
+
             // Add default empty option
             const emptyOption = document.createElement('option');
             emptyOption.value = "";
             emptyOption.textContent = "Select a product/service...";
             select.appendChild(emptyOption);
-            
+
             // Add items
             qboItems.forEach(item => {
                 const option = document.createElement('option');
                 option.value = item.id;
                 option.textContent = item.name;
-                
+
                 // Add description as title if available
                 if (item.description) {
                     option.title = item.description;
                 }
-                
+
                 select.appendChild(option);
             });
-            
+
             // Set default item
             select.value = defaultItemId;
         }
@@ -967,14 +967,14 @@ function populateItemSelects() {
 
 function populateAccountSelects() {
     console.log("Populating account dropdowns with", qboAccounts.length, "accounts");
-    
+
     // Get all account selects in the UI
     const selects = [
         document.getElementById('previewDepositToAccount'),
         document.getElementById('alternativeAccountSelect'),
         document.getElementById('batchDepositToAccount')
     ];
-    
+
     // Process each select element
     selects.forEach(select => {
         if (!select) {
@@ -982,10 +982,10 @@ function populateAccountSelects() {
             console.log("Account select element not found in DOM");
             return;
         }
-        
+
         // Clear existing options
         select.innerHTML = '';
-        
+
         // Check if we have accounts
         if (!qboAccounts || qboAccounts.length === 0) {
             console.log("No accounts available to populate dropdown");
@@ -995,73 +995,73 @@ function populateAccountSelects() {
             select.appendChild(option);
             return;
         }
-        
+
         // Add default empty option
         const emptyOption = document.createElement('option');
         emptyOption.value = "";
         emptyOption.textContent = "Select an account...";
         select.appendChild(emptyOption);
-        
+
         // Filter out expense accounts - only show asset, liability, and bank accounts
         const filteredAccounts = qboAccounts.filter(account => {
             const type = account.type?.toLowerCase() || '';
             return !type.includes('expense') && !type.includes('cost');
         });
-        
+
         console.log(`Filtered ${qboAccounts.length} accounts to ${filteredAccounts.length} non-expense accounts`);
-        
+
         // Find Undeposited Funds account in the filtered accounts list
         let undepositedFundsAccount = null;
         for (const account of filteredAccounts) {
             const name = account.name?.toLowerCase() || '';
             const subType = account.subType?.toLowerCase() || '';
-            
+
             if (name === 'undeposited funds' || subType === 'undepositedfunds') {
                 undepositedFundsAccount = account;
                 console.log(`Found Undeposited Funds account in filtered list: ${account.name} (${account.id})`);
                 break;
             }
         }
-        
+
         // Add filtered accounts
         filteredAccounts.forEach(account => {
             const option = document.createElement('option');
             option.value = account.id;
-            
+
             // Format option text with account number if available
             if (account.number) {
                 option.textContent = `${account.number} ${account.name} (${account.type})`;
             } else {
                 option.textContent = `${account.name} (${account.type})`;
             }
-            
+
             // Mark the Undeposited Funds account with special styling
-            if (account.id === defaultAccountId || 
+            if (account.id === defaultAccountId ||
                 (undepositedFundsAccount && account.id === undepositedFundsAccount.id)) {
                 option.className = 'fw-bold';
                 option.style.backgroundColor = '#f8f9fa';
             }
-            
+
             select.appendChild(option);
         });
-        
+
         // First, try to use defaultAccountId if available
         if (defaultAccountId) {
             console.log(`Setting default account to ${defaultAccountId}`);
             select.value = defaultAccountId;
         }
-        
+
         // If that didn't work, try the undepositedFundsAccount we found
         if ((select.value === "" || !select.value) && undepositedFundsAccount) {
             console.log(`Setting default account to Undeposited Funds: ${undepositedFundsAccount.id}`);
             select.value = undepositedFundsAccount.id;
-            
+
             // For the batch account select specifically, ensure we set the Undeposited Funds account
             if (select.id === 'batchDepositToAccount') {
                 select.value = undepositedFundsAccount.id;
             }
         }
-        
+
         // If still not set (rare case), add the account if we know it by ID
         if ((select.value === "" || !select.value) && defaultAccountId) {
             // Find the account in our data
@@ -1082,7 +1082,7 @@ function populateAccountSelects() {
                 console.warn(`Default account ID ${defaultAccountId} not found in QBO accounts`);
             }
         }
-        
+
         // Ensure the batch deposit account always has Undeposited Funds selected
         if (select.id === 'batchDepositToAccount') {
             if (undepositedFundsAccount) {
@@ -1090,7 +1090,7 @@ function populateAccountSelects() {
             } else if (defaultAccountId) {
                 select.value = defaultAccountId;
             }
-            
+
             // If still not set, create a fallback option
             if (select.value === "" || !select.value) {
                 const option = document.createElement('option');
@@ -1102,23 +1102,23 @@ function populateAccountSelects() {
                 select.value = "12000";
             }
         }
-        
+
         console.log(`Account select ${select.id} final value: ${select.value}`);
     });
 }
 
 function populateIncomeAccountSelect() {
     const incomeAccountSelect = document.getElementById('newItemIncomeAccount');
-    
+
     if (incomeAccountSelect) {
         // Clear existing options
         incomeAccountSelect.innerHTML = '';
-        
+
         // Filter for income accounts
-        const incomeAccounts = qboAccounts.filter(account => 
+        const incomeAccounts = qboAccounts.filter(account =>
             account.type === 'Income' || account.type.includes('Income')
         );
-        
+
         // Check if we have any income accounts
         if (incomeAccounts.length === 0) {
             const option = document.createElement('option');
@@ -1127,25 +1127,25 @@ function populateIncomeAccountSelect() {
             incomeAccountSelect.appendChild(option);
             return;
         }
-        
+
         // Add default empty option
         const emptyOption = document.createElement('option');
         emptyOption.value = "";
         emptyOption.textContent = "Select an income account...";
         incomeAccountSelect.appendChild(emptyOption);
-        
+
         // Add income accounts
         incomeAccounts.forEach(account => {
             const option = document.createElement('option');
             option.value = account.id;
-            
+
             // Format option text with account number if available
             if (account.number) {
                 option.textContent = `${account.number} ${account.name}`;
             } else {
                 option.textContent = account.name;
             }
-            
+
             incomeAccountSelect.appendChild(option);
         });
     }
@@ -1153,14 +1153,14 @@ function populateIncomeAccountSelect() {
 
 function populatePaymentMethodSelects() {
     console.log("Populating payment method dropdowns with", qboPaymentMethods.length, "methods");
-    
+
     // Get all payment method selects in the UI
     const selects = [
         document.getElementById('previewPaymentMethodRef'),
         document.getElementById('alternativePaymentMethodSelect'),
         document.getElementById('batchPaymentMethodRef')
     ];
-    
+
     // Process each select element
     selects.forEach(select => {
         if (!select) {
@@ -1168,10 +1168,10 @@ function populatePaymentMethodSelects() {
             console.log("Payment method select element not found in DOM");
             return;
         }
-        
+
         // Clear existing options
         select.innerHTML = '';
-        
+
         // Check if we have payment methods
         if (!qboPaymentMethods || qboPaymentMethods.length === 0) {
             console.log("No payment methods available to populate dropdown");
@@ -1181,13 +1181,13 @@ function populatePaymentMethodSelects() {
             select.appendChild(option);
             return;
         }
-        
+
         // Add default empty option
         const emptyOption = document.createElement('option');
         emptyOption.value = "";
         emptyOption.textContent = "Select a payment method...";
         select.appendChild(emptyOption);
-        
+
         // Add payment methods
         qboPaymentMethods.forEach(method => {
             const option = document.createElement('option');
@@ -1195,12 +1195,12 @@ function populatePaymentMethodSelects() {
             option.textContent = method.name;
             select.appendChild(option);
         });
-        
+
         // Set default payment method (Check) if available
         if (defaultPaymentMethodId) {
             console.log(`Setting default payment method to ${defaultPaymentMethodId}`);
             select.value = defaultPaymentMethodId;
-            
+
             // If setting the value didn't work (option doesn't exist), add it
             if (select.value !== defaultPaymentMethodId) {
                 // Find the payment method in our data
@@ -1213,14 +1213,14 @@ function populatePaymentMethodSelects() {
                     select.value = defaultPaymentMethodId;
                 } else {
                     console.warn(`Default payment method ID ${defaultPaymentMethodId} not found in QBO payment methods`);
-                    
+
                     // Add common payment methods if missing
                     const commonMethods = [
                         { id: 'CHECK', name: 'Check' },
                         { id: 'Cash', name: 'Cash' },
                         { id: 'Credit Card', name: 'Credit Card' }
                     ];
-                    
+
                     const methodToAdd = commonMethods.find(m => m.id === defaultPaymentMethodId);
                     if (methodToAdd) {
                         const option = document.createElement('option');
@@ -1246,42 +1246,42 @@ let setupAccountId, setupItemId, setupPaymentMethodId, pendingDonationId;
 function showQboSetupModal(type, invalidId, message, detail, donationId) {
     // Store the donation ID for later use
     pendingDonationId = donationId;
-    
+
     // Hide all setup sections
     document.getElementById('accountSetupSection').classList.add('d-none');
     document.getElementById('itemSetupSection').classList.add('d-none');
     document.getElementById('paymentMethodSetupSection').classList.add('d-none');
     document.getElementById('generalSetupSection').classList.add('d-none');
-    
+
     // Show error message
     document.getElementById('setupErrorMessage').textContent = message || 'A required QuickBooks element is missing.';
-    
+
     // Set hidden fields
     document.getElementById('setupType').value = type;
     document.getElementById('setupInvalidId').value = invalidId;
     document.getElementById('setupDonationId').value = donationId;
-    
+
     // Show the appropriate section based on type
     if (type === 'account') {
         setupAccountId = invalidId;
         document.getElementById('missingAccountId').textContent = invalidId;
         document.getElementById('accountSetupSection').classList.remove('d-none');
-        
+
         // Fetch accounts
         fetchQBOAccounts();
-    } 
+    }
     else if (type === 'item') {
         setupItemId = invalidId;
         document.getElementById('missingItemId').textContent = invalidId;
         document.getElementById('itemSetupSection').classList.remove('d-none');
-        
+
         // Items should already be loaded, but refresh just in case
         fetchQBOItems();
     }
     else if (type === 'paymentMethod') {
         setupPaymentMethodId = invalidId;
         document.getElementById('paymentMethodSetupSection').classList.remove('d-none');
-        
+
         // Fetch payment methods
         fetchQBOPaymentMethods();
     }
@@ -1290,7 +1290,7 @@ function showQboSetupModal(type, invalidId, message, detail, donationId) {
         document.getElementById('setupErrorDetail').textContent = detail || 'Check your QuickBooks configuration.';
         document.getElementById('generalSetupSection').classList.remove('d-none');
     }
-    
+
     // Show the modal
     qboSetupModal.show();
 }
@@ -1301,11 +1301,11 @@ function fetchQBOAccounts() {
         .then(data => {
             if (data.success && data.accounts) {
                 qboAccounts = data.accounts;
-                
+
                 // Populate the account select dropdown
                 const accountSelect = document.getElementById('alternativeAccountSelect');
                 accountSelect.innerHTML = '';
-                
+
                 // Add all accounts as options
                 qboAccounts.forEach(account => {
                     const option = document.createElement('option');
@@ -1313,21 +1313,21 @@ function fetchQBOAccounts() {
                     option.textContent = `${account.name} (${account.type})`;
                     accountSelect.appendChild(option);
                 });
-                
+
                 // If Undeposited Funds account exists, select it
                 if (data.undepositedFunds) {
                     accountSelect.value = data.undepositedFunds.id;
                 }
-                
+
                 // Also populate the income accounts dropdown for item creation
                 const incomeAccountSelect = document.getElementById('newItemIncomeAccount');
                 if (incomeAccountSelect) {
                     incomeAccountSelect.innerHTML = '';
-                    
+
                     // Add only income accounts as options
-                    const incomeAccounts = qboAccounts.filter(account => 
+                    const incomeAccounts = qboAccounts.filter(account =>
                         account.type === 'Income' || account.type.includes('Income'));
-                        
+
                     if (incomeAccounts.length > 0) {
                         incomeAccounts.forEach(account => {
                             const option = document.createElement('option');
@@ -1340,22 +1340,22 @@ function fetchQBOAccounts() {
                     }
                 }
             } else {
-                document.getElementById('alternativeAccountSelect').innerHTML = 
+                document.getElementById('alternativeAccountSelect').innerHTML =
                     '<option value="">No accounts found</option>';
-                
+
                 if (document.getElementById('newItemIncomeAccount')) {
-                    document.getElementById('newItemIncomeAccount').innerHTML = 
+                    document.getElementById('newItemIncomeAccount').innerHTML =
                         '<option value="">No income accounts found</option>';
                 }
             }
         })
         .catch(error => {
             console.error('Error fetching accounts:', error);
-            document.getElementById('alternativeAccountSelect').innerHTML = 
+            document.getElementById('alternativeAccountSelect').innerHTML =
                 '<option value="">Error loading accounts</option>';
-            
+
             if (document.getElementById('newItemIncomeAccount')) {
-                document.getElementById('newItemIncomeAccount').innerHTML = 
+                document.getElementById('newItemIncomeAccount').innerHTML =
                     '<option value="">Error loading accounts</option>';
             }
         });
@@ -1365,29 +1365,29 @@ function createQBOAccount() {
     // Show loading state
     const statusElement = document.getElementById('createAccountStatus');
     statusElement.innerHTML = '<div class="alert alert-info">Creating account...</div>';
-    
+
     // Get form values
     const accountName = document.getElementById('newAccountName').value;
     const accountType = document.getElementById('newAccountType').value;
     const accountNumber = document.getElementById('newAccountNumber').value;
     const accountDescription = document.getElementById('newAccountDescription').value;
-    
+
     // Validate name
     if (!accountName.trim()) {
         statusElement.innerHTML = '<div class="alert alert-danger">Account name is required</div>';
         return;
     }
-    
+
     // Prepare data
     const accountData = {
         name: accountName,
         accountType: accountType
     };
-    
+
     // Add optional fields
     if (accountNumber) accountData.accountNumber = accountNumber;
     if (accountDescription) accountData.description = accountDescription;
-    
+
     // Send request
     fetchWithCSRF('/qbo/account/create', {
         method: 'POST',
@@ -1401,10 +1401,10 @@ function createQBOAccount() {
         if (data.success) {
             // Show success message
             statusElement.innerHTML = '<div class="alert alert-success">Account created successfully!</div>';
-            
+
             // Add to dropdown and select it
             const newAccount = data.account;
-            
+
             // If no accounts dropdown exists yet, refresh the accounts list
             if (!document.getElementById('alternativeAccountSelect').options.length) {
                 fetchQBOAccounts();
@@ -1417,7 +1417,7 @@ function createQBOAccount() {
                 accountSelect.appendChild(option);
                 accountSelect.value = newAccount.id;
             }
-            
+
             // Switch to "Use Existing" tab
             document.getElementById('existing-account-tab').click();
         } else {
@@ -1434,36 +1434,36 @@ function createQBOItem() {
     // Show loading state
     const statusElement = document.getElementById('createItemStatus');
     statusElement.innerHTML = '<div class="alert alert-info">Creating item...</div>';
-    
+
     // Get form values
     const itemName = document.getElementById('newItemName').value;
     const itemType = document.getElementById('newItemType').value;
     const itemDescription = document.getElementById('newItemDescription').value;
     const itemPrice = document.getElementById('newItemPrice').value;
     const itemIncomeAccount = document.getElementById('newItemIncomeAccount').value;
-    
+
     // Validate required fields
     if (!itemName.trim()) {
         statusElement.innerHTML = '<div class="alert alert-danger">Item name is required</div>';
         return;
     }
-    
+
     if (!itemIncomeAccount) {
         statusElement.innerHTML = '<div class="alert alert-danger">Income account is required</div>';
         return;
     }
-    
+
     // Prepare data
     const itemData = {
         name: itemName,
         type: itemType,
         incomeAccountId: itemIncomeAccount
     };
-    
+
     // Add optional fields
     if (itemDescription) itemData.description = itemDescription;
     if (itemPrice) itemData.unitPrice = parseFloat(itemPrice);
-    
+
     // Send request
     fetchWithCSRF('/qbo/item/create', {
         method: 'POST',
@@ -1477,26 +1477,26 @@ function createQBOItem() {
         if (data.success) {
             // Show success message
             statusElement.innerHTML = '<div class="alert alert-success">Item created successfully!</div>';
-            
+
             // Add to dropdown and select it
             const newItem = data.item;
-            
+
             // Refresh items list to include the new item
             qboItems.push(newItem);
-            
+
             // Update the items dropdown
             const itemSelect = document.getElementById('alternativeItemSelect');
-            
+
             // Add to dropdown
             const option = document.createElement('option');
             option.value = newItem.id;
             option.textContent = newItem.name;
             itemSelect.appendChild(option);
             itemSelect.value = newItem.id;
-            
+
             // Also add to preview and batch item selects
             populateItemSelects();
-            
+
             // Switch to "Use Existing" tab
             document.getElementById('existing-item-tab').click();
         } else {
@@ -1513,21 +1513,21 @@ function createQBOPaymentMethod() {
     // Show loading state
     const statusElement = document.getElementById('createPaymentMethodStatus');
     statusElement.innerHTML = '<div class="alert alert-info">Creating payment method...</div>';
-    
+
     // Get form values
     const paymentMethodName = document.getElementById('newPaymentMethodName').value;
-    
+
     // Validate name
     if (!paymentMethodName.trim()) {
         statusElement.innerHTML = '<div class="alert alert-danger">Payment method name is required</div>';
         return;
     }
-    
+
     // Prepare data
     const paymentMethodData = {
         name: paymentMethodName
     };
-    
+
     // Send request
     fetchWithCSRF('/qbo/payment-method/create', {
         method: 'POST',
@@ -1541,10 +1541,10 @@ function createQBOPaymentMethod() {
         if (data.success) {
             // Show success message
             statusElement.innerHTML = '<div class="alert alert-success">Payment method created successfully!</div>';
-            
+
             // Add to dropdown and select it
             const newPaymentMethod = data.paymentMethod;
-            
+
             // If no payment methods dropdown exists yet, refresh the list
             if (!document.getElementById('alternativePaymentMethodSelect').options.length) {
                 fetchQBOPaymentMethods();
@@ -1557,7 +1557,7 @@ function createQBOPaymentMethod() {
                 methodSelect.appendChild(option);
                 methodSelect.value = newPaymentMethod.id;
             }
-            
+
             // Switch to "Use Existing" tab
             document.getElementById('existing-payment-method-tab').click();
         } else {
@@ -1576,11 +1576,11 @@ function fetchQBOPaymentMethods() {
         .then(data => {
             if (data.success && data.paymentMethods) {
                 qboPaymentMethods = data.paymentMethods;
-                
+
                 // Populate the payment method select dropdown
                 const methodSelect = document.getElementById('alternativePaymentMethodSelect');
                 methodSelect.innerHTML = '';
-                
+
                 // Add all payment methods as options
                 qboPaymentMethods.forEach(method => {
                     const option = document.createElement('option');
@@ -1588,19 +1588,19 @@ function fetchQBOPaymentMethods() {
                     option.textContent = method.name;
                     methodSelect.appendChild(option);
                 });
-                
+
                 // If Check payment method exists, select it
                 if (data.checkMethod) {
                     methodSelect.value = data.checkMethod.id;
                 }
             } else {
-                document.getElementById('alternativePaymentMethodSelect').innerHTML = 
+                document.getElementById('alternativePaymentMethodSelect').innerHTML =
                     '<option value="">No payment methods found</option>';
             }
         })
         .catch(error => {
             console.error('Error fetching payment methods:', error);
-            document.getElementById('alternativePaymentMethodSelect').innerHTML = 
+            document.getElementById('alternativePaymentMethodSelect').innerHTML =
                 '<option value="">Error loading payment methods</option>';
         });
 }
@@ -1609,15 +1609,15 @@ function useAlternative() {
     // Get the setup type
     const setupType = document.getElementById('setupType').value;
     const donationId = document.getElementById('setupDonationId').value;
-    
+
     // Get the selected alternative based on setup type
     let alternativeId;
     let customFields = {};
-    
+
     if (setupType === 'account') {
         alternativeId = document.getElementById('alternativeAccountSelect').value;
         customFields.depositToAccountId = alternativeId;
-    } 
+    }
     else if (setupType === 'item') {
         alternativeId = document.getElementById('alternativeItemSelect').value;
         customFields.itemRef = alternativeId;
@@ -1626,10 +1626,10 @@ function useAlternative() {
         alternativeId = document.getElementById('alternativePaymentMethodSelect').value;
         customFields.paymentMethodId = alternativeId;
     }
-    
+
     // Close the setup modal
     qboSetupModal.hide();
-    
+
     // Try sending again with the alternative
     trySendWithAlternative(donationId, customFields);
 }
@@ -1639,12 +1639,12 @@ function trySendWithAlternative(donationId, customFields) {
     if (!customFields.itemRef) {
         customFields.itemRef = document.getElementById('previewItemRef').value || defaultItemId || '1';
     }
-    
+
     // Get the standard account (if not overridden in customFields)
     if (!customFields.depositToAccountId) {
         customFields.depositToAccountId = document.getElementById('previewDepositToAccount').value || defaultAccountId || '12000';
     }
-    
+
     // Get the standard payment method (if not overridden in customFields)
     if (!customFields.paymentMethodId) {
         const paymentMethodSelect = document.getElementById('previewPaymentMethodRef');
@@ -1654,10 +1654,10 @@ function trySendWithAlternative(donationId, customFields) {
             customFields.paymentMethodId = defaultPaymentMethodId || 'CHECK';
         }
     }
-    
+
     // Log what we're sending
     console.log(`Sending sales receipt with alternative settings: ${JSON.stringify(customFields)}`);
-    
+
     // Send the request with custom fields
     fetchWithCSRF(`/qbo/sales-receipt/${donationId}`, {
         method: 'POST',
@@ -1674,15 +1674,15 @@ function trySendWithAlternative(donationId, customFields) {
                 if (donation) {
                     donation.qbSyncStatus = 'Sent';
                     donation.qboSalesReceiptId = data.salesReceipt.Id;
-                    
+
                     // Re-render the table
                     renderDonationTable();
-                    
+
                     // Hide the preview modal if it's open
                     salesReceiptPreviewModal.hide();
                     // Hide the setup modal
                     qboSetupModal.hide();
-                    
+
                     // Show appropriate message based on whether it was a duplicate
                     if (data.duplicate) {
                         showToast('Sales receipt already exists in QuickBooks - linked to donation', 'warning');
@@ -1693,8 +1693,8 @@ function trySendWithAlternative(donationId, customFields) {
             } else if (data.requiresSetup) {
                 // Another setup issue was encountered
                 showQboSetupModal(
-                    data.setupType, 
-                    data.invalidId, 
+                    data.setupType,
+                    data.invalidId,
                     data.message,
                     data.detail,
                     donationId
@@ -1717,17 +1717,17 @@ function trySendWithAlternative(donationId, customFields) {
 function showSalesReceiptPreview(donationId) {
     const donation = donations.find(d => d.internalId === donationId);
     if (!donation) return;
-    
+
     // Store donation ID for later use
     document.getElementById('previewDonationId').value = donationId;
-    
+
     // Show loading state
     const previewBtn = document.querySelector(`.send-to-qbo-btn[data-id="${donationId}"]`);
     if (previewBtn) {
         previewBtn.disabled = true;
         previewBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     }
-    
+
     // Make sure we have the latest QBO data before showing the preview
     // Fetch all QBO references in parallel and WAIT for them to complete
     Promise.all([
@@ -1741,7 +1741,7 @@ function showSalesReceiptPreview(donationId) {
         populateItemSelects();
         populateAccountSelects();
         populatePaymentMethodSelects();
-        
+
         // After populating, get the values
         continuePreview();
     })
@@ -1750,32 +1750,32 @@ function showSalesReceiptPreview(donationId) {
         // Try to continue anyway
         continuePreview();
     });
-    
+
     function continuePreview() {
         // Get the currently selected item ref - use a default if no item is selected
         const itemRef = document.getElementById('previewItemRef')?.value || defaultItemId || '1';
-        
+
         // Get the currently selected deposit account ID - with null check
         let depositToAccountId = defaultAccountId || '12000'; // Default fallback
         const depositToAccountElem = document.getElementById('previewDepositToAccount');
         if (depositToAccountElem && depositToAccountElem.value) {
             depositToAccountId = depositToAccountElem.value;
         }
-        
+
         // Get payment method with null check
         let paymentMethodId = defaultPaymentMethodId || 'CHECK'; // Default fallback
         const paymentMethodElem = document.getElementById('previewPaymentMethodRef');
         if (paymentMethodElem && paymentMethodElem.value) {
             paymentMethodId = paymentMethodElem.value;
         }
-    
+
         // Fetch preview data
         fetchWithCSRF(`/qbo/sales-receipt/preview/${donationId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 itemRef,
                 depositToAccountId,
                 paymentMethodId
@@ -1785,7 +1785,7 @@ function showSalesReceiptPreview(donationId) {
         .then(data => {
             if (data.success) {
                 const preview = data.salesReceiptPreview;
-                
+
                 // Populate preview fields
                 document.getElementById('previewCustomer').textContent = preview.customerName;
                 document.getElementById('previewAmount').textContent = formatCurrency(preview.amount);
@@ -1796,12 +1796,12 @@ function showSalesReceiptPreview(donationId) {
                 document.getElementById('previewDocNumber').textContent = preview.docNumber;
                 document.getElementById('previewMessage').textContent = preview.message;
                 document.getElementById('previewDescription').textContent = preview.description;
-                
+
                 // Set the item ref if specified
                 if (preview.itemRef) {
                     document.getElementById('previewItemRef').value = preview.itemRef;
                 }
-                
+
                 // Set the deposit account if specified
                 if (preview.depositToAccountId) {
                     const depositSelect = document.getElementById('previewDepositToAccount');
@@ -1816,7 +1816,7 @@ function showSalesReceiptPreview(donationId) {
                         depositSelect.value = preview.depositToAccountId;
                     }
                 }
-                
+
                 // Set the payment method if specified
                 if (preview.paymentMethodId) {
                     const paymentMethodSelect = document.getElementById('previewPaymentMethodRef');
@@ -1831,13 +1831,13 @@ function showSalesReceiptPreview(donationId) {
                         paymentMethodSelect.value = preview.paymentMethodId;
                     }
                 }
-                
+
                 // Show the modal
                 salesReceiptPreviewModal.show();
             } else {
                 showToast(data.message || 'Error previewing sales receipt', 'danger');
             }
-            
+
             // Reset button state
             if (previewBtn) {
                 previewBtn.disabled = false;
@@ -1847,7 +1847,7 @@ function showSalesReceiptPreview(donationId) {
             .catch(error => {
                 console.error('Error previewing sales receipt:', error);
                 showToast('Error previewing sales receipt', 'danger');
-                
+
                 // Reset button state
                 if (previewBtn) {
                     previewBtn.disabled = false;
@@ -1866,7 +1866,7 @@ function showBatchReceiptModal() {
     // Make sure we have the latest QBO data before showing the modal
     // Use Promise.all to fetch all data in parallel
     const loadingToast = showToast('Loading QuickBooks data...', 'info');
-    
+
     Promise.all([
         fetchQBOItems(),
         fetchQBOAccounts(),
@@ -1878,7 +1878,7 @@ function showBatchReceiptModal() {
         populateItemSelects();
         populateAccountSelects();
         populatePaymentMethodSelects();
-        
+
         // Show the modal
         batchReceiptModal.show();
     })
@@ -1894,53 +1894,53 @@ function sendAllToQBO() {
     for (const account of qboAccounts) {
         const name = account.name?.toLowerCase() || '';
         const subType = account.subType?.toLowerCase() || '';
-        
+
         if (name === 'undeposited funds' || subType === 'undepositedfunds') {
             undepositedFundsAccount = account;
             break;
         }
     }
-    
+
     // Get the default values from the modal inputs - with special handling for the deposit account
     const batchItemRef = document.getElementById('batchItemRef').value || defaultItemId || '1';
-    
-    // For deposit account, prioritize: 
+
+    // For deposit account, prioritize:
     // 1. User selection
     // 2. Undeposited Funds account we found
     // 3. Default account from server
     // 4. Fallback ID "12000"
-    const batchDepositToAccountId = document.getElementById('batchDepositToAccount').value || 
-                                    (undepositedFundsAccount ? undepositedFundsAccount.id : null) || 
-                                    defaultAccountId || 
+    const batchDepositToAccountId = document.getElementById('batchDepositToAccount').value ||
+                                    (undepositedFundsAccount ? undepositedFundsAccount.id : null) ||
+                                    defaultAccountId ||
                                     '12000';
-                                    
+
     const batchPaymentMethodId = document.getElementById('batchPaymentMethodRef').value || defaultPaymentMethodId || 'CHECK';
-    
+
     // Log what we're sending for debugging
     console.log(`Sending batch sales receipts with defaults - Item: ${batchItemRef}, Account: ${batchDepositToAccountId}, Payment Method: ${batchPaymentMethodId}`);
-    
+
     // Close the modal
     batchReceiptModal.hide();
-    
+
     // Show processing toast
     showToast('Processing sales receipts batch...', 'info');
-    
+
     fetchWithCSRF('/qbo/sales-receipt/batch', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
             defaultItemRef: batchItemRef,
             defaultDepositToAccountId: batchDepositToAccountId,
-            defaultPaymentMethodId: batchPaymentMethodId 
+            defaultPaymentMethodId: batchPaymentMethodId
         })
     })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 const summary = data.summary;
-                
+
                 // Update the UI with results
                 data.results.forEach(result => {
                     if (result.success) {
@@ -1957,10 +1957,10 @@ function sendAllToQBO() {
                         }
                     }
                 });
-                
+
                 // Re-render the table
                 renderDonationTable();
-                
+
                 // Show summary toast
                 let message = `Created ${summary.success} sales receipt(s) in QBO`;
                 if (summary.failure > 0) {
@@ -1985,13 +1985,13 @@ function deleteDonation(donationId) {
     if (index !== -1) {
         // Remove the donation from the array
         donations.splice(index, 1);
-        
+
         // Re-render the table
         renderDonationTable();
-        
+
         // Show success message
         showToast('Donation deleted successfully');
-        
+
         // Save changes to the server
         saveChanges();
     }
@@ -2024,10 +2024,10 @@ function clearAllDonations() {
     if (!confirm('Are you sure you want to clear all donations? This action cannot be undone.')) {
         return;
     }
-    
+
     // Clear local donations array
     donations = [];
-    
+
     // Clear session data on server
     fetchWithCSRF('/clear-all', {
         method: 'POST',
@@ -2058,7 +2058,7 @@ function generateReport() {
             if (data.success) {
                 const report = data.report;
                 const reportContent = document.getElementById('reportContent');
-                
+
                 // Format the report content
                 let html = `
                     <div class="report-header">
@@ -2067,7 +2067,7 @@ function generateReport() {
                         <p>Total: ${formatCurrency(report.total)}</p>
                     </div>
                 `;
-                
+
                 report.entries.forEach(entry => {
                     html += `
                         <div class="report-item">
@@ -2079,15 +2079,15 @@ function generateReport() {
                         </div>
                     `;
                 });
-                
+
                 html += `
                     <div class="report-total">
                         <p>Total Deposits: ${formatCurrency(report.total)}</p>
                     </div>
                 `;
-                
+
                 reportContent.innerHTML = html;
-                
+
                 // Show the modal
                 reportModal.show();
             } else {
@@ -2107,15 +2107,15 @@ function downloadReportCSV() {
         .then(data => {
             if (data.success) {
                 const report = data.report;
-                
+
                 // Create CSV content
                 let csvContent = 'data:text/csv;charset=utf-8,';
-                
+
                 // Include all columns in the CSV header
                 csvContent += 'Index,Donor Name,First Name,Last Name,Full Name,Organization Name,';
                 csvContent += 'Address Line 1,City,State,ZIP,Address,Amount,Date,Check No.,Memo,';
                 csvContent += 'Deposit Date,Deposit Method,Customer Lookup\n';
-                
+
                 report.entries.forEach(entry => {
                     const amount = entry.amount.toString().replace('$', '');
                     const row = [
@@ -2140,20 +2140,20 @@ function downloadReportCSV() {
                     ];
                     csvContent += row.join(',') + '\n';
                 });
-                
+
                 // Add total row
                 csvContent += `"","","","","","","","","","","Total",${report.total.toString().replace('$', '')},"","","","","",""\n`;
-                
+
                 // Create download link
                 const encodedUri = encodeURI(csvContent);
                 const link = document.createElement('a');
                 link.setAttribute('href', encodedUri);
                 link.setAttribute('download', `fom_deposit_report_${new Date().toISOString().split('T')[0]}.csv`);
                 document.body.appendChild(link);
-                
+
                 // Trigger download
                 link.click();
-                
+
                 // Cleanup
                 document.body.removeChild(link);
             } else {
@@ -2173,23 +2173,23 @@ function downloadReportTXT() {
         .then(data => {
             if (data.success) {
                 const report = data.report;
-                
+
                 // Use the formatted text report from the server
                 const textContent = report.text_report;
-                
+
                 // Create a blob with the text content
                 const blob = new Blob([textContent], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);
-                
+
                 // Create download link
                 const link = document.createElement('a');
                 link.href = url;
                 link.download = `fom_deposit_report_${new Date().toISOString().split('T')[0]}.txt`;
                 document.body.appendChild(link);
-                
+
                 // Trigger download
                 link.click();
-                
+
                 // Clean up
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
@@ -2207,27 +2207,27 @@ function downloadReportTXT() {
 function processUploadResponse(uploadData) {
     // The server has already done deduplication and validation
     // We just need to update our local state with the server's data
-    
+
     if (uploadData.donations && uploadData.donations.length > 0) {
         // Replace local donations with server's deduplicated list
         // Apply formatting to fix all caps issues
         donations = uploadData.donations.map(donation => formatDonationData(donation));
         renderDonationTable();
-        
+
         // Show appropriate message based on what happened
         const newCount = uploadData.newCount || uploadData.donations.length;
         const totalCount = uploadData.totalCount || uploadData.donations.length;
         const mergedCount = uploadData.mergedCount || 0;
-        
+
         if (mergedCount > 0) {
             showToast(`Processed ${newCount} donation(s), merged ${mergedCount} duplicate(s). Total: ${totalCount} donations`, 'success');
         } else {
             showToast(`Successfully processed ${newCount} donation(s). Total: ${totalCount} donations`, 'success');
         }
-        
+
         return newCount;
     }
-    
+
     return 0;
 }
 
@@ -2235,15 +2235,15 @@ function processUploadResponse(uploadData) {
 function removeInvalidDonationsFromSession(invalidDonations) {
     // Only proceed if there are invalid donations to remove
     if (!invalidDonations || invalidDonations.length === 0) return;
-    
+
     const invalidIds = invalidDonations
         .filter(donation => donation.internalId) // Only those with IDs
         .map(donation => donation.internalId);
-        
+
     if (invalidIds.length === 0) return;
-    
+
     console.log(`Removing ${invalidIds.length} invalid donations from server session:`, invalidIds);
-    
+
     // Call server to remove these donations
     fetchWithCSRF('/donations/remove-invalid', {
         method: 'POST',
@@ -2269,23 +2269,23 @@ function removeInvalidDonationsFromSession(invalidDonations) {
 function uploadAndProcessFiles(files) {
     // Create FormData object
     const formData = new FormData();
-    
+
     // Add files to FormData
     for (let i = 0; i < files.length; i++) {
         formData.append('files', files[i]);
     }
-    
+
     // Show uploading indicator
     const uploadButton = document.getElementById('uploadButton');
     uploadButton.disabled = true;
     uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Processing...';
-    
+
     // Show progress display immediately
     showProgressDisplay();
-    
+
     // Store session ID for later use
     let sessionId = null;
-    
+
     // First get a session ID by starting the upload
     fetchWithCSRF('/upload-start', {
         method: 'POST'
@@ -2297,10 +2297,10 @@ function uploadAndProcessFiles(files) {
             // Start progress stream immediately
             console.log('Starting progress stream with session ID:', sessionId);
             startProgressStream(sessionId);
-            
+
             // Add session ID to form data
             formData.append('sessionId', sessionId);
-            
+
             // Small delay to ensure SSE connection is established, then upload
             return new Promise((resolve) => {
                 setTimeout(() => {
@@ -2335,20 +2335,20 @@ function uploadAndProcessFiles(files) {
             console.log('Starting progress stream with session ID:', data.progressSessionId);
             startProgressStream(data.progressSessionId);
         }
-        
+
         if (data.success) {
                 // Process the upload response
                 const processedCount = processUploadResponse(data);
-                
+
                 if (processedCount === 0) {
                     showToast('No donation data found in the uploaded files', 'warning');
                 }
-                
+
                 // Check QuickBooks authentication status
                 if (data.qboAuthenticated === false) {
                     console.warn("QuickBooks authentication warning: Not connected to QBO");
                     showToast('QuickBooks is not connected. Connect to QuickBooks for automatic customer matching.', 'warning');
-                    
+
                     // Highlight the Connect to QBO button
                     const qboBtn = document.getElementById('connectQBOBtn');
                     if (qboBtn) {
@@ -2356,17 +2356,17 @@ function uploadAndProcessFiles(files) {
                         qboBtn.classList.remove('btn-primary');
                     }
                 }
-                
+
                 // Show warnings if any
                 if (data.warnings && data.warnings.length > 0) {
                     console.warn("Processing warnings:", data.warnings);
                     showToast(`Processed with warnings. Check console for details.`, 'warning');
                 }
-                
+
                 // Clear the file list
                 document.getElementById('fileList').innerHTML = '';
                 document.getElementById('uploadPreview').classList.add('d-none');
-                
+
                 // Hide progress display after a delay
                 setTimeout(hideProgressDisplay, 2000);
             } else {
@@ -2374,7 +2374,7 @@ function uploadAndProcessFiles(files) {
                 // Hide progress display on error
                 setTimeout(hideProgressDisplay, 1000);
             }
-            
+
             // Reset upload button
             uploadButton.disabled = false;
             uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
@@ -2382,17 +2382,17 @@ function uploadAndProcessFiles(files) {
         .catch(error => {
             console.error('Error uploading files:', error);
             let errorMessage = 'Error uploading and processing files';
-            
+
             // Show more specific error messages
             if (error.message) {
                 errorMessage = error.message;
             }
-            
+
             showToast(errorMessage, 'danger');
-            
+
             // Hide progress display on error
             setTimeout(hideProgressDisplay, 1000);
-            
+
             // Reset upload button
             uploadButton.disabled = false;
             uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
@@ -2407,19 +2407,19 @@ function uploadAndProcessFilesAsync(files) {
     for (let i = 0; i < files.length; i++) {
         formData.append('files', files[i]);
     }
-    
+
     // Show uploading indicator
     const uploadButton = document.getElementById('uploadButton');
     uploadButton.disabled = true;
     uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Processing...';
-    
+
     // Show progress display immediately
     showProgressDisplay();
-    
+
     // Store session ID and task ID for later use
     let sessionId = null;
     let taskId = null;
-    
+
     // First get a session ID by starting the upload
     fetchWithCSRF('/upload-start', {
         method: 'POST'
@@ -2431,10 +2431,10 @@ function uploadAndProcessFilesAsync(files) {
             // Start progress stream immediately
             console.log('Starting progress stream with session ID:', sessionId);
             startProgressStream(sessionId);
-            
+
             // Add session ID to form data
             formData.append('sessionId', sessionId);
-            
+
             // Small delay to ensure SSE connection is established, then upload
             return new Promise((resolve) => {
                 setTimeout(() => {
@@ -2467,7 +2467,7 @@ function uploadAndProcessFilesAsync(files) {
         if (data.success) {
             taskId = data.task_id;
             showToast('Files queued for processing. Checking status...', 'info');
-            
+
             // Poll for task completion
             const pollInterval = setInterval(() => {
                 fetchWithCSRF(`/task-status/${taskId}`)
@@ -2475,7 +2475,7 @@ function uploadAndProcessFilesAsync(files) {
                     .then(statusData => {
                         if (statusData.state === 'SUCCESS') {
                             clearInterval(pollInterval);
-                            
+
                             // Process the result
                             const result = statusData.result;
                             if (result.success) {
@@ -2492,7 +2492,7 @@ function uploadAndProcessFilesAsync(files) {
                                             matchConfidence: donation.matchConfidence
                                         });
                                     });
-                                    
+
                                     // Store donations in session via API call
                                     fetchWithCSRF('/donations/update-session', {
                                         method: 'POST',
@@ -2505,17 +2505,17 @@ function uploadAndProcessFilesAsync(files) {
                                     }).then(() => {
                                         // Process the upload response
                                         const processedCount = processUploadResponse(result);
-                                        
+
                                         if (processedCount === 0) {
                                             showToast('No donation data found in the uploaded files', 'warning');
                                         } else {
                                             showToast(`Successfully processed ${processedCount} donations`, 'success');
                                         }
-                                        
+
                                         // Clear the file list
                                         document.getElementById('fileList').innerHTML = '';
                                         document.getElementById('uploadPreview').classList.add('d-none');
-                                        
+
                                         // Hide progress display after a delay
                                         setTimeout(hideProgressDisplay, 2000);
                                     });
@@ -2527,18 +2527,18 @@ function uploadAndProcessFilesAsync(files) {
                                 showToast(result.message || 'Processing failed', 'danger');
                                 setTimeout(hideProgressDisplay, 1000);
                             }
-                            
+
                             // Reset upload button
                             uploadButton.disabled = false;
                             uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
-                            
+
                         } else if (statusData.state === 'FAILURE') {
                             clearInterval(pollInterval);
                             showToast('Processing failed: ' + statusData.error, 'danger');
-                            
+
                             // Hide progress display on error
                             setTimeout(hideProgressDisplay, 1000);
-                            
+
                             // Reset upload button
                             uploadButton.disabled = false;
                             uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
@@ -2549,12 +2549,12 @@ function uploadAndProcessFilesAsync(files) {
                         console.error('Error checking task status:', error);
                     });
             }, 2000); // Poll every 2 seconds
-            
+
         } else {
             showToast(data.message || 'Error queuing files', 'danger');
             // Hide progress display on error
             setTimeout(hideProgressDisplay, 1000);
-            
+
             // Reset upload button
             uploadButton.disabled = false;
             uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
@@ -2563,17 +2563,17 @@ function uploadAndProcessFilesAsync(files) {
     .catch(error => {
         console.error('Error uploading files:', error);
         let errorMessage = 'Error uploading and processing files';
-        
+
         // Show more specific error messages
         if (error.message) {
             errorMessage = error.message;
         }
-        
+
         showToast(errorMessage, 'danger');
-        
+
         // Hide progress display on error
         setTimeout(hideProgressDisplay, 1000);
-        
+
         // Reset upload button
         uploadButton.disabled = false;
         uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
@@ -2605,7 +2605,7 @@ function hideProgressDisplay() {
 function updateProgressDisplay(action, detail) {
     const progressAction = document.getElementById('progressAction');
     const progressDetail = document.getElementById('progressDetail');
-    
+
     if (progressAction && progressDetail) {
         progressAction.textContent = action;
         progressDetail.textContent = detail;
@@ -2619,10 +2619,10 @@ function startProgressStream(sessionId) {
     if (currentProgressStream) {
         currentProgressStream.close();
     }
-    
+
     try {
         currentProgressStream = new EventSource(`/progress-stream/${sessionId}`);
-        
+
         currentProgressStream.onmessage = function(event) {
             try {
                 const data = JSON.parse(event.data);
@@ -2631,14 +2631,14 @@ function startProgressStream(sessionId) {
                 console.error('Error parsing progress data:', e);
             }
         };
-        
+
         currentProgressStream.onerror = function(event) {
             console.error('Progress stream error:', event);
             if (currentProgressStream) {
                 currentProgressStream.close();
                 currentProgressStream = null;
             }
-            
+
             // Show error to user if we were actively processing
             const statusDiv = document.getElementById('processingStatus');
             if (statusDiv && statusDiv.textContent.includes('Processing')) {
@@ -2658,16 +2658,16 @@ function handleProgressEvent(data) {
             const detail = lines[1] || 'Please wait while we complete the process.';
             updateProgressDisplay(action, detail);
             break;
-            
+
         case 'heartbeat':
             // Keep connection alive
             break;
-            
+
         case 'error':
             updateProgressDisplay('An error occurred', data.message);
             setTimeout(hideProgressDisplay, 3000);
             break;
-            
+
         default:
             console.log('Unknown progress event:', data);
     }
@@ -2681,7 +2681,7 @@ function checkAuthAndProcessFiles() {
             if (data.authenticated) {
                 // Hide the modal
                 qboConnectionModal.hide();
-                
+
                 // Process the files
                 showToast("Connected to QuickBooks successfully! Processing your files now.", "success");
                 if (window.pendingFiles && window.pendingFiles.length > 0) {
@@ -2703,26 +2703,26 @@ function checkAuthAndProcessFiles() {
 function checkQBOAuthStatus() {
     // Add cache-busting parameter to prevent 304 responses
     const cacheBuster = new Date().getTime();
-    
+
     // First fetch environment info
     fetchWithCSRF(`/qbo/environment?_=${cacheBuster}`)
         .then(response => response.json())
         .then(envData => {
             console.log("Environment data received:", envData);
             const envBadge = document.getElementById('qboEnvironmentBadge');
-            
+
             // Update environment badge
             if (envBadge) {
                 // Get environment name with fallback
                 const envName = envData && envData.environment ? envData.environment : 'unknown';
                 console.log("Setting environment badge to:", envName.toUpperCase());
-                
+
                 // Set text content
                 envBadge.textContent = envName.toUpperCase();
-                
+
                 // Reset all classes
                 envBadge.classList.remove('bg-success', 'bg-info', 'bg-secondary');
-                
+
                 // Set appropriate class
                 if (envName === 'production') {
                     envBadge.classList.add('bg-success');
@@ -2743,13 +2743,13 @@ function checkQBOAuthStatus() {
                 envBadge.classList.add('bg-danger');
             }
         });
-    
+
     // Then check authentication status
     fetchWithCSRF('/qbo/auth-status')
         .then(response => response.json())
         .then(data => {
             const qboBtn = document.getElementById('connectQBOBtn');
-            
+
             if (data.authenticated) {
                 // QBO is connected
                 if (qboBtn) {
@@ -2758,7 +2758,7 @@ function checkQBOAuthStatus() {
                     qboBtn.innerHTML = '<i class="fas fa-check me-1"></i>Connected to QBO';
                 }
                 console.log(`QBO authentication is active (${data.environment} environment)`);
-                
+
                 // Fetch QBO references since we're authenticated
                 Promise.all([
                     fetchQBOItems(),
@@ -2768,7 +2768,7 @@ function checkQBOAuthStatus() {
                 ]).catch(error => {
                     console.error("Error fetching QBO references:", error);
                 });
-                
+
                 // Check if we just connected and need to process pending files
                 if (data.justConnected && window.pendingFiles && window.pendingFiles.length > 0) {
                     console.log("Just connected to QBO and have pending files - processing them now");
@@ -2800,26 +2800,26 @@ function checkQBOAuthStatus() {
 function showManualMatchModal(donationId) {
     // Store the donation ID
     document.getElementById('matchDonationId').value = donationId;
-    
+
     // Get the donation data for reference
     const donation = donations.find(d => d.internalId === donationId);
     if (!donation) return;
-    
+
     // Show the modal
     customerMatchModal.show();
-    
+
     // Show loading indicator
     document.getElementById('customerLoadingIndicator').classList.remove('d-none');
     document.getElementById('noCustomersFound').classList.add('d-none');
     document.querySelector('#customerSelectionTable tbody').innerHTML = '';
-    
+
     // Fetch all customers from QBO
     fetchAllCustomers();
-    
+
     // Set up search input handler
     const searchInput = document.getElementById('customerSearchInput');
     searchInput.value = donation.customerLookup || donation['Donor Name'] || '';
-    
+
     // Trigger search with the initial value after customers are loaded
     setTimeout(() => {
         searchInput.dispatchEvent(new Event('input'));
@@ -2832,14 +2832,14 @@ function fetchAllCustomers() {
         .then(data => {
             // Hide loading indicator
             document.getElementById('customerLoadingIndicator').classList.add('d-none');
-            
+
             if (data.success && data.customers && data.customers.length > 0) {
                 // Store customers globally for filtering
                 window.qboCustomers = data.customers;
-                
+
                 // Populate the table initially
                 populateCustomerTable(data.customers);
-                
+
                 // Set up search filtering
                 document.getElementById('customerSearchInput').addEventListener('input', function() {
                     const searchTerm = this.value.toLowerCase();
@@ -2861,30 +2861,30 @@ function fetchAllCustomers() {
 function populateCustomerTable(customers) {
     const tbody = document.querySelector('#customerSelectionTable tbody');
     tbody.innerHTML = '';
-    
+
     if (customers.length === 0) {
         document.getElementById('noCustomersFound').classList.remove('d-none');
         return;
     }
-    
+
     document.getElementById('noCustomersFound').classList.add('d-none');
-    
+
     // Only show first 100 to prevent browser slowdowns
     const displayCustomers = customers.slice(0, 100);
-    
+
     displayCustomers.forEach(customer => {
         const tr = document.createElement('tr');
-        
+
         // Name cell
         const nameCell = document.createElement('td');
         nameCell.textContent = customer.name;
         tr.appendChild(nameCell);
-        
+
         // Address cell
         const addressCell = document.createElement('td');
         addressCell.textContent = customer.address;
         tr.appendChild(addressCell);
-        
+
         // Action cell
         const actionCell = document.createElement('td');
         const selectBtn = document.createElement('button');
@@ -2896,10 +2896,10 @@ function populateCustomerTable(customers) {
         });
         actionCell.appendChild(selectBtn);
         tr.appendChild(actionCell);
-        
+
         tbody.appendChild(tr);
     });
-    
+
     // Show message if showing partial results
     if (customers.length > 100) {
         const infoRow = document.createElement('tr');
@@ -2914,24 +2914,24 @@ function populateCustomerTable(customers) {
 
 function filterCustomers(searchTerm) {
     if (!window.qboCustomers) return;
-    
+
     let filtered;
     if (!searchTerm) {
         filtered = window.qboCustomers;
     } else {
-        filtered = window.qboCustomers.filter(customer => 
+        filtered = window.qboCustomers.filter(customer =>
             customer.name.toLowerCase().includes(searchTerm) ||
             customer.address.toLowerCase().includes(searchTerm)
         );
     }
-    
+
     populateCustomerTable(filtered);
 }
 
 // This function is for the manual match modal - renamed to avoid conflict
 function manualMatchCustomerFromModal(customerId) {
     const donationId = document.getElementById('matchDonationId').value;
-    
+
     fetchWithCSRF(`/qbo/customer/manual-match/${donationId}`, {
         method: 'POST',
         headers: {
@@ -2950,13 +2950,13 @@ function manualMatchCustomerFromModal(customerId) {
                     donation.customerLookup = data.customer.name;
                     donation.matchMethod = 'manual';
                 }
-                
+
                 // Hide the modal
                 customerMatchModal.hide();
-                
+
                 // Re-render the table
                 renderDonationTable();
-                
+
                 showToast('Customer manually matched successfully');
             } else {
                 showToast(data.message || 'Error matching customer', 'danger');
@@ -2978,13 +2978,13 @@ document.addEventListener('DOMContentLoaded', function() {
     qboSetupModal = new bootstrap.Modal(document.getElementById('qboSetupModal'));
     salesReceiptPreviewModal = new bootstrap.Modal(document.getElementById('salesReceiptPreviewModal'));
     batchReceiptModal = new bootstrap.Modal(document.getElementById('batchReceiptModal'));
-    
+
     // Set up QBO setup modal buttons
     document.getElementById('createAccountBtn').addEventListener('click', createQBOAccount);
     document.getElementById('createItemBtn').addEventListener('click', createQBOItem);
     document.getElementById('createPaymentMethodBtn').addEventListener('click', createQBOPaymentMethod);
     document.getElementById('useAlternativeBtn').addEventListener('click', useAlternative);
-    
+
     // Set up Sales Receipt Preview modal
     document.getElementById('sendReceiptBtn').addEventListener('click', function() {
         const donationId = document.getElementById('previewDonationId').value;
@@ -2995,33 +2995,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 depositToAccountId: document.getElementById('previewDepositToAccount').value,
                 paymentMethodId: document.getElementById('previewPaymentMethodRef').value
             };
-            
+
             // Send with the selected values
             trySendWithAlternative(donationId, customFields);
         }
     });
-    
+
     // Set up Batch Processing modal "Send All to QuickBooks" button
     document.getElementById('sendAllReceiptsBtn').addEventListener('click', sendAllToQBO);
-    
+
     // Set up the main "Send All to QB" button in the table header to show the batch modal
     document.getElementById('sendAllQBOBtn').addEventListener('click', function() {
         showBatchReceiptModal();
     });
-    
+
     // Set up QBO connection modal buttons
     document.getElementById('proceedToQboAuthBtn').addEventListener('click', function() {
         // Open QBO authorization in a new window/tab instead of redirecting
         const authWindow = window.open('/qbo/authorize', 'qboAuthWindow', 'width=800,height=600');
-        
+
         // Handle popup blocker case
         if (!authWindow || authWindow.closed || typeof authWindow.closed === 'undefined') {
             showToast("Popup blocked! Please allow popups for this site and try again.", "danger");
             return;
         }
-        
+
         showToast("Waiting for QuickBooks authentication...", "info");
-        
+
         // Start polling to check when QBO auth is complete
         const pollInterval = setInterval(function() {
             // Check if auth window was closed manually
@@ -3029,14 +3029,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 clearInterval(pollInterval);
                 // Check if we've authenticated after window close
                 checkAuthAndProcessFiles();
-                
+
                 // Also update the environment badge
                 setTimeout(() => {
                     checkQBOAuthStatus();
                 }, 1000);
                 return;
             }
-            
+
             // Check QBO auth status
             fetchWithCSRF('/qbo/auth-status')
                 .then(response => response.json())
@@ -3045,10 +3045,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         // Authentication successful, close the popup
                         authWindow.close();
                         clearInterval(pollInterval);
-                        
+
                         // Use the helper to process files
                         checkAuthAndProcessFiles();
-                        
+
                         // Also update the environment badge
                         setTimeout(() => {
                             checkQBOAuthStatus();
@@ -3060,7 +3060,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
         }, 1000); // Check every second
     });
-    
+
     document.getElementById('skipQboConnectionBtn').addEventListener('click', function() {
         // If we have pending files, process them
         if (window.pendingFiles && window.pendingFiles.length > 0) {
@@ -3074,10 +3074,10 @@ document.addEventListener('DOMContentLoaded', function() {
             window.pendingFiles = null; // Clear pending files
         }
     });
-    
+
     // Check QBO authentication status
     checkQBOAuthStatus();
-    
+
     // Set up progress display close button
     document.getElementById('closeProgress').addEventListener('click', function() {
         hideProgressDisplay();
@@ -3087,57 +3087,57 @@ document.addEventListener('DOMContentLoaded', function() {
             currentProgressStream = null;
         }
     });
-    
+
     // Set up file upload area
     const uploadArea = document.getElementById('uploadArea');
     const fileInput = document.getElementById('fileInput');
     const uploadForm = document.getElementById('uploadForm');
     const fileList = document.getElementById('fileList');
     const uploadPreview = document.getElementById('uploadPreview');
-    
+
     // Click on upload area to trigger file input
     uploadArea.addEventListener('click', function() {
         fileInput.click();
     });
-    
+
     // Handle drag and drop
     uploadArea.addEventListener('dragover', function(e) {
         e.preventDefault();
         this.classList.add('dragover');
     });
-    
+
     uploadArea.addEventListener('dragleave', function() {
         this.classList.remove('dragover');
     });
-    
+
     uploadArea.addEventListener('drop', function(e) {
         e.preventDefault();
         this.classList.remove('dragover');
-        
+
         const files = e.dataTransfer.files;
         fileInput.files = files;
-        
+
         // Show preview of files
         showFilePreview(files);
     });
-    
+
     // Handle file selection
     fileInput.addEventListener('change', function() {
         const files = this.files;
         showFilePreview(files);
     });
-    
+
     // Function to show file preview
     function showFilePreview(files) {
         if (files.length > 0) {
             fileList.innerHTML = '';
             uploadPreview.classList.remove('d-none');
-            
+
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const li = document.createElement('li');
                 li.className = 'list-group-item d-flex justify-content-between align-items-center';
-                
+
                 // Display icon based on file type
                 let iconClass = 'fa-file';
                 if (file.name.match(/\.(jpg|jpeg|png)$/i)) {
@@ -3147,26 +3147,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (file.name.match(/\.csv$/i)) {
                     iconClass = 'fa-file-csv';
                 }
-                
+
                 li.innerHTML = `
                     <span><i class="fas ${iconClass} me-2"></i>${file.name}</span>
                     <span class="badge bg-secondary">${(file.size / 1024).toFixed(1)} KB</span>
                 `;
-                
+
                 fileList.appendChild(li);
             }
         }
     }
-    
+
     // Handle form submission
     uploadForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        
+
         const files = fileInput.files;
         if (files.length > 0) {
             // Always store files in the global variable for potential future use
             window.pendingFiles = files;
-            
+
             // First check if QBO is connected
             fetchWithCSRF('/qbo/auth-status')
                 .then(response => response.json())
@@ -3194,37 +3194,37 @@ document.addEventListener('DOMContentLoaded', function() {
             showToast('Please select files to upload', 'warning');
         }
     });
-    
+
     // Connect to QBO button
     document.getElementById('connectQBOBtn').addEventListener('click', function() {
         window.location.href = '/qbo/authorize';
     });
-    
+
     // Save changes button
     document.getElementById('saveChangesBtn').addEventListener('click', function() {
         saveChanges();
     });
-    
+
     // Generate report button
     document.getElementById('generateReportBtn').addEventListener('click', function() {
         generateReport();
     });
-    
+
     // Clear All button
     document.getElementById('clearAllBtn').addEventListener('click', function() {
         clearAllDonations();
     });
-    
+
     // Download report as CSV button
     document.getElementById('downloadReportCSVBtn').addEventListener('click', function() {
         downloadReportCSV();
     });
-    
+
     // Download report as TXT button
     document.getElementById('downloadReportTXTBtn').addEventListener('click', function() {
         downloadReportTXT();
     });
-    
+
     // Load existing donations from server on page load
     fetchWithCSRF('/donations')
         .then(response => response.json())

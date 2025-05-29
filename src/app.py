@@ -1,15 +1,32 @@
+"""Main Flask application for FOM to QBO automation."""
+
 import argparse
 import json
+import mimetypes
 import os
+import re
 import tempfile
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from urllib.parse import quote
 
+import dateutil.parser
 import pandas as pd
 import redis
 import requests
 from dotenv import load_dotenv
-from flask import Flask, Response, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    Response,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_session import Session
@@ -17,40 +34,18 @@ from flask_wtf.csrf import CSRFProtect
 from werkzeug.utils import secure_filename
 
 # Try importing from the src package first
-try:
-    from src.utils.exceptions import (
-        FileProcessingException,
-        FOMQBOException,
-        GeminiAPIException,
-        QBOAPIException,
-        ValidationException,
-    )
-    from src.utils.file_processor import FileProcessor
-    from src.utils.gemini_service import GeminiService
-    from src.utils.memory_monitor import memory_monitor
-    from src.utils.progress_logger import init_progress_logger, log_progress, progress_logger
-    from src.utils.qbo_service import QBOService
-except ModuleNotFoundError:
-    # Fall back to relative imports if running directly from src directory
-    from utils.gemini_service import GeminiService
-    from utils.qbo_service import QBOService
-    from utils.file_processor import FileProcessor
-    from utils.progress_logger import progress_logger, init_progress_logger, log_progress
-    from utils.memory_monitor import memory_monitor
-    from utils.exceptions import (
-        FOMQBOException,
-        QBOAPIException,
-        GeminiAPIException,
-        FileProcessingException,
-        ValidationException,
-    )
-
-import mimetypes
-import re
-import uuid
-from datetime import datetime
-
-import dateutil.parser
+from utils.exceptions import (
+    FileProcessingException,
+    FOMQBOException,
+    GeminiAPIException,
+    QBOAPIException,
+    ValidationException,
+)
+from utils.file_processor import FileProcessor
+from utils.gemini_service import GeminiService
+from utils.memory_monitor import memory_monitor
+from utils.progress_logger import init_progress_logger, log_progress, progress_logger
+from utils.qbo_service import QBOService
 
 try:
     import magic  # python-magic for file content validation
@@ -217,7 +212,9 @@ def process_single_file(file_data, qbo_authenticated):
         file_storage.seek(0)
 
         if file_size > MAX_FILE_SIZE:
-            result["error"] = f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB)"
+            result["error"] = (
+                f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB)"
+            )
             return result
 
         # Generate secure filename and save
@@ -259,7 +256,9 @@ def process_single_file(file_data, qbo_authenticated):
                             donation["matchConfidence"] = "High"
 
             result["success"] = True
-            log_progress(f"Successfully processed {original_filename}: {len(result['donations'])} donations found")
+            log_progress(
+                f"Successfully processed {original_filename}: {len(result['donations'])} donations found"
+            )
         else:
             result["error"] = f"No donation data extracted from {original_filename}"
 
@@ -381,7 +380,12 @@ parser.add_argument(
     "--model",
     type=str,
     default=resolved_env_model,
-    choices=["gemini-flash", "gemini-pro", "gemini-2.5-flash-preview-04-17", "gemini-2.5-pro-preview-03-25"],
+    choices=[
+        "gemini-flash",
+        "gemini-pro",
+        "gemini-2.5-flash-preview-04-17",
+        "gemini-2.5-pro-preview-03-25",
+    ],
     help="Gemini model to use (flash for faster responses, pro for better quality)",
 )
 args, _ = parser.parse_known_args()
@@ -419,12 +423,18 @@ if redis_url:
     # Use memory storage for rate limiting until Redis SSL is fixed
     print("Using memory storage for rate limiting (Redis SSL issue workaround)")
     limiter = Limiter(
-        app=app, key_func=get_remote_address, default_limits=["200 per hour", "50 per minute"], storage_uri="memory://"
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["200 per hour", "50 per minute"],
+        storage_uri="memory://",
     )
 else:
     # Use memory storage for development
     limiter = Limiter(
-        app=app, key_func=get_remote_address, default_limits=["200 per hour", "50 per minute"], storage_uri="memory://"
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["200 per hour", "50 per minute"],
+        storage_uri="memory://",
     )
 
 
@@ -501,7 +511,8 @@ if redis_url:
 
 # Initialize services
 gemini_service = GeminiService(
-    api_key=os.getenv("GEMINI_API_KEY"), model_name=gemini_model  # Use the command-line specified model
+    api_key=os.getenv("GEMINI_API_KEY"),
+    model_name=gemini_model,  # Use the command-line specified model
 )
 qbo_service = QBOService(
     client_id=os.getenv("QBO_CLIENT_ID"),

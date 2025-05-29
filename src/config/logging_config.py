@@ -68,7 +68,10 @@ def setup_logging(app=None) -> Tuple[logging.Logger, logging.Logger]:
         try:
             # General application log
             app_handler = RotatingFileHandler(
-                os.path.join(log_dir, "fom_qbo.log"), maxBytes=10485760, backupCount=5, encoding="utf-8"  # 10MB
+                os.path.join(log_dir, "fom_qbo.log"),
+                maxBytes=10485760,
+                backupCount=5,
+                encoding="utf-8",  # 10MB
             )
             app_handler.setLevel(logging.INFO)
             app_handler.setFormatter(detailed_format)
@@ -76,7 +79,10 @@ def setup_logging(app=None) -> Tuple[logging.Logger, logging.Logger]:
 
             # Error-only log for monitoring
             error_handler = RotatingFileHandler(
-                os.path.join(log_dir, "errors.log"), maxBytes=5242880, backupCount=3, encoding="utf-8"  # 5MB
+                os.path.join(log_dir, "errors.log"),
+                maxBytes=5242880,
+                backupCount=3,
+                encoding="utf-8",  # 5MB
             )
             error_handler.setLevel(logging.ERROR)
             error_handler.setFormatter(detailed_format)
@@ -84,7 +90,10 @@ def setup_logging(app=None) -> Tuple[logging.Logger, logging.Logger]:
 
             # Audit log for security events
             audit_handler = RotatingFileHandler(
-                os.path.join(log_dir, "audit.log"), maxBytes=5242880, backupCount=10, encoding="utf-8"  # 5MB
+                os.path.join(log_dir, "audit.log"),
+                maxBytes=5242880,
+                backupCount=10,
+                encoding="utf-8",  # 5MB
             )
             audit_handler.setLevel(logging.INFO)
             audit_formatter = logging.Formatter("%(asctime)s - AUDIT - %(levelname)s - %(message)s")

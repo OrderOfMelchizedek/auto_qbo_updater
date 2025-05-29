@@ -6,7 +6,7 @@ The donation I'm looking for has these identifying details:
 I specifically need to find these missing fields for THIS donation only:
 {{missing_fields}}
 
-IMPORTANT: 
+IMPORTANT:
 - Return information for ONLY this single donation
 - Do NOT extract information from other donations in the document
 - Match based on the Check No. and/or Donor Name and Amount

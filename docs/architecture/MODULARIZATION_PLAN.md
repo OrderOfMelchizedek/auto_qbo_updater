@@ -186,9 +186,9 @@ def setup_logging(app):
     """Configure application logging."""
     log_dir = app.config.get('LOG_DIR', 'logs')
     os.makedirs(log_dir, exist_ok=True)
-    
+
     # Move logging setup from app.py lines 60-168
-    
+
 # config/session_config.py
 def setup_session(app):
     """Configure Flask session management."""
@@ -205,28 +205,28 @@ class QBOAuthService:
     def __init__(self, redis_client=None):
         self.redis_client = redis_client
         self._setup_oauth_client()
-    
+
     def get_auth_url(self):
         """Generate OAuth authorization URL."""
         # Move from qbo_service.py lines 174-191
-    
+
     def exchange_code_for_tokens(self, code):
         """Exchange authorization code for access tokens."""
         # Move from qbo_service.py lines 193-227
-    
+
     def refresh_access_token(self):
         """Refresh expired access token."""
         # Move from qbo_service.py lines 229-270
 
-# qbo_service/customers.py  
+# qbo_service/customers.py
 class QBOCustomerService:
     def __init__(self, auth_service):
         self.auth = auth_service
-        
+
     def search_customers(self, search_query):
         """Search for customers using progressive matching."""
         # Move from qbo_service.py lines 449-622
-        
+
     def create_customer(self, customer_data):
         """Create a new customer in QuickBooks."""
         # Move from qbo_service.py lines 1035-1092
@@ -235,7 +235,7 @@ class QBOCustomerService:
 class QBOSalesReceiptService:
     def __init__(self, auth_service):
         self.auth = auth_service
-        
+
     def create_sales_receipt(self, donation_data):
         """Create a sales receipt for a donation."""
         # Move from qbo_service.py lines 697-859
@@ -251,21 +251,21 @@ from .sales_receipts import QBOSalesReceiptService
 
 class QBOService:
     """
-    Facade class to maintain backward compatibility while 
+    Facade class to maintain backward compatibility while
     delegating to specialized services.
     """
     def __init__(self, client_id=None, client_secret=None, redis_client=None):
         self.auth = QBOAuthService(redis_client)
         self.customers = QBOCustomerService(self.auth)
         self.sales_receipts = QBOSalesReceiptService(self.auth)
-    
+
     # Delegate methods to maintain compatibility
     def get_auth_url(self):
         return self.auth.get_auth_url()
-    
+
     def search_customers(self, query):
         return self.customers.search_customers(query)
-    
+
     def create_sales_receipt(self, donation):
         return self.sales_receipts.create_sales_receipt(donation)
 ```
@@ -283,7 +283,7 @@ class RateLimiter:
     def __init__(self, max_requests_per_minute=60):
         self.max_requests = max_requests_per_minute
         self.requests = []
-    
+
     def wait_if_needed(self):
         """Wait if rate limit would be exceeded."""
         # Move from gemini_service.py lines 46-86
@@ -299,11 +299,11 @@ from botocore.exceptions import ClientError
 class S3Handler:
     def __init__(self):
         self.s3_client = boto3.client('s3')
-    
+
     def download_file(self, bucket, key, local_path):
         """Download file from S3."""
         # Move from tasks.py lines 121-155
-    
+
     def upload_file(self, local_path, bucket, key):
         """Upload file to S3."""
         # Add complementary upload functionality
@@ -324,7 +324,7 @@ class S3Handler:
 ### 3. **Migration Path**
 ```python
 # Step 1: Create new module structure
-# Step 2: Copy functionality to new modules  
+# Step 2: Copy functionality to new modules
 # Step 3: Update imports to use new modules
 # Step 4: Add deprecation warnings to old code
 # Step 5: Remove old code after verification
@@ -367,7 +367,7 @@ class S3Handler:
 ## 📅 Timeline
 
 - **Week 1-2**: Phase 1 - app.py breakdown
-- **Week 3**: Phase 2 - qbo_service.py modularization  
+- **Week 3**: Phase 2 - qbo_service.py modularization
 - **Week 4**: Phase 3 - Minor extractions and cleanup
 - **Week 5**: Testing, documentation, and deployment
 - **Week 6**: Team training and knowledge transfer

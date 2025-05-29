@@ -1,5 +1,5 @@
-"""
-Temporary file management for async uploads.
+"""Temporary file management for async uploads.
+
 Stores uploaded files temporarily and provides references for Celery tasks.
 """
 
@@ -17,6 +17,11 @@ class TempFileManager:
     """Manages temporary file storage for async processing."""
 
     def __init__(self):
+        """Initialize the temporary file manager.
+
+        Creates a dedicated temporary directory for managing uploaded files
+        during async processing.
+        """
         # Create a dedicated temp directory for uploads
         self.temp_dir = os.path.join(tempfile.gettempdir(), "fom_qbo_uploads")
         os.makedirs(self.temp_dir, exist_ok=True)
@@ -60,7 +65,9 @@ class TempFileManager:
             with open(metadata_path, "w") as f:
                 json.dump(metadata, f)
 
-            logger.info(f"Saved file {file.filename} to {temp_path} ({metadata['size_bytes']} bytes)")
+            logger.info(
+                f"Saved file {file.filename} to {temp_path} ({metadata['size_bytes']} bytes)"
+            )
 
             return metadata
 

@@ -5,7 +5,7 @@ I've provided an image file. Please extract the donation information.
 
 THIS IMAGE SET CONTAINS:
 1. ⛔ A DEPOSIT SLIP with a date - THIS IS THE DEPOSIT DATE ONLY
-2. ✅ Individual CHECKS - each has its OWN Check Date  
+2. ✅ Individual CHECKS - each has its OWN Check Date
 
 YOUR MANDATORY PROCESS:
 1. The deposit slip date is ONLY for the "Deposit Date" field

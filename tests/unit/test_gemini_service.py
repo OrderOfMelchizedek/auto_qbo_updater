@@ -11,13 +11,15 @@ from PIL import Image
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
 # Mock genai before importing GeminiService
-sys.modules['google.generativeai'] = MagicMock()
+sys.modules["google.generativeai"] = MagicMock()
 import google.generativeai as genai
 
 from utils.gemini_service import GeminiService
 
 
 class TestGeminiService(unittest.TestCase):
+    """Test cases for GeminiService class."""
+
     def setUp(self):
         self.api_key = "test_api_key"
 
@@ -75,7 +77,7 @@ class TestGeminiService(unittest.TestCase):
         with patch("src.utils.gemini_service.Image.open") as mock_image_open:
             # Create a real PIL Image instead of a mock
             # This is needed because Gemini SDK checks the type
-            test_image = Image.new('RGB', (100, 100), color='white')
+            test_image = Image.new("RGB", (100, 100), color="white")
             mock_image_open.return_value = test_image
 
             # Mock response from Gemini
@@ -89,10 +91,11 @@ class TestGeminiService(unittest.TestCase):
                 "Gift Date": "01/01/2025"
             }
             """
+
             # Override the default mock for this specific test
             def custom_generate_content(contents, *args, **kwargs):
                 return mock_response
-            
+
             self.mock_model.generate_content = custom_generate_content
 
             # Test the method
@@ -112,7 +115,9 @@ class TestGeminiService(unittest.TestCase):
     @patch("PyPDF2.PdfReader")
     @patch("fitz.open")
     @patch("src.utils.gemini_service.Image.open")
-    def test_extract_donation_data_pdf(self, mock_image_open, mock_fitz_open, mock_pdf_reader, mock_splitext):
+    def test_extract_donation_data_pdf(
+        self, mock_image_open, mock_fitz_open, mock_pdf_reader, mock_splitext
+    ):
         """Test extraction from a PDF file."""
         # Mock file extension check
         mock_splitext.return_value = ["test", ".pdf"]
@@ -143,10 +148,11 @@ class TestGeminiService(unittest.TestCase):
                 }
             ]
             """
+
             # Override the default mock for this specific test
             def custom_generate_content(contents, *args, **kwargs):
                 return mock_response
-            
+
             self.mock_model.generate_content = custom_generate_content
 
             # Mock PyPDF2 reader
@@ -170,7 +176,7 @@ class TestGeminiService(unittest.TestCase):
 
             # Mock PIL Image
             # Create a real PIL Image instead of a mock
-            test_image = Image.new('RGB', (100, 100), color='white')
+            test_image = Image.new("RGB", (100, 100), color="white")
             mock_image_open.return_value = test_image
 
             # Call the method being tested
@@ -202,10 +208,11 @@ class TestGeminiService(unittest.TestCase):
             }
         ]
         """
+
         # Override the default mock for this specific test
         def custom_generate_content(contents, *args, **kwargs):
             return mock_response
-        
+
         self.mock_model.generate_content = custom_generate_content
 
         # Test the method
@@ -227,9 +234,9 @@ class TestGeminiService(unittest.TestCase):
         # JSON inside text
         text_with_json = """
         Here is the extracted data:
-        
+
         {"name": "John", "amount": "100.00"}
-        
+
         Let me know if you need anything else.
         """
         result = self.service._extract_json_from_text(text_with_json)

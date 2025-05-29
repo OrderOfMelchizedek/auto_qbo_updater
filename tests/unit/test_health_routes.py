@@ -57,7 +57,9 @@ class TestHealthRoutes:
 
             # Mock high memory usage (80%)
             mock_proc_instance = Mock()
-            mock_proc_instance.memory_info.return_value = Mock(rss=410 * 1024 * 1024)  # 410MB of 512MB
+            mock_proc_instance.memory_info.return_value = Mock(
+                rss=410 * 1024 * 1024
+            )  # 410MB of 512MB
             mock_proc_instance.create_time.return_value = 1234567890
             mock_proc_instance.cpu_percent.return_value = 15.5
             mock_process.return_value = mock_proc_instance

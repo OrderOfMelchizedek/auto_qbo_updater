@@ -108,7 +108,7 @@ Desktop.ini
 *~
 
 # Project specific
-uploads/ 
+uploads/
 qbo api client ID and secret.md
 CLAUDE.md
 
@@ -129,4 +129,3 @@ CLAUDE.md
 # !docs/prompts_archive/
 # !docs/FOM_deposit_report_header_descriptions_2025-04-12.md
 # !docs/FOM Deposit Assistant Prompt 2025-04-12.md
-

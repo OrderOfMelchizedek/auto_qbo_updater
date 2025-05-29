@@ -71,11 +71,11 @@ class TestPromptManager(unittest.TestCase):
     def setUp(self):
         # Set up code here
         pass
-        
+
     def tearDown(self):
         # Clean up code here
         pass
-        
+
     def test_something(self):
         # Test code here
         pass
@@ -92,7 +92,7 @@ def test_extract_donation_data_success(self, mock_image_open):
     # Mock setup
     mock_image = MagicMock()
     mock_image_open.return_value = mock_image
-    
+
     # Test code
     # ...
 ```

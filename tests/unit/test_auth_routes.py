@@ -25,7 +25,7 @@ class TestAuthRoutes:
 
         # Set the mock on the app
         app.qbo_service = mock_qbo_service
-        
+
         with client.session_transaction() as sess:
             sess["qbo_authenticated"] = True
             sess["qbo_company_id"] = "test-company-123"
@@ -45,7 +45,7 @@ class TestAuthRoutes:
         """Test auth status when not authenticated."""
         mock_qbo_service.access_token = None
         mock_qbo_service.environment = "sandbox"
-        
+
         # Set the mock on the app
         app.qbo_service = mock_qbo_service
 
@@ -61,7 +61,7 @@ class TestAuthRoutes:
     def test_qbo_authorize_redirect(self, client, app, mock_qbo_service):
         """Test QBO authorization redirect."""
         mock_qbo_service.get_authorization_url.return_value = "https://test.intuit.com/auth"
-        
+
         # Set the mock on the app
         app.qbo_service = mock_qbo_service
 
@@ -112,7 +112,7 @@ class TestAuthRoutes:
     def test_qbo_callback_exchange_failure(self, client, app, mock_qbo_service):
         """Test QBO callback when token exchange fails."""
         mock_qbo_service.get_tokens.return_value = False
-        
+
         # Set the mock on the app
         app.qbo_service = mock_qbo_service
 
@@ -125,7 +125,7 @@ class TestAuthRoutes:
         """Test successful QBO disconnect."""
         mock_qbo_service.clear_tokens = Mock()
         mock_qbo_service.redis_client = None  # No Redis in test
-        
+
         # Set the mock on the app
         app.qbo_service = mock_qbo_service
 
@@ -148,8 +148,8 @@ class TestAuthRoutes:
     def test_disconnect_with_error(self, client, app, mock_qbo_service):
         """Test QBO disconnect with error during token clearing."""
         mock_qbo_service.clear_tokens.side_effect = Exception("Clear tokens error")
-        mock_qbo_service.redis_client = Mock()  # Has Redis 
-        
+        mock_qbo_service.redis_client = Mock()  # Has Redis
+
         # Set the mock on the app
         app.qbo_service = mock_qbo_service
 

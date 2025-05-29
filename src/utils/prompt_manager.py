@@ -14,7 +14,7 @@ class PromptManager:
             prompt_dir: Directory containing prompt files
         """
         self.prompt_dir = prompt_dir
-        self.prompt_cache = {}  # Cache for loaded prompts
+        self.prompt_cache: Dict[str, str] = {}  # Cache for loaded prompts
 
     def get_prompt(self, prompt_name: str, placeholders: Dict[str, str] = None) -> str:
         """Load a prompt from file with caching and replace placeholders.

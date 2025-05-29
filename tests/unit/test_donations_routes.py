@@ -149,7 +149,10 @@ class TestDonationsRoutes:
             sess["donations"] = []  # Empty donations list
 
         response = client.put(
-            "/donations/donation_1", json={}, content_type="application/json", headers={"X-CSRFToken": "test-token"}
+            "/donations/donation_1",
+            json={},
+            content_type="application/json",
+            headers={"X-CSRFToken": "test-token"},
         )
 
         assert response.status_code == 404
@@ -171,7 +174,9 @@ class TestDonationsRoutes:
             sess["session_id"] = "test-session"
 
         with patch("src.routes.donations.log_audit_event") as mock_audit:
-            response = client.post("/donations/remove-invalid", headers={"X-CSRFToken": "test-token"})
+            response = client.post(
+                "/donations/remove-invalid", headers={"X-CSRFToken": "test-token"}
+            )
 
             assert response.status_code == 200
             data = json.loads(response.data)

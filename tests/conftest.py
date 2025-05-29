@@ -46,16 +46,19 @@ class MockRedis:
         self.data = {}
 
     def ping(self):
+        """Simulate Redis ping command."""
         return True
 
     def get(self, key):
+        """Get value for given key from mock storage."""
         return self.data.get(key)
 
     def set(self, *args, **kwargs):
+        """Set key-value pair in mock storage, supporting multiple calling conventions."""
         # Handle multiple calling conventions:
         # 1. Regular Redis: set(key, value, ...)
         # 2. Flask-Session: set(name=key, value=value, ...)
-        
+
         if args:
             # Traditional positional arguments
             key = args[0]
@@ -64,24 +67,28 @@ class MockRedis:
             # Keyword arguments (Flask-Session style)
             key = kwargs.get("name", kwargs.get("key", ""))
             value = kwargs.get("value", "")
-        
+
         if key:
             self.data[key] = value
         return True
 
     def setex(self, key, time, value, **kwargs):
+        """Set key with expiration time (expiration is ignored in mock)."""
         self.data[key] = value
         return True
 
     def delete(self, key):
+        """Delete key from mock storage."""
         if key in self.data:
             del self.data[key]
         return True
 
     def exists(self, key):
+        """Check if key exists in mock storage."""
         return key in self.data
 
     def info(self):
+        """Return mock Redis server information."""
         return {"redis_version": "test", "used_memory_human": "1M"}
 
 
@@ -161,7 +168,10 @@ def mock_gemini_service():
         "Check No.": "1234",
         "Check Date": "2024-01-01",
     }
-    mock_service.verify_customer_match.return_value = {"validMatch": True, "matchConfidence": "High"}
+    mock_service.verify_customer_match.return_value = {
+        "validMatch": True,
+        "matchConfidence": "High",
+    }
     return mock_service
 
 

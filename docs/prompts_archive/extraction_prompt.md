@@ -24,7 +24,7 @@ For EACH check:
 - ❌ NOT using the deposit slip date for Check Date
 
 Please extract ONLY the donation check information from the document and return it in STRICT JSON format.
-VERY IMPORTANT: 
+VERY IMPORTANT:
 - Extract ONLY actual donation checks with check numbers and amounts
 - Do NOT extract summary totals, deposit slip headers, or memo lines that aren't part of a specific check
 - Each check should have its OWN date - do not apply one date to all checks
@@ -59,7 +59,7 @@ These fields are REQUIRED and MUST have a value (not null):
 
 These fields should be extracted if available, but use null if not found:
 - First Name
-- Last Name  
+- Last Name
 - Address - Line 1
 - City
 - State
@@ -80,7 +80,7 @@ For "Deposit Date" - This is when the batch was deposited at the bank:
   - This is the SAME for all checks in a batch
   - If not specified, use today's date (2025-05-24)
 
-EXTREMELY IMPORTANT: 
+EXTREMELY IMPORTANT:
 - Each check MUST have its OWN Check Date read from that individual check
 - Do NOT apply the same Check Date to all checks in a batch
 - The Deposit Date can be the same for all checks (that's expected)

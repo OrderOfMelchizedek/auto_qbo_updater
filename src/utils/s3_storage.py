@@ -9,7 +9,14 @@ logger = logging.getLogger(__name__)
 
 
 class S3Storage:
+    """Handle file storage operations with Amazon S3."""
+
     def __init__(self):
+        """Initialize S3 storage client.
+
+        Configures the S3 client using AWS credentials from environment variables
+        and sets up the bucket name for storage operations.
+        """
         self.s3_client = boto3.client(
             "s3",
             aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
@@ -18,10 +25,14 @@ class S3Storage:
         )
         self.bucket_name = os.environ.get("S3_BUCKET_NAME", "fom-qbo-uploads")
 
-    def upload_file(self, file_content: bytes, key: str, content_type: str = "application/octet-stream") -> Dict:
+    def upload_file(
+        self, file_content: bytes, key: str, content_type: str = "application/octet-stream"
+    ) -> Dict:
         """Upload a file to S3 and return the reference."""
         try:
-            self.s3_client.put_object(Bucket=self.bucket_name, Key=key, Body=file_content, ContentType=content_type)
+            self.s3_client.put_object(
+                Bucket=self.bucket_name, Key=key, Body=file_content, ContentType=content_type
+            )
 
             logger.info(f"Uploaded file to S3: {key}")
 
@@ -53,7 +64,7 @@ class S3Storage:
             logger.info(f"Deleted file from S3: {key}")
 
         except ClientError as e:
-            logger.error(f"Failed to delete from S3: {e}")
+            logger.error(f"Failed to delete from S3: {e}")  # nosec B608 - Not SQL
             raise
 
     def generate_key(self, session_id: str, filename: str) -> str:

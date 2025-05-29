@@ -49,7 +49,11 @@ class TestQBOIntegration(unittest.TestCase):
         mock_response.json.return_value = {
             "QueryResponse": {
                 "Customer": [
-                    {"Id": "123", "DisplayName": "John Smith", "PrimaryEmailAddr": {"Address": "john@example.com"}}
+                    {
+                        "Id": "123",
+                        "DisplayName": "John Smith",
+                        "PrimaryEmailAddr": {"Address": "john@example.com"},
+                    }
                 ]
             }
         }

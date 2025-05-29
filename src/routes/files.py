@@ -1,3 +1,5 @@
+"""Routes for file upload and processing operations."""
+
 import logging
 import os
 import uuid
@@ -186,7 +188,9 @@ def upload_files():
         file_data_list = []
         for idx, file in enumerate(files):
             if file and file.filename:
-                file_data_list.append({"file_storage": file, "filename": file.filename, "index": idx})
+                file_data_list.append(
+                    {"file_storage": file, "filename": file.filename, "index": idx}
+                )
 
         if not file_data_list:
             return jsonify({"error": "No valid files to process"}), 400
@@ -228,10 +232,15 @@ def upload_files():
                             }
                         )
                         all_donations.extend(result["donations"])
-                        log_progress(f"Processed {result['filename']}: {len(result['donations'])} donations", progress)
+                        log_progress(
+                            f"Processed {result['filename']}: {len(result['donations'])} donations",
+                            progress,
+                        )
                     else:
                         errors.append({"filename": result["filename"], "error": result["error"]})
-                        log_progress(f"Error processing {result['filename']}: {result['error']}", progress)
+                        log_progress(
+                            f"Error processing {result['filename']}: {result['error']}", progress
+                        )
 
                     # Clean up uploaded file
                     if result.get("file_path"):
@@ -239,7 +248,9 @@ def upload_files():
                         cleanup_uploaded_file(result["file_path"])
 
                 except Exception as e:
-                    logger.error(f"Error processing {file_data['filename']}: {str(e)}", exc_info=True)
+                    logger.error(
+                        f"Error processing {file_data['filename']}: {str(e)}", exc_info=True
+                    )
                     errors.append({"filename": file_data["filename"], "error": str(e)})
 
                 # Memory cleanup after each file
@@ -256,7 +267,9 @@ def upload_files():
             existing_donations = session.get("donations", [])
 
             # Use deduplication service
-            unique_donations = DeduplicationService.deduplicate_donations(existing_donations, all_donations)
+            unique_donations = DeduplicationService.deduplicate_donations(
+                existing_donations, all_donations
+            )
 
             # Store in session
             session["donations"] = unique_donations

@@ -36,7 +36,9 @@ class BatchProcessor:
     PDF_BATCH_SIZE = 10  # Pages per PDF batch
     MAX_CONCURRENT_BATCHES = 10  # Maximum concurrent API calls
 
-    def __init__(self, gemini_service: GeminiService, progress_logger: Optional[ProgressLogger] = None):
+    def __init__(
+        self, gemini_service: GeminiService, progress_logger: Optional[ProgressLogger] = None
+    ):
         """Initialize the batch processor.
 
         Args:
@@ -151,7 +153,9 @@ class BatchProcessor:
         # Process batches concurrently
         with ThreadPoolExecutor(max_workers=self.MAX_CONCURRENT_BATCHES) as executor:
             # Submit all batches for processing
-            future_to_batch = {executor.submit(self._process_single_batch, batch): batch for batch in batches}
+            future_to_batch = {
+                executor.submit(self._process_single_batch, batch): batch for batch in batches
+            }
 
             # Process completed batches as they finish
             for future in as_completed(future_to_batch):
@@ -162,14 +166,18 @@ class BatchProcessor:
 
                     # Aggregate results
                     if donations:
-                        all_donations.extend(donations if isinstance(donations, list) else [donations])
+                        all_donations.extend(
+                            donations if isinstance(donations, list) else [donations]
+                        )
                     if errors:
                         all_errors.extend(errors if isinstance(errors, list) else [errors])
 
                     # Update progress
                     processed_count += 1
                     if self.progress_logger and task_id:
-                        self.progress_logger.log(f"Processed {processed_count}/{total_batches} batches")
+                        self.progress_logger.log(
+                            f"Processed {processed_count}/{total_batches} batches"
+                        )
 
                 except Exception as e:
                     error_msg = f"Error processing batch {batch.batch_id}: {str(e)}"
@@ -179,7 +187,9 @@ class BatchProcessor:
                     # Still update progress on error
                     processed_count += 1
                     if self.progress_logger and task_id:
-                        self.progress_logger.log(f"Processed {processed_count}/{total_batches} batches (with errors)")
+                        self.progress_logger.log(
+                            f"Processed {processed_count}/{total_batches} batches (with errors)"
+                        )
 
         # Final progress update
         if self.progress_logger and task_id:
@@ -187,7 +197,9 @@ class BatchProcessor:
 
         return all_donations, all_errors
 
-    def _process_single_batch(self, batch: ProcessingBatch) -> Tuple[List[Dict[str, Any]], List[str]]:
+    def _process_single_batch(
+        self, batch: ProcessingBatch
+    ) -> Tuple[List[Dict[str, Any]], List[str]]:
         """Process a single batch.
 
         Args:
@@ -226,7 +238,9 @@ class BatchProcessor:
         return donations, errors
 
     @memory_monitor.monitor_function
-    def _process_pdf_batch(self, batch: ProcessingBatch) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
+    def _process_pdf_batch(
+        self, batch: ProcessingBatch
+    ) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
         """Process a PDF batch with its pages, images, and text.
 
         Args:

@@ -2,7 +2,7 @@
 
 [bandit]
 # Test IDs to skip
-skips: 
+skips:
   # B608: SQL injection - False positive, we properly escape with _escape_query_value()
   - B608
   # B101: assert_used - We use assert for type checking in non-security contexts
@@ -52,7 +52,7 @@ tests:
   - B323  # unverified_context usage
   - B324  # hashlib insecure
   - B325  # tempnam usage
-  
+
   # Medium priority - code quality and potential issues
   - B102  # exec_used
   - B103  # set_bad_file_permissions
@@ -64,7 +64,7 @@ tests:
   - B110  # try_except_pass
   - B112  # try_except_continue
   - B113  # request_without_timeout
-  
+
   # Low priority - best practices
   - B401  # import_telnetlib
   - B402  # import_ftplib

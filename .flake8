@@ -6,7 +6,7 @@ max-line-length = 120
 max-complexity = 20
 
 # Exclude directories that shouldn't be linted
-exclude = 
+exclude =
     .git,
     __pycache__,
     venv,
@@ -22,7 +22,7 @@ exclude =
     scripts
 
 # Ignore non-critical issues while still catching real problems
-ignore = 
+ignore =
     # E501: Line too long - handled by black, 120 is reasonable
     E501,
     # E203: Whitespace before ':' - conflicts with black
@@ -67,7 +67,7 @@ per-file-ignores =
 # Focus on catching real issues:
 # - E9xx: Syntax errors (critical)
 # - F63x: Incorrect use of assertions
-# - F7xx: Syntax errors and undefined names  
+# - F7xx: Syntax errors and undefined names
 # - F82x: Undefined names (critical)
 # These are checked by the first flake8 command in CI
 

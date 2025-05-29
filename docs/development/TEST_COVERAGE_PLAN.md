@@ -4,7 +4,7 @@
 
 ### ✅ Working Tests (16 tests passing)
 - `test_prompt_manager.py` - 100% coverage on PromptManager
-- `test_csv_parser.py` - 81% coverage on CSVParser  
+- `test_csv_parser.py` - 81% coverage on CSVParser
 - `test_gemini_service.py` - 64% coverage on GeminiService
 
 ### ❌ Broken Tests (60 tests failing)
@@ -32,7 +32,7 @@ Most failures due to:
 
 **Target functions for 70% coverage:**
 - `validate_donation_date()` - Date validation logic
-- `normalize_*()` functions - Data normalization  
+- `normalize_*()` functions - Data normalization
 - `generate_secure_filename()` - Security function
 - `validate_file_content()` - File validation
 - Route handlers: `/upload`, `/donations`, `/qbo/*`
@@ -40,7 +40,7 @@ Most failures due to:
 #### src/utils/qbo_service.py (1125 lines, 0% coverage)
 **Critical functions:**
 - OAuth flow (`get_tokens`, `refresh_access_token`)
-- Customer operations (`find_customer`, `get_all_customers`) 
+- Customer operations (`find_customer`, `get_all_customers`)
 - CRUD operations (`create_customer`, `create_sales_receipt`)
 - Caching functions (`_is_cache_valid`, `_update_customer_cache`)
 
@@ -54,7 +54,7 @@ Most failures due to:
 
 #### High-Impact Areas:
 1. **Error handling and exception paths**
-2. **Security validation functions** 
+2. **Security validation functions**
 3. **Data transformation and normalization**
 4. **Flask route integration tests**
 5. **Performance optimization features (caching, pagination)**
@@ -63,7 +63,7 @@ Most failures due to:
 
 ### Phase 1: Fix Broken Tests (Target: 50% coverage)
 1. Fix import issues in all test files
-2. Correct function signature expectations  
+2. Correct function signature expectations
 3. Fix mock configurations
 4. Update return type expectations
 
@@ -74,7 +74,7 @@ Most failures due to:
 
 ### Phase 3: Add Edge Cases & Security Tests (Target: 70%+)
 1. Error handling paths
-2. Security validation edge cases  
+2. Security validation edge cases
 3. Performance optimization features
 4. Integration scenarios
 
@@ -88,7 +88,7 @@ Most failures due to:
 
 ### New Tests Needed:
 - `tests/test_app_routes.py` - Flask route testing
-- `tests/test_app_helpers.py` - Helper function testing  
+- `tests/test_app_helpers.py` - Helper function testing
 - `tests/test_qbo_service_comprehensive.py` - Full QBO service testing
 - `tests/test_file_processor_comprehensive.py` - File processing testing
 - `tests/test_security_comprehensive.py` - Security feature testing

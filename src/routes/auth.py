@@ -1,3 +1,5 @@
+"""Authentication routes for QuickBooks OAuth flow."""
+
 import logging
 from datetime import datetime
 
@@ -101,7 +103,10 @@ def qbo_status():
             try:
                 company_info = qbo_service.get_company_info()
                 if company_info:
-                    status["company"] = {"name": company_info.get("CompanyName"), "id": company_info.get("Id")}
+                    status["company"] = {
+                        "name": company_info.get("CompanyName"),
+                        "id": company_info.get("Id"),
+                    }
             except Exception as e:
                 logger.error(f"Error fetching company info: {e}")
                 status["company_error"] = str(e)

@@ -3,7 +3,7 @@ Here is the raw CSV content:
 
 {{csv_content}}
 
-Please extract all donation records from this CSV file. 
+Please extract all donation records from this CSV file.
 VERY IMPORTANT: Return ONLY a valid JSON array containing objects with these fields, with NO additional text before or after:
 
 [
@@ -15,7 +15,7 @@ VERY IMPORTANT: Return ONLY a valid JSON array containing objects with these fie
     "Gift Amount": "string (REQUIRED)",
     "Check Date": "string (REQUIRED)",
     "Deposit Date": "today's date",
-    "Deposit Method": "Online Donation", 
+    "Deposit Method": "Online Donation",
     "Memo": "string or null",
     "First Name": "string (REQUIRED)",
     "Last Name": "string (REQUIRED)",

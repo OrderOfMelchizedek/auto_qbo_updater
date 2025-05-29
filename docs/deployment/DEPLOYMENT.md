@@ -7,7 +7,7 @@ This guide covers deploying the FOM to QuickBooks automation application to Hero
 1. **Heroku Account**: Sign up at [heroku.com](https://www.heroku.com/)
 2. **Heroku CLI**: Install from [devcenter.heroku.com/articles/heroku-cli](https://devcenter.heroku.com/articles/heroku-cli)
 3. **Git**: Ensure your code is committed to Git
-4. **Production API Credentials**: 
+4. **Production API Credentials**:
    - QuickBooks Production App credentials
    - Google Gemini API key
 
@@ -181,10 +181,10 @@ heroku pg:backups:download
    ```bash
    # Check logs for specific error
    heroku logs --tail
-   
+
    # Ensure all environment variables are set
    heroku config
-   
+
    # Restart the application
    heroku restart
    ```
@@ -198,7 +198,7 @@ heroku pg:backups:download
    ```bash
    # Verify Redis is provisioned
    heroku addons
-   
+
    # Check Redis connection
    heroku redis:cli
    > PING
@@ -209,7 +209,7 @@ heroku pg:backups:download
    ```bash
    # Check memory usage
    heroku ps
-   
+
    # Scale to larger dyno if needed
    heroku ps:resize web=standard-2x
    ```

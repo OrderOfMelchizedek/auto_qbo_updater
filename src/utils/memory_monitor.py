@@ -17,6 +17,11 @@ class MemoryMonitor:
     """Monitor and manage memory usage in the application."""
 
     def __init__(self):
+        """Initialize the memory monitor.
+
+        Sets up process monitoring using psutil if available, and configures
+        memory thresholds for warnings and critical alerts.
+        """
         if PSUTIL_AVAILABLE:
             self.process = psutil.Process(os.getpid())
         else:
@@ -27,7 +32,13 @@ class MemoryMonitor:
     def get_memory_usage(self) -> dict:
         """Get current memory usage statistics."""
         if not PSUTIL_AVAILABLE or not self.process:
-            return {"rss_mb": 0, "vms_mb": 0, "percent": 0, "available_mb": 0, "error": "psutil not available"}
+            return {
+                "rss_mb": 0,
+                "vms_mb": 0,
+                "percent": 0,
+                "available_mb": 0,
+                "error": "psutil not available",
+            }
 
         try:
             memory_info = self.process.memory_info()
@@ -50,11 +61,15 @@ class MemoryMonitor:
         )
 
         if stats["rss_mb"] > self.critical_memory_threshold_mb:
-            print(f"[Memory Monitor] CRITICAL: Memory usage exceeds {self.critical_memory_threshold_mb}MB!")
+            print(
+                f"[Memory Monitor] CRITICAL: Memory usage exceeds {self.critical_memory_threshold_mb}MB!"
+            )
             # Force garbage collection
             self.force_cleanup()
         elif stats["rss_mb"] > self.high_memory_threshold_mb:
-            print(f"[Memory Monitor] WARNING: Memory usage exceeds {self.high_memory_threshold_mb}MB")
+            print(
+                f"[Memory Monitor] WARNING: Memory usage exceeds {self.high_memory_threshold_mb}MB"
+            )
 
     def log_memory(self, context: str = ""):
         """Alias for log_memory_usage for backward compatibility."""

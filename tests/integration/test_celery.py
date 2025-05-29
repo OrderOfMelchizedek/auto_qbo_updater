@@ -31,7 +31,9 @@ def test_celery_connection():
             print(f"Active workers: {list(stats.keys())}")
         else:
             print("⚠️  No Celery workers are currently running.")
-            print("Start a worker with: celery -A src.utils.celery_app:celery_app worker --loglevel=info")
+            print(
+                "Start a worker with: celery -A src.utils.celery_app:celery_app worker --loglevel=info"
+            )
     except Exception as e:
         print(f"❌ Error connecting to Celery: {e}")
         print("Make sure Redis is running and REDIS_URL is set correctly.")
@@ -52,7 +54,9 @@ def test_simple_task():
         ]
 
         # Submit task
-        result = process_files_task.apply_async(args=[test_data], kwargs={"session_id": "test-session"})
+        result = process_files_task.apply_async(
+            args=[test_data], kwargs={"session_id": "test-session"}
+        )
 
         print(f"✅ Task submitted successfully!")
         print(f"Task ID: {result.id}")

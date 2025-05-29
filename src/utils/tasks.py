@@ -57,7 +57,13 @@ class CallbackTask(Task):
 )
 @memory_monitor.monitor_function
 def process_files_task(
-    self, s3_references=None, file_references=None, files_data=None, session_id=None, qbo_config=None, gemini_model=None
+    self,
+    s3_references=None,
+    file_references=None,
+    files_data=None,
+    session_id=None,
+    qbo_config=None,
+    gemini_model=None,
 ):
     """
     Process uploaded files asynchronously.
@@ -93,7 +99,9 @@ def process_files_task(
         qbo_redirect_uri = os.environ.get("QBO_REDIRECT_URI", "http://localhost:5000/qbo/callback")
 
         if not qbo_client_id or not qbo_client_secret:
-            raise ValueError("QBO_CLIENT_ID and QBO_CLIENT_SECRET environment variables must be set")
+            raise ValueError(
+                "QBO_CLIENT_ID and QBO_CLIENT_SECRET environment variables must be set"
+            )
 
         qbo_service = QBOService(
             client_id=qbo_client_id,
@@ -162,8 +170,12 @@ def process_files_task(
                     )
 
                 except Exception as e:
-                    logger.error(f"Error downloading from S3: {s3_ref.get('filename', 'unknown')}: {str(e)}")
-                    processing_errors.append(f"Failed to download {s3_ref.get('filename', 'unknown')}: {str(e)}")
+                    logger.error(
+                        f"Error downloading from S3: {s3_ref.get('filename', 'unknown')}: {str(e)}"
+                    )
+                    processing_errors.append(
+                        f"Failed to download {s3_ref.get('filename', 'unknown')}: {str(e)}"
+                    )
 
         elif file_references:
             # Temp file method: files already saved to temp storage
@@ -209,13 +221,19 @@ def process_files_task(
                         {
                             "path": filepath,
                             "filename": filename,
-                            "content_type": file_data.get("content_type", "application/octet-stream"),
+                            "content_type": file_data.get(
+                                "content_type", "application/octet-stream"
+                            ),
                         }
                     )
 
                 except Exception as e:
-                    logger.error(f"Error saving file {file_data.get('filename', 'unknown')}: {str(e)}")
-                    processing_errors.append(f"Failed to save {file_data.get('filename', 'unknown')}: {str(e)}")
+                    logger.error(
+                        f"Error saving file {file_data.get('filename', 'unknown')}: {str(e)}"
+                    )
+                    processing_errors.append(
+                        f"Failed to save {file_data.get('filename', 'unknown')}: {str(e)}"
+                    )
         else:
             raise ValueError("No files provided to process")
 
@@ -252,7 +270,9 @@ def process_files_task(
             finally:
                 # Force garbage collection after each file
                 gc.collect()
-                memory_monitor.log_memory_usage(f"After processing {file_info.get('filename', 'file')}")
+                memory_monitor.log_memory_usage(
+                    f"After processing {file_info.get('filename', 'file')}"
+                )
 
         # Clean up S3 files after processing
         if s3_references and "s3_storage" in locals():
@@ -292,7 +312,9 @@ def process_files_task(
 
                 try:
                     # Use the file_processor instance to match customers
-                    unique_donations = file_processor.match_donations_with_qbo_customers(unique_donations)
+                    unique_donations = file_processor.match_donations_with_qbo_customers(
+                        unique_donations
+                    )
 
                     # Log matching results
                     matched_count = sum(
@@ -349,9 +371,12 @@ def process_files_task(
             filtered_matched = sum(
                 1
                 for d in filtered_donations
-                if d.get("qbCustomerStatus") in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]
+                if d.get("qbCustomerStatus")
+                in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]
             )
-            logger.warning(f"Returning {len(filtered_donations)} donations with {filtered_matched} matched")
+            logger.warning(
+                f"Returning {len(filtered_donations)} donations with {filtered_matched} matched"
+            )
             for idx, donation in enumerate(filtered_donations[:4]):
                 logger.warning(
                     f"  Return {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}"
@@ -397,7 +422,8 @@ def process_files_task(
 
             if session_id:
                 log_progress(
-                    f"Processing complete! Found {len(unique_donations)} unique donations.", force_summary=True
+                    f"Processing complete! Found {len(unique_donations)} unique donations.",
+                    force_summary=True,
                 )
 
         else:
@@ -423,10 +449,10 @@ def process_files_task(
     finally:
         # Clean up temp directory
         if temp_dir_context:
-            try:
+            import contextlib
+
+            with contextlib.suppress(Exception):
                 temp_dir_context.__exit__(None, None, None)
-            except:
-                pass
 
         # Clean up temp files if using file references
         if file_references and session_id:

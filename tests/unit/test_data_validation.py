@@ -23,14 +23,18 @@ class TestDataValidation(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         # Mock environment variables for date validation
-        self.env_patcher = patch.dict(os.environ, {"DATE_WARNING_DAYS": "365", "FUTURE_DATE_LIMIT_DAYS": "7"})
+        self.env_patcher = patch.dict(
+            os.environ, {"DATE_WARNING_DAYS": "365", "FUTURE_DATE_LIMIT_DAYS": "7"}
+        )
         self.env_patcher.start()
-        
+
         # Reload the validation module to pick up new env vars
         import importlib
+
         import src.services.validation
+
         importlib.reload(src.services.validation)
-        
+
         # Re-import the functions
         from src.services.validation import (
             normalize_amount,
@@ -39,6 +43,7 @@ class TestDataValidation(unittest.TestCase):
             normalize_donor_name,
             validate_donation_date,
         )
+
         self.validate_donation_date = validate_donation_date
 
     def tearDown(self):
