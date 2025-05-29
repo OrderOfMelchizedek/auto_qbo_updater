@@ -19,8 +19,14 @@ class FOMQBOException(Exception):
 class ExternalAPIException(FOMQBOException):
     """Base exception for external API errors."""
 
-    def __init__(self, service, message, status_code=None, response_text=None, user_message=None):
-        details = {"service": service, "status_code": status_code, "response_text": response_text}
+    def __init__(
+        self, service, message, status_code=None, response_text=None, user_message=None
+    ):
+        details = {
+            "service": service,
+            "status_code": status_code,
+            "response_text": response_text,
+        }
         super().__init__(message, user_message, details)
         self.service = service
         self.status_code = status_code
@@ -30,33 +36,41 @@ class ExternalAPIException(FOMQBOException):
 class QBOAPIException(ExternalAPIException):
     """Exception for QuickBooks Online API errors."""
 
-    def __init__(self, message, status_code=None, response_text=None, user_message=None):
+    def __init__(
+        self, message, status_code=None, response_text=None, user_message=None
+    ):
         if not user_message:
             if status_code == 401:
-                user_message = "QuickBooks authentication expired. Please reconnect to QuickBooks."
+                user_message = (
+                    "QuickBooks authentication expired. Please reconnect to QuickBooks."
+                )
             elif status_code == 429:
-                user_message = (
-                    "Too many requests to QuickBooks. Please wait a moment and try again."
-                )
+                user_message = "Too many requests to QuickBooks. Please wait a moment and try again."
             elif status_code and status_code >= 500:
-                user_message = (
-                    "QuickBooks service is temporarily unavailable. Please try again later."
-                )
+                user_message = "QuickBooks service is temporarily unavailable. Please try again later."
             else:
                 user_message = "Error communicating with QuickBooks. Please try again."
 
-        super().__init__("QuickBooks", message, status_code, response_text, user_message)
+        super().__init__(
+            "QuickBooks", message, status_code, response_text, user_message
+        )
 
 
 class GeminiAPIException(ExternalAPIException):
     """Exception for Google Gemini API errors."""
 
-    def __init__(self, message, status_code=None, response_text=None, user_message=None):
+    def __init__(
+        self, message, status_code=None, response_text=None, user_message=None
+    ):
         if not user_message:
             if status_code == 429:
-                user_message = "AI processing limit reached. Please wait a moment and try again."
+                user_message = (
+                    "AI processing limit reached. Please wait a moment and try again."
+                )
             elif status_code >= 500:
-                user_message = "AI service is temporarily unavailable. Please try again later."
+                user_message = (
+                    "AI service is temporarily unavailable. Please try again later."
+                )
             else:
                 user_message = "Error processing with AI. Please try again."
 

@@ -23,7 +23,9 @@ except ModuleNotFoundError:
 class FileProcessor:
     """Service for processing different file types (images, PDFs) for donation extraction."""
 
-    def __init__(self, gemini_service: GeminiService, qbo_service=None, progress_logger=None):
+    def __init__(
+        self, gemini_service: GeminiService, qbo_service=None, progress_logger=None
+    ):
         """Initialize the file processor with Gemini and QBO services.
 
         Args:
@@ -49,7 +51,9 @@ class FileProcessor:
             List of dictionaries (for PDFs/CSVs with multiple donations) or None if extraction failed
         """
         if file_ext in [".jpg", ".jpeg", ".png"]:
-            return self._process_with_validation(self._process_image, file_path, file_ext)
+            return self._process_with_validation(
+                self._process_image, file_path, file_ext
+            )
         elif file_ext == ".pdf":
             return self._process_with_validation(self._process_pdf, file_path, file_ext)
         elif file_ext == ".csv":
@@ -76,7 +80,9 @@ class FileProcessor:
             return None
 
         # Convert to list if it's a single donation
-        donations_list = donation_data if isinstance(donation_data, list) else [donation_data]
+        donations_list = (
+            donation_data if isinstance(donation_data, list) else [donation_data]
+        )
 
         # Check if any donations need reprocessing for missing fields
         complete_donations = []
@@ -86,7 +92,14 @@ class FileProcessor:
         critical_fields = ["Donor Name", "Gift Amount", "Check Date", "Check No."]
 
         # Nice-to-have fields (we'll try to get these but won't reprocess just for them)
-        optional_fields = ["Address - Line 1", "City", "State", "ZIP", "First Name", "Last Name"]
+        optional_fields = [
+            "Address - Line 1",
+            "City",
+            "State",
+            "ZIP",
+            "First Name",
+            "Last Name",
+        ]
 
         for donation in donations_list:
             # Warn if Check Date equals Deposit Date (likely extraction error)
@@ -97,7 +110,9 @@ class FileProcessor:
                     )
 
             # Check for missing critical fields
-            missing_critical = [field for field in critical_fields if not donation.get(field)]
+            missing_critical = [
+                field for field in critical_fields if not donation.get(field)
+            ]
 
             if missing_critical:
                 # Critical fields are missing - must reprocess
@@ -109,7 +124,9 @@ class FileProcessor:
                 )
             else:
                 # Check optional fields just for logging
-                missing_optional = [field for field in optional_fields if not donation.get(field)]
+                missing_optional = [
+                    field for field in optional_fields if not donation.get(field)
+                ]
                 if missing_optional:
                     print(
                         f"Donation missing optional fields: {', '.join(missing_optional)}. Skipping reprocessing."
@@ -158,9 +175,11 @@ class FileProcessor:
                             r_check = str(r.get("Check No.", "")).strip()
 
                             # Match by donor name and/or check number
-                            if (donor_name and donor_name in r_donor or r_donor in donor_name) or (
-                                check_no and check_no == r_check
-                            ):
+                            if (
+                                donor_name
+                                and donor_name in r_donor
+                                or r_donor in donor_name
+                            ) or (check_no and check_no == r_check):
                                 matched_reprocessed = r
                                 break
 
@@ -197,7 +216,9 @@ class FileProcessor:
         # Match donations with QuickBooks customers if QBO service is available
         if self.qbo_service:
             print("Performing QBO customer matching for all donations...")
-            complete_donations = self.match_donations_with_qbo_customers_batch(complete_donations)
+            complete_donations = self.match_donations_with_qbo_customers_batch(
+                complete_donations
+            )
 
         # Return in the same format as the original data
         if isinstance(donation_data, list):
@@ -247,7 +268,9 @@ class FileProcessor:
             print(f"Error processing image {image_path}: {str(e)}")
             return None
 
-    def _process_pdf(self, pdf_path: str) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
+    def _process_pdf(
+        self, pdf_path: str
+    ) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
         """Process a PDF file.
 
         Args:
@@ -267,7 +290,9 @@ class FileProcessor:
             print(f"Error processing PDF {pdf_path}: {str(e)}")
             return None
 
-    def _process_csv(self, csv_path: str) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
+    def _process_csv(
+        self, csv_path: str
+    ) -> Optional[Union[Dict[str, Any], List[Dict[str, Any]]]]:
         """Process a CSV file using Gemini.
 
         Args:
@@ -310,7 +335,9 @@ class FileProcessor:
 
             # Match each donation with QuickBooks customers
             if donation_data and self.qbo_service:
-                donation_data = self.match_donations_with_qbo_customers_batch(donation_data)
+                donation_data = self.match_donations_with_qbo_customers_batch(
+                    donation_data
+                )
 
             return donation_data
 
@@ -402,7 +429,9 @@ class FileProcessor:
                         else:
                             match_method = "unknown field"
 
-                        print(f"Customer found using {match_method}: {customer.get('DisplayName')}")
+                        print(
+                            f"Customer found using {match_method}: {customer.get('DisplayName')}"
+                        )
                         break
 
                 if customer:
@@ -424,10 +453,14 @@ class FileProcessor:
                         donation["customerLookup"] = customer.get("DisplayName", "")
                         donation["qboCustomerId"] = customer.get("Id")
                         donation["matchMethod"] = match_method
-                        donation["matchConfidence"] = verification_result.get("matchConfidence")
+                        donation["matchConfidence"] = verification_result.get(
+                            "matchConfidence"
+                        )
 
                         if verification_result.get("addressMateriallyDifferent", False):
-                            print("Address is materially different - will need user confirmation")
+                            print(
+                                "Address is materially different - will need user confirmation"
+                            )
                             donation["qbCustomerStatus"] = "Matched-AddressNeedsReview"
                             donation["addressMateriallyDifferent"] = True
 
@@ -436,14 +469,21 @@ class FileProcessor:
                                 donation["qboAddress"] = {
                                     "Line1": bill_addr.get("Line1", ""),
                                     "City": bill_addr.get("City", ""),
-                                    "State": bill_addr.get("CountrySubDivisionCode", ""),
+                                    "State": bill_addr.get(
+                                        "CountrySubDivisionCode", ""
+                                    ),
                                     "ZIP": bill_addr.get("PostalCode", ""),
                                 }
                         else:
                             donation["qbCustomerStatus"] = "Matched"
 
                             if "enhancedData" in verification_result:
-                                preserved_fields = ["Gift Amount", "Gift Date", "Check No", "Memo"]
+                                preserved_fields = [
+                                    "Gift Amount",
+                                    "Gift Date",
+                                    "Check No",
+                                    "Memo",
+                                ]
                                 preserved_values = {
                                     field: donation.get(field)
                                     for field in preserved_fields
@@ -457,7 +497,9 @@ class FileProcessor:
                                 for field, value in preserved_values.items():
                                     donation[field] = value
 
-                                donation["customerLookup"] = customer.get("DisplayName", "")
+                                donation["customerLookup"] = customer.get(
+                                    "DisplayName", ""
+                                )
                     else:
                         mismatch_reason = verification_result.get(
                             "mismatchReason", "No specific reason provided"
@@ -466,7 +508,9 @@ class FileProcessor:
                         donation["qbCustomerStatus"] = "New"
                         donation["matchRejectionReason"] = mismatch_reason
                 else:
-                    print(f"No customer found for donation from: {donation.get('Donor Name')}")
+                    print(
+                        f"No customer found for donation from: {donation.get('Donor Name')}"
+                    )
                     donation["qbCustomerStatus"] = "New"
 
                 matched_donations.append(donation)
@@ -512,7 +556,10 @@ class FileProcessor:
                 match_method = None
                 lookup_strategies = [
                     # Strategy 1: Use explicit customerLookup field if available
-                    {"field": "customerLookup", "description": "explicit customerLookup field"},
+                    {
+                        "field": "customerLookup",
+                        "description": "explicit customerLookup field",
+                    },
                     # Strategy 2: Use donor name
                     {"field": "Donor Name", "description": "donor name"},
                     # Strategy 3: Use email if available
@@ -526,8 +573,12 @@ class FileProcessor:
                     lookup_value = donation.get(field)
 
                     if lookup_value and str(lookup_value).strip():
-                        print(f"Trying lookup with {strategy['description']}: {lookup_value}")
-                        potential_customer = self.qbo_service.find_customer(str(lookup_value))
+                        print(
+                            f"Trying lookup with {strategy['description']}: {lookup_value}"
+                        )
+                        potential_customer = self.qbo_service.find_customer(
+                            str(lookup_value)
+                        )
 
                         if potential_customer:
                             customer = potential_customer
@@ -557,11 +608,15 @@ class FileProcessor:
                         donation["customerLookup"] = customer.get("DisplayName", "")
                         donation["qboCustomerId"] = customer.get("Id")
                         donation["matchMethod"] = match_method
-                        donation["matchConfidence"] = verification_result.get("matchConfidence")
+                        donation["matchConfidence"] = verification_result.get(
+                            "matchConfidence"
+                        )
 
                         # Check if address is materially different (requiring user attention)
                         if verification_result.get("addressMateriallyDifferent", False):
-                            print("Address is materially different - will need user confirmation")
+                            print(
+                                "Address is materially different - will need user confirmation"
+                            )
                             donation["qbCustomerStatus"] = "Matched-AddressNeedsReview"
                             donation["addressMateriallyDifferent"] = True
 
@@ -571,7 +626,9 @@ class FileProcessor:
                                 donation["qboAddress"] = {
                                     "Line1": bill_addr.get("Line1", ""),
                                     "City": bill_addr.get("City", ""),
-                                    "State": bill_addr.get("CountrySubDivisionCode", ""),
+                                    "State": bill_addr.get(
+                                        "CountrySubDivisionCode", ""
+                                    ),
                                     "ZIP": bill_addr.get("PostalCode", ""),
                                 }
                         else:
@@ -582,7 +639,12 @@ class FileProcessor:
                             if "enhancedData" in verification_result:
                                 # Replace the donation with the enhanced data, but preserve
                                 # any fields that should always come from the extracted data
-                                preserved_fields = ["Gift Amount", "Gift Date", "Check No", "Memo"]
+                                preserved_fields = [
+                                    "Gift Amount",
+                                    "Gift Date",
+                                    "Check No",
+                                    "Memo",
+                                ]
                                 preserved_values = {
                                     field: donation.get(field)
                                     for field in preserved_fields
@@ -600,7 +662,9 @@ class FileProcessor:
 
                                 # Ensure customerLookup is always set to QBO DisplayName
                                 # (in case it was overwritten by enhancedData)
-                                donation["customerLookup"] = customer.get("DisplayName", "")
+                                donation["customerLookup"] = customer.get(
+                                    "DisplayName", ""
+                                )
                     else:
                         # This is not a valid match despite the fuzzy matching
                         mismatch_reason = verification_result.get(
@@ -610,7 +674,9 @@ class FileProcessor:
                         donation["qbCustomerStatus"] = "New"
                         donation["matchRejectionReason"] = mismatch_reason
                 else:
-                    print(f"No customer found for donation from: {donation.get('Donor Name')}")
+                    print(
+                        f"No customer found for donation from: {donation.get('Donor Name')}"
+                    )
                     donation["qbCustomerStatus"] = "New"
 
                 # Add the matched donation to the result list
@@ -643,8 +709,8 @@ class FileProcessor:
             print(f"Created {len(batches)} batches for concurrent processing")
 
             # Process all batches concurrently
-            all_donations, all_errors = self.batch_processor.process_batches_concurrently(
-                batches, task_id
+            all_donations, all_errors = (
+                self.batch_processor.process_batches_concurrently(batches, task_id)
             )
 
             # Perform validation and reprocessing on all donations
@@ -653,7 +719,12 @@ class FileProcessor:
                 validated_donations = []
 
                 # Critical fields that must be present
-                critical_fields = ["Donor Name", "Gift Amount", "Check Date", "Check No."]
+                critical_fields = [
+                    "Donor Name",
+                    "Gift Amount",
+                    "Check Date",
+                    "Check No.",
+                ]
 
                 for donation in all_donations:
                     # Check for missing critical fields
@@ -677,7 +748,9 @@ class FileProcessor:
                 # Match with QBO customers
                 if self.qbo_service and deduplicated:
                     print(f"Matching {len(deduplicated)} donations with QBO customers")
-                    deduplicated = self.match_donations_with_qbo_customers_batch(deduplicated)
+                    deduplicated = self.match_donations_with_qbo_customers_batch(
+                        deduplicated
+                    )
 
                 return deduplicated, all_errors
 
@@ -688,7 +761,9 @@ class FileProcessor:
             print(error_msg)
             return [], [error_msg]
 
-    def _deduplicate_donations(self, donations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _deduplicate_donations(
+        self, donations: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """Deduplicate donations based on key fields.
 
         Args:
@@ -705,7 +780,9 @@ class FileProcessor:
 
         for donation in donations:
             # Final safety check - skip donations missing critical fields
-            missing_critical = [field for field in critical_fields if not donation.get(field)]
+            missing_critical = [
+                field for field in critical_fields if not donation.get(field)
+            ]
             if missing_critical:
                 print(
                     f"WARNING: Skipping invalid donation during deduplication - missing: {', '.join(missing_critical)}"

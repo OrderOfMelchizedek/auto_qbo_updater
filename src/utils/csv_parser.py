@@ -70,7 +70,9 @@ class CSVParser:
             successful_encoding = encoding
 
             # Open the file again for actual parsing
-            with open(csv_path, "r", newline="", encoding=successful_encoding) as csvfile:
+            with open(
+                csv_path, "r", newline="", encoding=successful_encoding
+            ) as csvfile:
                 # Create a dictionary reader with the detected or fallback delimiter
                 reader = csv.DictReader(csvfile, delimiter=delimiter)
 
@@ -135,7 +137,9 @@ class CSVParser:
                         donation["Deposit Method"] = "Online Donation"
 
                     if "Deposit Date" not in donation:
-                        donation["Deposit Date"] = datetime.datetime.now().strftime("%m/%d/%Y")
+                        donation["Deposit Date"] = datetime.datetime.now().strftime(
+                            "%m/%d/%Y"
+                        )
 
                     # Generate customerLookup field if missing
                     if "customerLookup" not in donation:
@@ -152,7 +156,9 @@ class CSVParser:
                             if len(parts) > 1:
                                 last_name = parts[-1]
                                 first_name = " ".join(parts[:-1])
-                                donation["customerLookup"] = f"{last_name}, {first_name}"
+                                donation["customerLookup"] = (
+                                    f"{last_name}, {first_name}"
+                                )
                             else:
                                 donation["customerLookup"] = donation["Donor Name"]
 

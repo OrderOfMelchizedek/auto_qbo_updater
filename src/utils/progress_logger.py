@@ -70,7 +70,11 @@ class ProgressLogger:
             current_time = time.time()
             time_since_last = current_time - self.last_summary_time
 
-            if force_summary or time_since_last >= self.summary_interval or len(self.logs) >= 3:
+            if (
+                force_summary
+                or time_since_last >= self.summary_interval
+                or len(self.logs) >= 3
+            ):
                 print(
                     f"[ProgressLogger] Creating summary (force={force_summary}, time_since_last={time_since_last:.1f}s, log_count={len(self.logs)})"
                 )
@@ -87,7 +91,9 @@ class ProgressLogger:
 
         try:
             # Prepare logs for summarization
-            log_messages = [log["message"] for log in self.logs[-10:]]  # Last 10 messages
+            log_messages = [
+                log["message"] for log in self.logs[-10:]
+            ]  # Last 10 messages
             print(f"[ProgressLogger] Summarizing {len(log_messages)} messages")
 
             # Use simple summary to avoid Gemini API overhead
@@ -103,9 +109,9 @@ class ProgressLogger:
             if self.session_id in self.recent_summaries:
                 self.recent_summaries[self.session_id].append(message)
                 # Keep only last 10 summaries
-                self.recent_summaries[self.session_id] = self.recent_summaries[self.session_id][
-                    -10:
-                ]
+                self.recent_summaries[self.session_id] = self.recent_summaries[
+                    self.session_id
+                ][-10:]
 
             # Send to subscribers
             if self.session_id in self.subscribers:
@@ -114,7 +120,9 @@ class ProgressLogger:
                 )
                 self.subscribers[self.session_id].put(message)
             else:
-                print(f"[ProgressLogger] No subscriber found for session {self.session_id}")
+                print(
+                    f"[ProgressLogger] No subscriber found for session {self.session_id}"
+                )
 
             # Clear processed logs
             self.logs = []
@@ -124,7 +132,11 @@ class ProgressLogger:
             error_summary = f"Processing your files...\nEncountered an issue: {str(e)}"
             if self.session_id in self.subscribers:
                 self.subscribers[self.session_id].put(
-                    {"type": "progress", "summary": error_summary, "timestamp": time.time()}
+                    {
+                        "type": "progress",
+                        "summary": error_summary,
+                        "timestamp": time.time(),
+                    }
                 )
 
     def _summarize_with_gemini(self, log_messages: List[str]) -> str:
@@ -190,9 +202,7 @@ IMPORTANT: Output exactly 2 lines of text, nothing else."""
         elif "customer" in recent_msg or "quickbooks" in recent_msg:
             return "Matching donations with customers in QuickBooks...\nVerifying donor information and addresses."
         elif "deduplication" in recent_msg or "duplicate" in recent_msg:
-            return (
-                "Checking for duplicate donations...\nEnsuring each donation is counted only once."
-            )
+            return "Checking for duplicate donations...\nEnsuring each donation is counted only once."
         elif "extract" in recent_msg or "donation" in recent_msg:
             return "Found donations in your files...\nProcessing donor information and amounts."
         else:

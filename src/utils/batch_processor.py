@@ -35,7 +35,9 @@ class BatchProcessor:
     MAX_CONCURRENT_BATCHES = 10  # Maximum concurrent API calls
 
     def __init__(
-        self, gemini_service: GeminiService, progress_logger: Optional[ProgressLogger] = None
+        self,
+        gemini_service: GeminiService,
+        progress_logger: Optional[ProgressLogger] = None,
     ):
         """Initialize the batch processor.
 
@@ -147,7 +149,8 @@ class BatchProcessor:
         with ThreadPoolExecutor(max_workers=self.MAX_CONCURRENT_BATCHES) as executor:
             # Submit all batches for processing
             future_to_batch = {
-                executor.submit(self._process_single_batch, batch): batch for batch in batches
+                executor.submit(self._process_single_batch, batch): batch
+                for batch in batches
             }
 
             # Process completed batches as they finish
@@ -163,7 +166,9 @@ class BatchProcessor:
                             donations if isinstance(donations, list) else [donations]
                         )
                     if errors:
-                        all_errors.extend(errors if isinstance(errors, list) else [errors])
+                        all_errors.extend(
+                            errors if isinstance(errors, list) else [errors]
+                        )
 
                     # Update progress
                     processed_count += 1
@@ -212,7 +217,9 @@ class BatchProcessor:
                 elif batch.batch_type == "image":
                     result = self.gemini_service.extract_donation_data(batch.file_path)
                 elif batch.batch_type == "csv":
-                    result = self.gemini_service.extract_text_data(batch.file_path, file_type="csv")
+                    result = self.gemini_service.extract_text_data(
+                        batch.file_path, file_type="csv"
+                    )
                 else:
                     raise ValueError(f"Unknown batch type: {batch.batch_type}")
 
@@ -253,7 +260,9 @@ class BatchProcessor:
                     if page_num < len(pdf_reader.pages):
                         page_text = pdf_reader.pages[page_num].extract_text()
                         if page_text:
-                            batch_text += f"\n--- Page {page_num + 1} ---\n{page_text}\n"
+                            batch_text += (
+                                f"\n--- Page {page_num + 1} ---\n{page_text}\n"
+                            )
             except Exception as e:
                 print(f"Error extracting text from PDF pages: {str(e)}")
 

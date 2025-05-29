@@ -37,14 +37,22 @@ try:
     )
     from src.utils.file_processor import FileProcessor
     from src.utils.gemini_service import GeminiService
-    from src.utils.progress_logger import init_progress_logger, log_progress, progress_logger
+    from src.utils.progress_logger import (
+        init_progress_logger,
+        log_progress,
+        progress_logger,
+    )
     from src.utils.qbo_service import QBOService
 except ModuleNotFoundError:
     # Fall back to relative imports if running directly from src directory
     from utils.gemini_service import GeminiService
     from utils.qbo_service import QBOService
     from utils.file_processor import FileProcessor
-    from utils.progress_logger import progress_logger, init_progress_logger, log_progress
+    from utils.progress_logger import (
+        progress_logger,
+        init_progress_logger,
+        log_progress,
+    )
     from utils.exceptions import (
         FOMQBOException,
         QBOAPIException,
@@ -117,7 +125,10 @@ def configure_logging():
         try:
             # General application log
             app_handler = RotatingFileHandler(
-                "logs/fom_qbo.log", maxBytes=10485760, backupCount=5, encoding="utf-8"  # 10MB
+                "logs/fom_qbo.log",
+                maxBytes=10485760,
+                backupCount=5,
+                encoding="utf-8",  # 10MB
             )
             app_handler.setLevel(logging.INFO)
             app_handler.setFormatter(detailed_format)
@@ -125,7 +136,10 @@ def configure_logging():
 
             # Error-only log for monitoring
             error_handler = RotatingFileHandler(
-                "logs/errors.log", maxBytes=5242880, backupCount=3, encoding="utf-8"  # 5MB
+                "logs/errors.log",
+                maxBytes=5242880,
+                backupCount=3,
+                encoding="utf-8",  # 5MB
             )
             error_handler.setLevel(logging.ERROR)
             error_handler.setFormatter(detailed_format)
@@ -133,10 +147,15 @@ def configure_logging():
 
             # Audit log for security events
             audit_handler = RotatingFileHandler(
-                "logs/audit.log", maxBytes=5242880, backupCount=10, encoding="utf-8"  # 5MB
+                "logs/audit.log",
+                maxBytes=5242880,
+                backupCount=10,
+                encoding="utf-8",  # 5MB
             )
             audit_handler.setLevel(logging.INFO)
-            audit_formatter = logging.Formatter("%(asctime)s - AUDIT - %(levelname)s - %(message)s")
+            audit_formatter = logging.Formatter(
+                "%(asctime)s - AUDIT - %(levelname)s - %(message)s"
+            )
             audit_handler.setFormatter(audit_formatter)
 
             # Create separate audit logger
@@ -206,7 +225,8 @@ def sanitize_for_logging(data):
                 sanitized[key] = sanitize_for_logging(value)
             elif isinstance(value, list):
                 sanitized[key] = [
-                    sanitize_for_logging(item) if isinstance(item, dict) else item for item in value
+                    sanitize_for_logging(item) if isinstance(item, dict) else item
+                    for item in value
                 ]
             else:
                 sanitized[key] = value
@@ -360,7 +380,9 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB per file
 # Donations older than this many days are flagged as potentially incorrect
 DATE_WARNING_DAYS = int(os.getenv("DATE_WARNING_DAYS", "365"))  # Default: 1 year
 # Donations with future dates more than this many days are rejected
-FUTURE_DATE_LIMIT_DAYS = int(os.getenv("FUTURE_DATE_LIMIT_DAYS", "7"))  # Default: 1 week
+FUTURE_DATE_LIMIT_DAYS = int(
+    os.getenv("FUTURE_DATE_LIMIT_DAYS", "7")
+)  # Default: 1 week
 
 
 def generate_secure_filename(original_filename):
@@ -400,7 +422,10 @@ def validate_file_content(file_path):
             if ext in allowed_exts:
                 return True, None
             else:
-                return False, f"File extension {ext} doesn't match content type {detected_type}"
+                return (
+                    False,
+                    f"File extension {ext} doesn't match content type {detected_type}",
+                )
         else:
             return False, f"File type {detected_type} is not allowed"
 
@@ -449,13 +474,21 @@ def validate_donation_date(date_str, field_name="date"):
                     None,
                 )
             elif days_future > 0:
-                return True, f"{field_name} is {days_future} days in the future", parsed_date
+                return (
+                    True,
+                    f"{field_name} is {days_future} days in the future",
+                    parsed_date,
+                )
 
         # Check if date is too old
         days_old = (today - parsed_date).days
         if days_old > DATE_WARNING_DAYS:
             years_old = days_old // 365
-            return True, f"{field_name} is {years_old:.1f} years old - please verify", parsed_date
+            return (
+                True,
+                f"{field_name} is {years_old:.1f} years old - please verify",
+                parsed_date,
+            )
 
         # Date is within normal range
         return True, None, parsed_date
@@ -481,12 +514,18 @@ def validate_environment():
             missing_vars.append(f"  - {var_name}: {description}")
 
     if missing_vars:
-        error_msg = "Missing required environment variables:\n" + "\n".join(missing_vars)
-        error_msg += "\n\nPlease set these in your .env file. See .env.example for reference."
+        error_msg = "Missing required environment variables:\n" + "\n".join(
+            missing_vars
+        )
+        error_msg += (
+            "\n\nPlease set these in your .env file. See .env.example for reference."
+        )
         raise ValueError(error_msg)
 
     # Validate optional but recommended variables
-    optional_vars = {"QBO_ENVIRONMENT": ("sandbox", "QuickBooks environment (sandbox/production)")}
+    optional_vars = {
+        "QBO_ENVIRONMENT": ("sandbox", "QuickBooks environment (sandbox/production)")
+    }
 
     for var_name, (default, description) in optional_vars.items():
         if not os.environ.get(var_name):
@@ -587,7 +626,9 @@ def deduplicate_and_synthesize_donations(existing_donations, new_donations):
                 unique_key = f"OTHER_{donor_name}_{amount}_{gift_date}"
             else:
                 # Skip donations without enough identifying information
-                print(f"Skipping donation without sufficient identifying info: {donation}")
+                print(
+                    f"Skipping donation without sufficient identifying info: {donation}"
+                )
                 continue
 
         # Store in dictionary (will overwrite if duplicate key exists)
@@ -624,7 +665,9 @@ def deduplicate_and_synthesize_donations(existing_donations, new_donations):
                 unique_key = f"OTHER_{donor_name}_{amount}_{gift_date}"
             else:
                 # Skip donations without enough identifying information
-                print(f"Skipping new donation without sufficient identifying info: {new_donation}")
+                print(
+                    f"Skipping new donation without sufficient identifying info: {new_donation}"
+                )
                 continue
 
         # Check if this key already exists
@@ -703,7 +746,10 @@ def synthesize_donation_data(existing, new):
             merged_fields.append(field)
         # Take longer/more complete value for text fields
         elif (
-            existing_val and new_val and isinstance(existing_val, str) and isinstance(new_val, str)
+            existing_val
+            and new_val
+            and isinstance(existing_val, str)
+            and isinstance(new_val, str)
         ):
             # Safely strip whitespace
             existing_stripped = existing_val.strip() if existing_val else ""
@@ -864,7 +910,9 @@ def configure_session(app):
                 # Handle Heroku Redis SSL URLs
                 if redis_url.startswith("rediss://"):
                     # For SSL Redis connections, we need special handling
-                    app.config["SESSION_REDIS"] = redis.from_url(redis_url, ssl_cert_reqs=None)
+                    app.config["SESSION_REDIS"] = redis.from_url(
+                        redis_url, ssl_cert_reqs=None
+                    )
                 else:
                     app.config["SESSION_REDIS"] = redis.from_url(redis_url)
                 print("Using Redis for session storage")
@@ -876,7 +924,9 @@ def configure_session(app):
             configure_filesystem_sessions(app)
     else:
         # Use filesystem for development
-        print("No REDIS_URL found. Using filesystem for session storage (development mode)")
+        print(
+            "No REDIS_URL found. Using filesystem for session storage (development mode)"
+        )
         configure_filesystem_sessions(app)
 
     # Common session configuration
@@ -951,7 +1001,9 @@ def health_check():
             ),
         },
         "system": {
-            "memory_usage_mb": round(psutil.Process().memory_info().rss / 1024 / 1024, 1),
+            "memory_usage_mb": round(
+                psutil.Process().memory_info().rss / 1024 / 1024, 1
+            ),
             "cpu_percent": psutil.Process().cpu_percent(),
             "disk_free_gb": round(psutil.disk_usage("/").free / 1024**3, 1),
         },
@@ -967,7 +1019,9 @@ def health_check():
     # Calculate token expiration time
     if qbo_service.token_expires_at:
         try:
-            expires_at = datetime.fromisoformat(qbo_service.token_expires_at.replace("Z", "+00:00"))
+            expires_at = datetime.fromisoformat(
+                qbo_service.token_expires_at.replace("Z", "+00:00")
+            )
             time_diff = expires_at - datetime.now().replace(tzinfo=expires_at.tzinfo)
             health_status["auth"]["qbo_token_expires_in_hours"] = round(
                 time_diff.total_seconds() / 3600, 1
@@ -1050,7 +1104,9 @@ def readiness_check():
         try:
             start_time = time.time()
             # Simple test prompt
-            result = gemini_service.generate_text("Test connectivity. Respond with 'OK'.")
+            result = gemini_service.generate_text(
+                "Test connectivity. Respond with 'OK'."
+            )
             response_time = round((time.time() - start_time) * 1000, 1)
 
             if result and "OK" in result.upper():
@@ -1125,7 +1181,10 @@ def readiness_check():
                 readiness_status["checks_performed"].append(service_name)
 
                 # If any critical service is unhealthy, mark as not ready
-                if service_name in ["quickbooks", "gemini"] and result["status"] == "unhealthy":
+                if (
+                    service_name in ["quickbooks", "gemini"]
+                    and result["status"] == "unhealthy"
+                ):
                     readiness_status["status"] = "not_ready"
 
             except Exception as e:
@@ -1141,7 +1200,9 @@ def readiness_check():
 @app.route("/qbo/auth-status")
 def qbo_auth_status():
     """Check QBO authentication status."""
-    authenticated = qbo_service.access_token is not None and qbo_service.realm_id is not None
+    authenticated = (
+        qbo_service.access_token is not None and qbo_service.realm_id is not None
+    )
 
     # Check if we just connected to QBO and need to resume file processing
     just_connected = session.pop("qbo_just_connected", False)
@@ -1290,7 +1351,9 @@ def upload_files():
 
                     if ext not in ALLOWED_EXTENSIONS:
                         errors.append(f"File type not allowed: {original_filename}")
-                        log_progress(f"Skipping {original_filename} - file type not allowed")
+                        log_progress(
+                            f"Skipping {original_filename} - file type not allowed"
+                        )
                         continue
 
                     # Check file size before saving
@@ -1316,7 +1379,9 @@ def upload_files():
                     # Validate file content
                     is_valid, error_msg = validate_file_content(file_path)
                     if not is_valid:
-                        errors.append(f"Invalid file content: {original_filename} - {error_msg}")
+                        errors.append(
+                            f"Invalid file content: {original_filename} - {error_msg}"
+                        )
                         log_progress(f"Skipping {original_filename} - {error_msg}")
                         cleanup_uploaded_file(file_path)
                         uploaded_files.remove(file_path)
@@ -1331,7 +1396,9 @@ def upload_files():
 
             # Process all files concurrently
             if files_to_process:
-                log_progress(f"Processing {len(files_to_process)} files concurrently...")
+                log_progress(
+                    f"Processing {len(files_to_process)} files concurrently..."
+                )
 
                 # Count expected batches
                 total_batches = 0
@@ -1355,15 +1422,19 @@ def upload_files():
                 )
 
                 # Process files concurrently
-                concurrent_donations, concurrent_errors = file_processor.process_files_concurrently(
-                    files_to_process, task_id=session_id
+                concurrent_donations, concurrent_errors = (
+                    file_processor.process_files_concurrently(
+                        files_to_process, task_id=session_id
+                    )
                 )
 
                 # Add data source and internal IDs to donations
                 for idx, donation in enumerate(concurrent_donations):
                     # Determine data source
                     data_source = (
-                        "CSV" if any(fp.endswith(".csv") for fp, _ in files_to_process) else "LLM"
+                        "CSV"
+                        if any(fp.endswith(".csv") for fp, _ in files_to_process)
+                        else "LLM"
                     )
                     source_prefix = "csv" if data_source == "CSV" else "llm"
 
@@ -1394,7 +1465,9 @@ def upload_files():
 
                     if ext not in ALLOWED_EXTENSIONS:
                         errors.append(f"File type not allowed: {original_filename}")
-                        log_progress(f"Skipping {original_filename} - file type not allowed")
+                        log_progress(
+                            f"Skipping {original_filename} - file type not allowed"
+                        )
                         continue
 
                     # Check file size before saving
@@ -1420,14 +1493,18 @@ def upload_files():
                     # Validate file content
                     is_valid, error_msg = validate_file_content(file_path)
                     if not is_valid:
-                        errors.append(f"Invalid file content: {original_filename} - {error_msg}")
+                        errors.append(
+                            f"Invalid file content: {original_filename} - {error_msg}"
+                        )
                         log_progress(f"Skipping {original_filename} - {error_msg}")
                         cleanup_uploaded_file(file_path)
                         uploaded_files.remove(file_path)
                         continue
 
                     file_size_mb = file_size / (1024 * 1024)
-                    log_progress(f"File validated: {original_filename} ({file_size_mb:.1f}MB)")
+                    log_progress(
+                        f"File validated: {original_filename} ({file_size_mb:.1f}MB)"
+                    )
 
                     # Process different file types
                     file_ext = ext  # We already have the extension
@@ -1438,14 +1515,18 @@ def upload_files():
                             "spreadsheet"
                             if file_ext == ".csv"
                             else (
-                                "image" if file_ext in [".jpg", ".jpeg", ".png"] else "PDF document"
+                                "image"
+                                if file_ext in [".jpg", ".jpeg", ".png"]
+                                else "PDF document"
                             )
                         )
                         log_progress(f"Reading {file_type}: {original_filename}")
 
                         log_progress(f"Analyzing content of {original_filename}...")
                         extracted_data = file_processor.process(file_path, file_ext)
-                        log_progress(f"Content analysis complete for {original_filename}")
+                        log_progress(
+                            f"Content analysis complete for {original_filename}"
+                        )
 
                         # Set the data source based on file type
                         data_source = "CSV" if file_ext == ".csv" else "LLM"
@@ -1477,7 +1558,9 @@ def upload_files():
                             else:
                                 # Single donation (typically from image)
                                 extracted_data["dataSource"] = data_source
-                                extracted_data["internalId"] = f"{source_prefix}_{len(donations)}"
+                                extracted_data["internalId"] = (
+                                    f"{source_prefix}_{len(donations)}"
+                                )
                                 extracted_data["qbSyncStatus"] = "Pending"
                                 # Only initialize as Unknown if no status was set during matching
                                 if "qbCustomerStatus" not in extracted_data:
@@ -1514,7 +1597,9 @@ def upload_files():
         # Apply smart deduplication and data synthesis
         log_progress("Finalizing donation records...")
         log_progress(f"Merging with existing {initial_count} donations...")
-        session["donations"] = deduplicate_and_synthesize_donations(session["donations"], donations)
+        session["donations"] = deduplicate_and_synthesize_donations(
+            session["donations"], donations
+        )
 
         # Calculate merge statistics
         final_count = len(session["donations"])
@@ -1547,7 +1632,8 @@ def upload_files():
             )
         else:
             log_progress(
-                "Could not find any donation data in the uploaded files", force_summary=True
+                "Could not find any donation data in the uploaded files",
+                force_summary=True,
             )
             progress_logger.end_session(session_id)
 
@@ -1737,7 +1823,12 @@ def remove_invalid_donations():
 
     invalid_ids = request.json["invalidIds"]
     if not invalid_ids or not isinstance(invalid_ids, list):
-        return jsonify({"success": False, "message": "Invalid IDs must be a non-empty list"}), 400
+        return (
+            jsonify(
+                {"success": False, "message": "Invalid IDs must be a non-empty list"}
+            ),
+            400,
+        )
 
     # Count the number of donations before filtering
     initial_count = len(donations)
@@ -1801,7 +1892,10 @@ def qbo_callback():
         log_audit_event(
             "qbo_auth_failed",
             request_ip=request.remote_addr,
-            details={"error": error, "error_description": request.args.get("error_description")},
+            details={
+                "error": error,
+                "error_description": request.args.get("error_description"),
+            },
         )
         error_desc = request.args.get("error_description", "Unknown error")
         flash(f"QuickBooks authorization failed: {error_desc}", "error")
@@ -1831,7 +1925,9 @@ def qbo_callback():
             try:
                 customers = qbo_service.get_all_customers()
                 customer_count = len(customers)
-                logger.info(f"Pre-fetched {customer_count} customers for future matching")
+                logger.info(
+                    f"Pre-fetched {customer_count} customers for future matching"
+                )
 
                 # Store success message including customer count
                 flash(
@@ -1938,7 +2034,12 @@ def get_all_customers():
         # Check if authenticated
         if not qbo_service.access_token or not qbo_service.realm_id:
             return (
-                jsonify({"success": False, "message": "Not authenticated with QuickBooks Online"}),
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Not authenticated with QuickBooks Online",
+                    }
+                ),
                 401,
             )
 
@@ -1981,7 +2082,12 @@ def get_all_customers():
 
     except Exception as e:
         print(f"Error fetching customers: {str(e)}")
-        return jsonify({"success": False, "message": f"Error fetching customers: {str(e)}"}), 500
+        return (
+            jsonify(
+                {"success": False, "message": f"Error fetching customers: {str(e)}"}
+            ),
+            500,
+        )
 
 
 @app.route("/qbo/customer/manual-match/<donation_id>", methods=["POST"])
@@ -2002,14 +2108,19 @@ def manual_match_customer(donation_id):
 
         # Get customer ID from request
         if not request.json or "customerId" not in request.json:
-            return jsonify({"success": False, "message": "Customer ID is required"}), 400
+            return (
+                jsonify({"success": False, "message": "Customer ID is required"}),
+                400,
+            )
 
         customer_id = request.json["customerId"]
 
         # Get customer details from QBO
         query = f"SELECT * FROM Customer WHERE Id = '{customer_id}'"
         encoded_query = quote(query)
-        url = f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
+        url = (
+            f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
+        )
         response = requests.get(url, headers=qbo_service._get_auth_headers())
 
         customer = None
@@ -2019,7 +2130,10 @@ def manual_match_customer(donation_id):
                 customer = data["QueryResponse"]["Customer"][0]
 
         if not customer:
-            return jsonify({"success": False, "message": "Customer not found in QBO"}), 404
+            return (
+                jsonify({"success": False, "message": "Customer not found in QBO"}),
+                404,
+            )
 
         # Update donation with customer info
         donation = donations[donation_index]
@@ -2046,7 +2160,12 @@ def manual_match_customer(donation_id):
     except Exception as e:
         print(f"Error manually matching customer: {str(e)}")
         return (
-            jsonify({"success": False, "message": f"Error manually matching customer: {str(e)}"}),
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"Error manually matching customer: {str(e)}",
+                }
+            ),
             500,
         )
 
@@ -2061,12 +2180,19 @@ def create_customer(donation_id):
         if donation["internalId"] == donation_id:
             if donation["dataSource"] == "CSV":
                 return (
-                    jsonify({"success": False, "message": "Cannot create customer from CSV data"}),
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": "Cannot create customer from CSV data",
+                        }
+                    ),
                     400,
                 )
 
             # Use Donor Name if customerLookup is empty
-            display_name = donation.get("customerLookup") or donation.get("Donor Name", "")
+            display_name = donation.get("customerLookup") or donation.get(
+                "Donor Name", ""
+            )
 
             # Build customer data with required name fields
             customer_data = {
@@ -2084,7 +2210,9 @@ def create_customer(donation_id):
             }
 
             # Ensure at least one name field is populated
-            if not any([display_name, customer_data["GivenName"], customer_data["FamilyName"]]):
+            if not any(
+                [display_name, customer_data["GivenName"], customer_data["FamilyName"]]
+            ):
                 customer_data["DisplayName"] = "Unknown Donor"
 
             result = qbo_service.create_customer(customer_data)
@@ -2099,7 +2227,12 @@ def create_customer(donation_id):
                 return jsonify({"success": True, "customer": result})
             else:
                 return (
-                    jsonify({"success": False, "message": "Failed to create customer in QBO"}),
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": "Failed to create customer in QBO",
+                        }
+                    ),
                     500,
                 )
 
@@ -2115,12 +2248,22 @@ def update_customer(donation_id):
         if donation["internalId"] == donation_id:
             if donation["dataSource"] == "CSV":
                 return (
-                    jsonify({"success": False, "message": "Cannot update customer from CSV data"}),
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": "Cannot update customer from CSV data",
+                        }
+                    ),
                     400,
                 )
 
             if not donation.get("qboCustomerId"):
-                return jsonify({"success": False, "message": "No QBO customer ID available"}), 400
+                return (
+                    jsonify(
+                        {"success": False, "message": "No QBO customer ID available"}
+                    ),
+                    400,
+                )
 
             customer_data = {
                 "Id": donation["qboCustomerId"],
@@ -2143,7 +2286,12 @@ def update_customer(donation_id):
                 return jsonify({"success": True, "customer": result})
             else:
                 return (
-                    jsonify({"success": False, "message": "Failed to update customer in QBO"}),
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": "Failed to update customer in QBO",
+                        }
+                    ),
                     500,
                 )
 
@@ -2161,7 +2309,10 @@ def create_sales_receipt(donation_id):
             if donation["dataSource"] == "CSV":
                 return (
                     jsonify(
-                        {"success": False, "message": "Cannot create sales receipt from CSV data"}
+                        {
+                            "success": False,
+                            "message": "Cannot create sales receipt from CSV data",
+                        }
                     ),
                     400,
                 )
@@ -2185,7 +2336,12 @@ def create_sales_receipt(donation_id):
                         )
                 else:
                     return (
-                        jsonify({"success": False, "message": "Customer lookup field is empty"}),
+                        jsonify(
+                            {
+                                "success": False,
+                                "message": "Customer lookup field is empty",
+                            }
+                        ),
                         400,
                     )
 
@@ -2219,7 +2375,9 @@ def create_sales_receipt(donation_id):
             check_date = donation.get("Check Date", "")
 
             # Validate the date
-            is_valid, warning_msg, parsed_date = validate_donation_date(check_date, "Check Date")
+            is_valid, warning_msg, parsed_date = validate_donation_date(
+                check_date, "Check Date"
+            )
 
             if not is_valid:
                 return jsonify({"success": False, "message": warning_msg}), 400
@@ -2242,7 +2400,12 @@ def create_sales_receipt(donation_id):
                 gift_amount = float(donation.get("Gift Amount", 0))
             except ValueError:
                 return (
-                    jsonify({"success": False, "message": "Invalid Gift Amount, must be a number"}),
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": "Invalid Gift Amount, must be a number",
+                        }
+                    ),
                     400,
                 )
 
@@ -2251,7 +2414,9 @@ def create_sales_receipt(donation_id):
             memo = donation.get("Memo", "")
 
             # Format description, limiting to reasonable length
-            description = f"{check_no}_{check_date}_{gift_amount}_{last_name}_{first_name}"
+            description = (
+                f"{check_no}_{check_date}_{gift_amount}_{last_name}_{first_name}"
+            )
             if memo:
                 description += f"_{memo}"
 
@@ -2283,7 +2448,9 @@ def create_sales_receipt(donation_id):
             )
 
             if existing_receipt:
-                print(f"Found existing sales receipt with ID: {existing_receipt.get('Id')}")
+                print(
+                    f"Found existing sales receipt with ID: {existing_receipt.get('Id')}"
+                )
                 # Update donation record with existing receipt ID
                 donation["qbSyncStatus"] = "Sent"
                 donation["qboSalesReceiptId"] = existing_receipt.get("Id")
@@ -2369,7 +2536,13 @@ def create_sales_receipt(donation_id):
 
                 # Default error response for other types of errors
                 return (
-                    jsonify({"success": False, "message": error_message, "detail": error_detail}),
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": error_message,
+                            "detail": error_detail,
+                        }
+                    ),
                     500,
                 )
 
@@ -2386,7 +2559,12 @@ def create_sales_receipt(donation_id):
                 session["donations"] = donations
 
                 return (
-                    jsonify({"success": False, "message": "Failed to create sales receipt in QBO"}),
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": "Failed to create sales receipt in QBO",
+                        }
+                    ),
                     500,
                 )
 
@@ -2402,7 +2580,9 @@ def create_batch_sales_receipts():
 
     # Get the default values from request or use defaults
     default_item_ref = request.json.get("defaultItemRef", "1")  # Default fallback
-    default_account_id = request.json.get("defaultDepositToAccountId", "12000")  # Default fallback
+    default_account_id = request.json.get(
+        "defaultDepositToAccountId", "12000"
+    )  # Default fallback
     default_payment_method_id = request.json.get(
         "defaultPaymentMethodId", "CHECK"
     )  # Default fallback
@@ -2479,11 +2659,17 @@ def create_batch_sales_receipts():
             today = pd.Timestamp.now().strftime("%Y-%m-%d")
             check_date = donation.get("Check Date", "")
             # Validate the date
-            is_valid, warning_msg, parsed_date = validate_donation_date(check_date, "Check Date")
+            is_valid, warning_msg, parsed_date = validate_donation_date(
+                check_date, "Check Date"
+            )
 
             if not is_valid:
                 results.append(
-                    {"internalId": donation["internalId"], "success": False, "message": warning_msg}
+                    {
+                        "internalId": donation["internalId"],
+                        "success": False,
+                        "message": warning_msg,
+                    }
                 )
                 failure_count += 1
                 continue
@@ -2495,7 +2681,9 @@ def create_batch_sales_receipts():
 
             if parsed_date:
                 check_date = parsed_date.strftime("%Y-%m-%d")
-                print(f"Using Check Date: {check_date} for donation {donation['internalId']}")
+                print(
+                    f"Using Check Date: {check_date} for donation {donation['internalId']}"
+                )
             else:
                 check_date = today
 
@@ -2506,9 +2694,15 @@ def create_batch_sales_receipts():
                     raise ValueError("Gift amount must be greater than zero")
             except ValueError as e:
                 # Skip donations with invalid amounts
-                error_msg = f"Invalid Gift Amount: {donation.get('Gift Amount')} - {str(e)}"
+                error_msg = (
+                    f"Invalid Gift Amount: {donation.get('Gift Amount')} - {str(e)}"
+                )
                 results.append(
-                    {"internalId": donation["internalId"], "success": False, "message": error_msg}
+                    {
+                        "internalId": donation["internalId"],
+                        "success": False,
+                        "message": error_msg,
+                    }
                 )
                 # Mark donation as error
                 donation["qbSyncStatus"] = "Error"
@@ -2524,7 +2718,9 @@ def create_batch_sales_receipts():
             memo = donation.get("Memo", "")
 
             # Format description
-            description = f"{check_no}_{check_date}_{gift_amount}_{last_name}_{first_name}"
+            description = (
+                f"{check_no}_{check_date}_{gift_amount}_{last_name}_{first_name}"
+            )
             if memo:
                 description += f"_{memo}"
 
@@ -2545,7 +2741,9 @@ def create_batch_sales_receipts():
             # If we still don't have a valid item_ref, use '1' as the last resort
             if not item_ref or (isinstance(item_ref, str) and item_ref.strip() == ""):
                 item_ref = "1"
-            print(f"Using item_ref: {item_ref} for batch donation {donation.get('internalId')}")
+            print(
+                f"Using item_ref: {item_ref} for batch donation {donation.get('internalId')}"
+            )
 
             # Prepare sales receipt data with all required fields
             sales_receipt_data = {
@@ -2605,7 +2803,11 @@ def create_batch_sales_receipts():
                 donations[i] = donation
 
                 results.append(
-                    {"internalId": donation["internalId"], "success": False, "message": error_msg}
+                    {
+                        "internalId": donation["internalId"],
+                        "success": False,
+                        "message": error_msg,
+                    }
                 )
                 failure_count += 1
                 continue
@@ -2630,7 +2832,11 @@ def create_batch_sales_receipts():
                 donations[i] = donation
 
                 results.append(
-                    {"internalId": donation["internalId"], "success": False, "message": error_msg}
+                    {
+                        "internalId": donation["internalId"],
+                        "success": False,
+                        "message": error_msg,
+                    }
                 )
                 failure_count += 1
 
@@ -2658,7 +2864,11 @@ def create_batch_sales_receipts():
     return jsonify(
         {
             "success": True,
-            "summary": {"total": len(results), "success": success_count, "failure": failure_count},
+            "summary": {
+                "total": len(results),
+                "success": success_count,
+                "failure": failure_count,
+            },
             "results": results,
         }
     )
@@ -2678,7 +2888,9 @@ def clear_all_donations():
         # Ensure session is saved
         session.modified = True
 
-        return jsonify({"success": True, "message": "All donations cleared successfully"})
+        return jsonify(
+            {"success": True, "message": "All donations cleared successfully"}
+        )
     except Exception as e:
         print(f"Error clearing donations: {str(e)}")
         return jsonify({"success": False, "message": "Error clearing donations"}), 500
@@ -2713,12 +2925,16 @@ def generate_report():
         state = donation.get("State", "")
         zipcode = donation.get("ZIP", "")
         address_line = (
-            f"{address}, {city}, {state} {zipcode}" if all([address, city, state, zipcode]) else ""
+            f"{address}, {city}, {state} {zipcode}"
+            if all([address, city, state, zipcode])
+            else ""
         )
 
         # Create a multi-line address for text report format
         address_line_1 = address
-        address_line_2 = f"{city}, {state} {zipcode}" if all([city, state, zipcode]) else ""
+        address_line_2 = (
+            f"{city}, {state} {zipcode}" if all([city, state, zipcode]) else ""
+        )
 
         # Safely convert gift amount to float
         try:
@@ -2841,7 +3057,9 @@ def test_qbo_customers():
         # Try to get a customer count first (lightweight operation)
         query = "SELECT COUNT(*) FROM Customer"
         encoded_query = quote(query)
-        url = f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
+        url = (
+            f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
+        )
         response = requests.get(url, headers=qbo_service._get_auth_headers())
 
         customer_count = 0
@@ -2855,7 +3073,9 @@ def test_qbo_customers():
         customers = []
         query = "SELECT * FROM Customer MAXRESULTS 10"
         encoded_query = quote(query)
-        url = f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
+        url = (
+            f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
+        )
         response = requests.get(url, headers=qbo_service._get_auth_headers())
 
         if response.status_code == 200:
@@ -2901,13 +3121,23 @@ def test_customer_matching():
     """Test route to check customer matching for a sample donation."""
     try:
         if not request.json:
-            return jsonify({"success": False, "message": "No donation data provided"}), 400
+            return (
+                jsonify({"success": False, "message": "No donation data provided"}),
+                400,
+            )
 
         donation_data = request.json
-        customer_lookup = donation_data.get("customerLookup", donation_data.get("Donor Name", ""))
+        customer_lookup = donation_data.get(
+            "customerLookup", donation_data.get("Donor Name", "")
+        )
 
         if not customer_lookup:
-            return jsonify({"success": False, "message": "No customer lookup value provided"}), 400
+            return (
+                jsonify(
+                    {"success": False, "message": "No customer lookup value provided"}
+                ),
+                400,
+            )
 
         # Perform direct QBO API lookup
         customer = qbo_service.find_customer(customer_lookup)
@@ -2977,7 +3207,12 @@ def preview_sales_receipt(donation_id):
 
         if donation["dataSource"] == "CSV":
             return (
-                jsonify({"success": False, "message": "Cannot create sales receipt from CSV data"}),
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Cannot create sales receipt from CSV data",
+                    }
+                ),
                 400,
             )
 
@@ -3000,7 +3235,9 @@ def preview_sales_receipt(donation_id):
                 gift_amount = float(gift_amount_str)
             else:
                 # Remove currency symbols, commas, and other formatting
-                gift_amount = float(gift_amount_str.replace("$", "").replace(",", "").strip())
+                gift_amount = float(
+                    gift_amount_str.replace("$", "").replace(",", "").strip()
+                )
         except (ValueError, TypeError) as e:
             print(f"Error parsing gift amount '{gift_amount_str}': {str(e)}")
             gift_amount = 0.0  # Default to zero if parsing fails
@@ -3010,7 +3247,9 @@ def preview_sales_receipt(donation_id):
         memo = donation.get("Memo", "")
 
         # Format description
-        description = f"{check_no}_{gift_date}_{gift_amount_str}_{last_name}_{first_name}"
+        description = (
+            f"{check_no}_{gift_date}_{gift_amount_str}_{last_name}_{first_name}"
+        )
         if memo:
             description += f"_{memo}"
 
@@ -3046,7 +3285,12 @@ def preview_sales_receipt(donation_id):
     except Exception as e:
         print(f"Error previewing sales receipt: {str(e)}")
         return (
-            jsonify({"success": False, "message": f"Error previewing sales receipt: {str(e)}"}),
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"Error previewing sales receipt: {str(e)}",
+                }
+            ),
             500,
         )
 
@@ -3072,7 +3316,12 @@ def get_all_items():
         # Check if authenticated
         if not qbo_service.access_token or not qbo_service.realm_id:
             return (
-                jsonify({"success": False, "message": "Not authenticated with QuickBooks Online"}),
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Not authenticated with QuickBooks Online",
+                    }
+                ),
                 401,
             )
 
@@ -3103,7 +3352,10 @@ def get_all_items():
 
     except Exception as e:
         print(f"Error fetching items: {str(e)}")
-        return jsonify({"success": False, "message": f"Error fetching items: {str(e)}"}), 500
+        return (
+            jsonify({"success": False, "message": f"Error fetching items: {str(e)}"}),
+            500,
+        )
 
 
 @app.route("/qbo/item/create", methods=["POST"])
@@ -3113,7 +3365,12 @@ def create_item():
         # Check if authenticated
         if not qbo_service.access_token or not qbo_service.realm_id:
             return (
-                jsonify({"success": False, "message": "Not authenticated with QuickBooks Online"}),
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Not authenticated with QuickBooks Online",
+                    }
+                ),
                 401,
             )
 
@@ -3127,7 +3384,10 @@ def create_item():
             return jsonify({"success": False, "message": "Item name is required"}), 400
 
         if "incomeAccountId" not in item_data or not item_data["incomeAccountId"]:
-            return jsonify({"success": False, "message": "Income account is required"}), 400
+            return (
+                jsonify({"success": False, "message": "Income account is required"}),
+                400,
+            )
 
         # Build QBO-formatted item data
         qbo_item_data = {
@@ -3165,14 +3425,20 @@ def create_item():
                 }
             )
         else:
-            return jsonify({"success": False, "message": "Failed to create item in QBO"}), 500
+            return (
+                jsonify({"success": False, "message": "Failed to create item in QBO"}),
+                500,
+            )
 
     except Exception as e:
         print(f"Error creating item: {str(e)}")
         import traceback
 
         traceback.print_exc()
-        return jsonify({"success": False, "message": f"Error creating item: {str(e)}"}), 500
+        return (
+            jsonify({"success": False, "message": f"Error creating item: {str(e)}"}),
+            500,
+        )
 
 
 @app.route("/qbo/accounts/all", methods=["GET"])
@@ -3182,7 +3448,12 @@ def get_all_accounts():
         # Check if authenticated
         if not qbo_service.access_token or not qbo_service.realm_id:
             return (
-                jsonify({"success": False, "message": "Not authenticated with QuickBooks Online"}),
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Not authenticated with QuickBooks Online",
+                    }
+                ),
                 401,
             )
 
@@ -3195,7 +3466,8 @@ def get_all_accounts():
             # Check if this is an Undeposited Funds account by name or account type
             if (
                 account.get("Name", "").lower() == "undeposited funds"
-                or account.get("AccountSubType", "").lower() == "undepositedFunds".lower()
+                or account.get("AccountSubType", "").lower()
+                == "undepositedFunds".lower()
             ):
                 undeposited_funds = {
                     "id": account.get("Id"),
@@ -3221,12 +3493,21 @@ def get_all_accounts():
             )
 
         return jsonify(
-            {"success": True, "accounts": accounts, "undepositedFunds": undeposited_funds}
+            {
+                "success": True,
+                "accounts": accounts,
+                "undepositedFunds": undeposited_funds,
+            }
         )
 
     except Exception as e:
         print(f"Error fetching accounts: {str(e)}")
-        return jsonify({"success": False, "message": f"Error fetching accounts: {str(e)}"}), 500
+        return (
+            jsonify(
+                {"success": False, "message": f"Error fetching accounts: {str(e)}"}
+            ),
+            500,
+        )
 
 
 @app.route("/qbo/account/create", methods=["POST"])
@@ -3236,21 +3517,35 @@ def create_account():
         # Check if authenticated
         if not qbo_service.access_token or not qbo_service.realm_id:
             return (
-                jsonify({"success": False, "message": "Not authenticated with QuickBooks Online"}),
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Not authenticated with QuickBooks Online",
+                    }
+                ),
                 401,
             )
 
         # Get account data from request
         if not request.json:
-            return jsonify({"success": False, "message": "No account data provided"}), 400
+            return (
+                jsonify({"success": False, "message": "No account data provided"}),
+                400,
+            )
 
         # Validate required fields
         account_data = request.json
         if "name" not in account_data or not account_data["name"]:
-            return jsonify({"success": False, "message": "Account name is required"}), 400
+            return (
+                jsonify({"success": False, "message": "Account name is required"}),
+                400,
+            )
 
         if "accountType" not in account_data or not account_data["accountType"]:
-            return jsonify({"success": False, "message": "Account type is required"}), 400
+            return (
+                jsonify({"success": False, "message": "Account type is required"}),
+                400,
+            )
 
         # Build QBO-formatted account data
         qbo_account_data = {
@@ -3284,14 +3579,22 @@ def create_account():
                 }
             )
         else:
-            return jsonify({"success": False, "message": "Failed to create account in QBO"}), 500
+            return (
+                jsonify(
+                    {"success": False, "message": "Failed to create account in QBO"}
+                ),
+                500,
+            )
 
     except Exception as e:
         print(f"Error creating account: {str(e)}")
         import traceback
 
         traceback.print_exc()
-        return jsonify({"success": False, "message": f"Error creating account: {str(e)}"}), 500
+        return (
+            jsonify({"success": False, "message": f"Error creating account: {str(e)}"}),
+            500,
+        )
 
 
 @app.route("/qbo/payment-methods/all", methods=["GET"])
@@ -3301,7 +3604,12 @@ def get_all_payment_methods():
         # Check if authenticated
         if not qbo_service.access_token or not qbo_service.realm_id:
             return (
-                jsonify({"success": False, "message": "Not authenticated with QuickBooks Online"}),
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Not authenticated with QuickBooks Online",
+                    }
+                ),
                 401,
             )
 
@@ -3324,7 +3632,12 @@ def get_all_payment_methods():
     except Exception as e:
         print(f"Error fetching payment methods: {str(e)}")
         return (
-            jsonify({"success": False, "message": f"Error fetching payment methods: {str(e)}"}),
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"Error fetching payment methods: {str(e)}",
+                }
+            ),
             500,
         )
 
@@ -3336,24 +3649,41 @@ def create_payment_method():
         # Check if authenticated
         if not qbo_service.access_token or not qbo_service.realm_id:
             return (
-                jsonify({"success": False, "message": "Not authenticated with QuickBooks Online"}),
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Not authenticated with QuickBooks Online",
+                    }
+                ),
                 401,
             )
 
         # Get payment method data from request
         if not request.json:
-            return jsonify({"success": False, "message": "No payment method data provided"}), 400
+            return (
+                jsonify(
+                    {"success": False, "message": "No payment method data provided"}
+                ),
+                400,
+            )
 
         # Validate required fields
         payment_method_data = request.json
         if "name" not in payment_method_data or not payment_method_data["name"]:
-            return jsonify({"success": False, "message": "Payment method name is required"}), 400
+            return (
+                jsonify(
+                    {"success": False, "message": "Payment method name is required"}
+                ),
+                400,
+            )
 
         # Build QBO-formatted payment method data
         qbo_payment_method_data = {"Name": payment_method_data["name"], "Active": True}
 
         # Create the payment method
-        created_payment_method = qbo_service.create_payment_method(qbo_payment_method_data)
+        created_payment_method = qbo_service.create_payment_method(
+            qbo_payment_method_data
+        )
 
         if created_payment_method:
             return jsonify(
@@ -3367,7 +3697,12 @@ def create_payment_method():
             )
         else:
             return (
-                jsonify({"success": False, "message": "Failed to create payment method in QBO"}),
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Failed to create payment method in QBO",
+                    }
+                ),
                 500,
             )
 
@@ -3377,7 +3712,12 @@ def create_payment_method():
 
         traceback.print_exc()
         return (
-            jsonify({"success": False, "message": f"Error creating payment method: {str(e)}"}),
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"Error creating payment method: {str(e)}",
+                }
+            ),
             500,
         )
 
@@ -3433,9 +3773,13 @@ def debug_donations():
 
 if __name__ == "__main__":
     # Display the environment when starting
-    print(f"====== Starting with QuickBooks Online {qbo_environment.upper()} environment ======")
+    print(
+        f"====== Starting with QuickBooks Online {qbo_environment.upper()} environment ======"
+    )
     print(f"API Base URL: {qbo_service.api_base}")
-    print(f"To change environments, restart with: python src/app.py --env [sandbox|production]")
+    print(
+        f"To change environments, restart with: python src/app.py --env [sandbox|production]"
+    )
     print("================================================================")
 
     app.run(debug=True)

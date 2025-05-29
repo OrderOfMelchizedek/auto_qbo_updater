@@ -116,7 +116,9 @@ class TestGeminiService(unittest.TestCase):
         ]
 
         # Mock the extract_json_from_text method to return our test data
-        with patch.object(self.service, "_extract_json_from_text", return_value=expected_data):
+        with patch.object(
+            self.service, "_extract_json_from_text", return_value=expected_data
+        ):
             # Mock response from Gemini for PDF
             mock_response = MagicMock()
             mock_response.text = """

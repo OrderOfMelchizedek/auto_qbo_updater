@@ -33,7 +33,9 @@ class GeminiService:
     RATE_LIMIT_PER_MINUTE = int(os.environ.get("GEMINI_RATE_LIMIT_PER_MINUTE", "60"))
     RATE_LIMIT_PER_HOUR = int(os.environ.get("GEMINI_RATE_LIMIT_PER_HOUR", "1500"))
 
-    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash-preview-04-17"):
+    def __init__(
+        self, api_key: str, model_name: str = "gemini-2.5-flash-preview-04-17"
+    ):
         """Initialize the Gemini service with API key and model name.
 
         Args:
@@ -146,7 +148,8 @@ class GeminiService:
             # Call Gemini API with prompt text
             print(f"Processing text with Gemini model: {self.model_name}")
             response = model.generate_content(
-                contents=[prompt_text], generation_config=genai.GenerationConfig(temperature=0.2)
+                contents=[prompt_text],
+                generation_config=genai.GenerationConfig(temperature=0.2),
             )
 
             # Extract response text
@@ -176,10 +179,14 @@ class GeminiService:
                 if parsed_json:
                     # Return the data (array or single object)
                     if isinstance(parsed_json, list):
-                        print(f"Found array of {len(parsed_json)} items, returning all items")
+                        print(
+                            f"Found array of {len(parsed_json)} items, returning all items"
+                        )
                         return parsed_json
                     else:
-                        return [parsed_json]  # Wrap single object in list for consistency
+                        return [
+                            parsed_json
+                        ]  # Wrap single object in list for consistency
 
             print("Failed to extract data from Gemini response")
             return None
@@ -284,7 +291,9 @@ class GeminiService:
                 extraction_prompt = custom_prompt
             else:
                 # Use the simplified extraction prompt
-                extraction_prompt = self.prompt_manager.get_prompt("simplified_extraction_prompt")
+                extraction_prompt = self.prompt_manager.get_prompt(
+                    "simplified_extraction_prompt"
+                )
 
             # Set up model using the configured model name
             model = genai.GenerativeModel(self.model_name)
@@ -336,13 +345,15 @@ class GeminiService:
                             try:
                                 for page_num in range(batch_start, batch_end):
                                     if page_num < len(pdf_reader.pages):
-                                        page_text = pdf_reader.pages[page_num].extract_text()
+                                        page_text = pdf_reader.pages[
+                                            page_num
+                                        ].extract_text()
                                         if page_text:
-                                            batch_text += (
-                                                f"\n--- Page {page_num + 1} ---\n{page_text}\n"
-                                            )
+                                            batch_text += f"\n--- Page {page_num + 1} ---\n{page_text}\n"
                             except Exception as e:
-                                print(f"Error extracting text from batch pages: {str(e)}")
+                                print(
+                                    f"Error extracting text from batch pages: {str(e)}"
+                                )
 
                         # Build prompt for this batch
                         batch_extraction_prompt = extraction_prompt
@@ -384,10 +395,14 @@ class GeminiService:
                             # Check rate limit before making API call
                             self._check_rate_limit()
 
-                            print(f"Sending batch of {len(content_parts) - 1} pages to Gemini")
+                            print(
+                                f"Sending batch of {len(content_parts) - 1} pages to Gemini"
+                            )
                             batch_response = model.generate_content(
                                 contents=content_parts,
-                                generation_config=genai.GenerationConfig(temperature=0.2),
+                                generation_config=genai.GenerationConfig(
+                                    temperature=0.2
+                                ),
                             )
 
                             # Extract response for this batch
@@ -395,7 +410,9 @@ class GeminiService:
                                 print(f"Received response for batch {batch_num + 1}")
                                 try:
                                     # Try to parse the JSON response
-                                    batch_json = self._extract_json_from_text(batch_response.text)
+                                    batch_json = self._extract_json_from_text(
+                                        batch_response.text
+                                    )
 
                                     if batch_json:
                                         # Add to results (could be a single object or array)
@@ -413,7 +430,9 @@ class GeminiService:
                                             )
                                         else:
                                             all_results.append(batch_json)
-                                            print(f"Added 1 donation from batch {batch_num + 1}")
+                                            print(
+                                                f"Added 1 donation from batch {batch_num + 1}"
+                                            )
                                 except Exception as e:
                                     print(
                                         f"Error processing data from batch {batch_num + 1}: {str(e)}"
@@ -430,7 +449,9 @@ class GeminiService:
 
                     # If we didn't get any results, try processing the first page as a fallback
                     if not all_results:
-                        print("No results from batch processing, falling back to single page")
+                        print(
+                            "No results from batch processing, falling back to single page"
+                        )
                         page = pdf_doc[0]
                         pix = page.get_pixmap()
                         img_data = pix.tobytes("png")
@@ -449,7 +470,9 @@ class GeminiService:
                             for i in range(pages_to_extract):
                                 page_text = pdf_reader.pages[i].extract_text()
                                 if page_text:
-                                    fallback_text += f"\n--- Page {i+1} ---\n{page_text}\n"
+                                    fallback_text += (
+                                        f"\n--- Page {i+1} ---\n{page_text}\n"
+                                    )
                         except Exception as e:
                             print(f"Error extracting fallback text: {str(e)}")
 
@@ -460,7 +483,9 @@ class GeminiService:
                         fallback_content = self.prompt_manager.get_prompt(
                             "pdf_text_fallback_prompt", {"pdf_text": fallback_text}
                         )
-                        text_fallback_prompt = f"{extraction_prompt}\n\n{fallback_content}"
+                        text_fallback_prompt = (
+                            f"{extraction_prompt}\n\n{fallback_content}"
+                        )
                         content_parts = [text_fallback_prompt]
                     else:
                         # If we have no text and the visual approach failed, we can't process this PDF
@@ -482,7 +507,9 @@ class GeminiService:
                     print(f"Read {len(img_bytes)} bytes from image file")
                     # Handle image as raw data
                     # Use prompt manager to get image extraction prompt
-                    image_prompt = self.prompt_manager.get_prompt("simplified_image_prompt")
+                    image_prompt = self.prompt_manager.get_prompt(
+                        "simplified_image_prompt"
+                    )
                     content_parts = [extraction_prompt + f"\n\n{image_prompt}"]
             else:
                 raise ValueError(f"Unsupported file type: {file_ext}")
@@ -496,7 +523,8 @@ class GeminiService:
             # JSON format is now built into our simplified prompts
 
             response = model.generate_content(
-                contents=content_parts, generation_config=genai.GenerationConfig(temperature=0.2)
+                contents=content_parts,
+                generation_config=genai.GenerationConfig(temperature=0.2),
             )
 
             # Extract response text
@@ -527,10 +555,14 @@ class GeminiService:
                 if parsed_json:
                     # Structure the output consistently - always return a list
                     if isinstance(parsed_json, list):
-                        print(f"Found array of {len(parsed_json)} donations, returning all items")
+                        print(
+                            f"Found array of {len(parsed_json)} donations, returning all items"
+                        )
                         # Debug: Check if all donations have the same date
                         check_dates = [
-                            d.get("Check Date") for d in parsed_json if d.get("Check Date")
+                            d.get("Check Date")
+                            for d in parsed_json
+                            if d.get("Check Date")
                         ]
                         if len(set(check_dates)) == 1 and len(check_dates) > 1:
                             print(
@@ -569,7 +601,9 @@ class GeminiService:
         """
         try:
             # Get the extraction prompt
-            extraction_prompt = self.prompt_manager.get_prompt("simplified_extraction_prompt")
+            extraction_prompt = self.prompt_manager.get_prompt(
+                "simplified_extraction_prompt"
+            )
 
             # Build content parts for Gemini
             content_parts = [extraction_prompt]
@@ -602,7 +636,8 @@ class GeminiService:
             # Call Gemini API
             print(f"Sending batch {batch_info or 'unknown'} to Gemini")
             response = model.generate_content(
-                contents=content_parts, generation_config=genai.GenerationConfig(temperature=0.2)
+                contents=content_parts,
+                generation_config=genai.GenerationConfig(temperature=0.2),
             )
 
             # Extract and parse response
@@ -617,7 +652,9 @@ class GeminiService:
                     else:
                         return [parsed_json]
 
-            print(f"Failed to extract donation data from batch {batch_info or 'unknown'}")
+            print(
+                f"Failed to extract donation data from batch {batch_info or 'unknown'}"
+            )
             return None
 
         except Exception as e:

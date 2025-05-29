@@ -29,7 +29,11 @@ class QBOService:
     """Service for interacting with QuickBooks Online API."""
 
     def __init__(
-        self, client_id: str, client_secret: str, redirect_uri: str, environment: str = "sandbox"
+        self,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        environment: str = "sandbox",
     ):
         """Initialize the QBO service with OAuth credentials.
 
@@ -40,7 +44,9 @@ class QBOService:
             environment: 'sandbox' or 'production'
         """
         if environment not in ["sandbox", "production"]:
-            raise ValueError(f"Environment must be 'sandbox' or 'production', got: {environment}")
+            raise ValueError(
+                f"Environment must be 'sandbox' or 'production', got: {environment}"
+            )
 
         self.client_id = client_id
         self.client_secret = client_secret
@@ -50,11 +56,15 @@ class QBOService:
         # Base URLs for QBO API
         if environment == "sandbox":
             self.auth_endpoint = "https://appcenter.intuit.com/connect/oauth2"
-            self.token_endpoint = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
+            self.token_endpoint = (
+                "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
+            )
             self.api_base = "https://sandbox-quickbooks.api.intuit.com/v3/company/"
         else:
             self.auth_endpoint = "https://appcenter.intuit.com/connect/oauth2"
-            self.token_endpoint = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
+            self.token_endpoint = (
+                "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
+            )
             self.api_base = "https://quickbooks.api.intuit.com/v3/company/"
 
         # OAuth tokens (to be set during authorization flow)
@@ -89,7 +99,9 @@ class QBOService:
         auth_url = f"{self.auth_endpoint}?{urlencode(params)}"
         return auth_url
 
-    @retry_on_failure(max_attempts=3, exceptions=(requests.RequestException, QBOAPIException))
+    @retry_on_failure(
+        max_attempts=3, exceptions=(requests.RequestException, QBOAPIException)
+    )
     def get_tokens(self, authorization_code: str, realm_id: str) -> bool:
         """Exchange authorization code for access and refresh tokens.
 
@@ -116,18 +128,24 @@ class QBOService:
                 "redirect_uri": self.redirect_uri,
             }
 
-            response = requests.post(self.token_endpoint, headers=headers, data=data, timeout=30)
+            response = requests.post(
+                self.token_endpoint, headers=headers, data=data, timeout=30
+            )
 
             if response.status_code == 200:
                 token_data = response.json()
                 self.access_token = token_data.get("access_token")
                 self.refresh_token = token_data.get("refresh_token")
                 self.realm_id = realm_id
-                self.token_expires_at = int(time.time()) + token_data.get("expires_in", 3600)
+                self.token_expires_at = int(time.time()) + token_data.get(
+                    "expires_in", 3600
+                )
                 logger.info("Successfully obtained QBO access tokens")
                 return True
             else:
-                logger.error(f"Failed to get QBO tokens: {response.status_code} - {response.text}")
+                logger.error(
+                    f"Failed to get QBO tokens: {response.status_code} - {response.text}"
+                )
                 return False
 
         except requests.RequestException as e:
@@ -175,10 +193,14 @@ class QBOService:
                 token_data = response.json()
                 self.access_token = token_data.get("access_token")
                 self.refresh_token = token_data.get("refresh_token", self.refresh_token)
-                self.token_expires_at = int(time.time()) + token_data.get("expires_in", 3600)
+                self.token_expires_at = int(time.time()) + token_data.get(
+                    "expires_in", 3600
+                )
                 return True
             else:
-                print(f"Error refreshing token: {response.status_code} - {response.text}")
+                print(
+                    f"Error refreshing token: {response.status_code} - {response.text}"
+                )
                 return False
 
         except Exception as e:
@@ -321,7 +343,13 @@ class QBOService:
 
         # Remove duplicates and empty values
         unique_lookups = list(
-            set([lookup.strip() for lookup in customer_lookups if lookup and lookup.strip()])
+            set(
+                [
+                    lookup.strip()
+                    for lookup in customer_lookups
+                    if lookup and lookup.strip()
+                ]
+            )
         )
 
         if not unique_lookups:
@@ -461,7 +489,9 @@ class QBOService:
                     if len(parts) == 2:
                         # Take last name from before comma, first name from after comma, and reverse them
                         space_separated = f"{parts[1].strip()} {parts[0].strip()}"
-                        escaped_space_separated = self._escape_query_value(space_separated)
+                        escaped_space_separated = self._escape_query_value(
+                            space_separated
+                        )
                         query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{escaped_space_separated}%'"
                         encoded_query = quote(query)
                         url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
@@ -492,7 +522,9 @@ class QBOService:
 
                 # Try to match on the most significant tokens
                 for significant_part in significant_parts:
-                    if len(significant_part) > 3:  # Only use tokens with more than 3 chars
+                    if (
+                        len(significant_part) > 3
+                    ):  # Only use tokens with more than 3 chars
                         escaped_part = self._escape_query_value(significant_part)
                         query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{escaped_part}%'"
                         encoded_query = quote(query)
@@ -520,9 +552,7 @@ class QBOService:
                     org_name = domain.split(".")[0]
                     if len(org_name) > 3:  # Only use if meaningful
                         escaped_org_name = self._escape_query_value(org_name)
-                        query = (
-                            f"SELECT * FROM Customer WHERE DisplayName LIKE '%{escaped_org_name}%'"
-                        )
+                        query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{escaped_org_name}%'"
                         encoded_query = quote(query)
                         url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
 
@@ -547,7 +577,9 @@ class QBOService:
             ):
                 # Format a cleaned phone number (last 10 digits)
                 cleaned_phone = "".join([c for c in safe_lookup if c.isdigit()])[-10:]
-                if len(cleaned_phone) >= 7:  # Need at least 7 digits for meaningful phone match
+                if (
+                    len(cleaned_phone) >= 7
+                ):  # Need at least 7 digits for meaningful phone match
                     escaped_phone = self._escape_query_value(cleaned_phone[-7:])
                     query = f"SELECT * FROM Customer WHERE PrimaryPhone LIKE '%{escaped_phone}%'"
                     encoded_query = quote(query)
@@ -580,7 +612,9 @@ class QBOService:
             Dictionary with cache statistics
         """
         with self._cache_lock:
-            cache_size = len([k for k in self._customer_cache.keys() if not k.startswith("id_")])
+            cache_size = len(
+                [k for k in self._customer_cache.keys() if not k.startswith("id_")]
+            )
             cache_age_seconds = 0
             if self._cache_timestamp:
                 cache_age_seconds = datetime.now().timestamp() - self._cache_timestamp
@@ -592,7 +626,9 @@ class QBOService:
                 "cache_ttl": self._cache_ttl,
             }
 
-    def create_customer(self, customer_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def create_customer(
+        self, customer_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
         """Create a new customer in QBO.
 
         Args:
@@ -607,19 +643,25 @@ class QBOService:
 
         try:
             url = f"{self.api_base}{self.realm_id}/customer"
-            response = requests.post(url, headers=self._get_auth_headers(), json=customer_data)
+            response = requests.post(
+                url, headers=self._get_auth_headers(), json=customer_data
+            )
 
             if response.status_code == 200:
                 return response.json()["Customer"]
             else:
-                print(f"Error creating customer: {response.status_code} - {response.text}")
+                print(
+                    f"Error creating customer: {response.status_code} - {response.text}"
+                )
                 return None
 
         except Exception as e:
             print(f"Exception in create_customer: {str(e)}")
             return None
 
-    def update_customer(self, customer_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def update_customer(
+        self, customer_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
         """Update an existing customer in QBO.
 
         Args:
@@ -634,12 +676,16 @@ class QBOService:
 
         try:
             url = f"{self.api_base}{self.realm_id}/customer"
-            response = requests.post(url, headers=self._get_auth_headers(), json=customer_data)
+            response = requests.post(
+                url, headers=self._get_auth_headers(), json=customer_data
+            )
 
             if response.status_code == 200:
                 return response.json()["Customer"]
             else:
-                print(f"Error updating customer: {response.status_code} - {response.text}")
+                print(
+                    f"Error updating customer: {response.status_code} - {response.text}"
+                )
                 return None
 
         except Exception as e:
@@ -683,14 +729,18 @@ class QBOService:
                     print(f"Found {len(receipts)} matching sales receipt(s)")
                     return receipts[0] if receipts else None
             else:
-                print(f"Error querying sales receipts: {response.status_code} - {response.text}")
+                print(
+                    f"Error querying sales receipts: {response.status_code} - {response.text}"
+                )
                 return None
 
         except Exception as e:
             print(f"Exception in find_sales_receipt: {str(e)}")
             return None
 
-    def create_sales_receipt(self, sales_receipt_data: Dict[str, Any]) -> Dict[str, Any]:
+    def create_sales_receipt(
+        self, sales_receipt_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Create a sales receipt in QBO with enhanced error handling.
 
         Args:
@@ -705,7 +755,9 @@ class QBOService:
 
         try:
             url = f"{self.api_base}{self.realm_id}/salesreceipt"
-            response = requests.post(url, headers=self._get_auth_headers(), json=sales_receipt_data)
+            response = requests.post(
+                url, headers=self._get_auth_headers(), json=sales_receipt_data
+            )
 
             if response.status_code == 200:
                 return response.json()["SalesReceipt"]
@@ -717,9 +769,15 @@ class QBOService:
                     error_json = response.json()
                     if "Fault" in error_json:
                         # Get error details from response
-                        error_detail = error_json["Fault"].get("Error", [{}])[0].get("Detail", "")
-                        error_message = error_json["Fault"].get("Error", [{}])[0].get("Message", "")
-                        error_code = error_json["Fault"].get("Error", [{}])[0].get("code", "")
+                        error_detail = (
+                            error_json["Fault"].get("Error", [{}])[0].get("Detail", "")
+                        )
+                        error_message = (
+                            error_json["Fault"].get("Error", [{}])[0].get("Message", "")
+                        )
+                        error_code = (
+                            error_json["Fault"].get("Error", [{}])[0].get("code", "")
+                        )
 
                         # Add to error data
                         error_data["detail"] = error_detail
@@ -743,14 +801,18 @@ class QBOService:
                                     r"Accounts element id (\d+)", error_detail
                                 )
                                 if not account_match:
-                                    account_match = re.search(r"Account id (\d+)", error_detail)
+                                    account_match = re.search(
+                                        r"Account id (\d+)", error_detail
+                                    )
 
                                 if account_match:
                                     account_id = account_match.group(1)
                                     error_data["setupType"] = "account"
                                     error_data["invalidId"] = account_id
                                     error_data["requiresSetup"] = True
-                                    print(f"Detected invalid account reference: {account_id}")
+                                    print(
+                                        f"Detected invalid account reference: {account_id}"
+                                    )
 
                             # Item reference errors - multiple possible error formats
                             elif (
@@ -761,11 +823,17 @@ class QBOService:
                                 import re
 
                                 # Try different regex patterns for item errors
-                                item_match = re.search(r"Item elements id (\d+)", error_detail)
+                                item_match = re.search(
+                                    r"Item elements id (\d+)", error_detail
+                                )
                                 if not item_match:
-                                    item_match = re.search(r"Item elements Id (\d+)", error_detail)
+                                    item_match = re.search(
+                                        r"Item elements Id (\d+)", error_detail
+                                    )
                                 if not item_match:
-                                    item_match = re.search(r"Item id (\d+)", error_detail)
+                                    item_match = re.search(
+                                        r"Item id (\d+)", error_detail
+                                    )
 
                                 if item_match:
                                     item_id = item_match.group(1)
@@ -814,7 +882,9 @@ class QBOService:
                             print(f"Detected validation error: {validation_details}")
 
                         # Check for duplicate document number
-                        elif "Duplicate" in error_message and "DocNumber" in error_detail:
+                        elif (
+                            "Duplicate" in error_message and "DocNumber" in error_detail
+                        ):
                             error_data["duplicateError"] = True
                             error_data["duplicateField"] = "DocNumber"
                             print("Detected duplicate document number error")
@@ -917,11 +987,15 @@ class QBOService:
                     if not key.startswith("id_")
                 ]
                 if cached_customers:
-                    logger.info(f"Returning {len(cached_customers)} customers from cache")
+                    logger.info(
+                        f"Returning {len(cached_customers)} customers from cache"
+                    )
                     return cached_customers
 
         if not self.access_token or not self.realm_id:
-            logger.error("Not authenticated with QBO - Missing access_token or realm_id")
+            logger.error(
+                "Not authenticated with QBO - Missing access_token or realm_id"
+            )
             raise QBOAPIException("QuickBooks not authenticated")
             return []
 
@@ -943,7 +1017,9 @@ class QBOService:
                 encoded_query = quote(query)
                 url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
 
-                print(f"Batch {batch_count}: Requesting customers at position {start_position}")
+                print(
+                    f"Batch {batch_count}: Requesting customers at position {start_position}"
+                )
                 print(f"Request URL: {url}")
 
                 # Print auth headers (but mask token for security)
@@ -981,14 +1057,18 @@ class QBOService:
 
                     # If we got fewer customers than the max, we're done
                     if len(batch) < max_results:
-                        print(f"Batch {batch_count}: Less than max results, finished retrieving")
+                        print(
+                            f"Batch {batch_count}: Less than max results, finished retrieving"
+                        )
                         break
 
                     # Otherwise, update the start position for the next batch
                     start_position += max_results
                 else:
                     error_text = (
-                        response.text[:200] + "..." if len(response.text) > 200 else response.text
+                        response.text[:200] + "..."
+                        if len(response.text) > 200
+                        else response.text
                     )
                     print(f"Error fetching customers: {response.status_code}")
                     print(f"Error details: {error_text}")
@@ -1048,7 +1128,9 @@ class QBOService:
                 return None
 
             url = f"{self.api_base}{self.realm_id}/account"
-            response = requests.post(url, headers=self._get_auth_headers(), json=account_data)
+            response = requests.post(
+                url, headers=self._get_auth_headers(), json=account_data
+            )
 
             if response.status_code == 200:
                 account = response.json().get("Account")
@@ -1057,7 +1139,9 @@ class QBOService:
                 )
                 return account
             else:
-                print(f"Error creating account: {response.status_code} - {response.text}")
+                print(
+                    f"Error creating account: {response.status_code} - {response.text}"
+                )
                 return None
 
         except Exception as e:
@@ -1098,11 +1182,15 @@ class QBOService:
                 item_data["ItemType"] = "Non-inventory"
 
             url = f"{self.api_base}{self.realm_id}/item"
-            response = requests.post(url, headers=self._get_auth_headers(), json=item_data)
+            response = requests.post(
+                url, headers=self._get_auth_headers(), json=item_data
+            )
 
             if response.status_code == 200:
                 item = response.json().get("Item")
-                print(f"Successfully created item: {item.get('Name')} (ID: {item.get('Id')})")
+                print(
+                    f"Successfully created item: {item.get('Name')} (ID: {item.get('Id')})"
+                )
                 return item
             else:
                 print(f"Error creating item: {response.status_code} - {response.text}")
@@ -1149,7 +1237,9 @@ class QBOService:
                 )
                 return payment_method
             else:
-                print(f"Error creating payment method: {response.status_code} - {response.text}")
+                print(
+                    f"Error creating payment method: {response.status_code} - {response.text}"
+                )
                 return None
 
         except Exception as e:
@@ -1180,13 +1270,13 @@ class QBOService:
             while True:
                 batch_count += 1
                 # Query for a batch of items
-                query = (
-                    f"SELECT * FROM Item STARTPOSITION {start_position} MAXRESULTS {max_results}"
-                )
+                query = f"SELECT * FROM Item STARTPOSITION {start_position} MAXRESULTS {max_results}"
                 encoded_query = quote(query)
                 url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
 
-                print(f"Batch {batch_count}: Requesting items at position {start_position}")
+                print(
+                    f"Batch {batch_count}: Requesting items at position {start_position}"
+                )
 
                 response = requests.get(url, headers=self._get_auth_headers())
 
@@ -1209,14 +1299,18 @@ class QBOService:
 
                     # If we got fewer items than the max, we're done
                     if len(batch) < max_results:
-                        print(f"Batch {batch_count}: Less than max results, finished retrieving")
+                        print(
+                            f"Batch {batch_count}: Less than max results, finished retrieving"
+                        )
                         break
 
                     # Otherwise, update the start position for the next batch
                     start_position += max_results
                 else:
                     error_text = (
-                        response.text[:200] + "..." if len(response.text) > 200 else response.text
+                        response.text[:200] + "..."
+                        if len(response.text) > 200
+                        else response.text
                     )
                     print(f"Error fetching items: {response.status_code}")
                     print(f"Error details: {error_text}")
@@ -1261,13 +1355,13 @@ class QBOService:
             while True:
                 batch_count += 1
                 # Query for a batch of accounts
-                query = (
-                    f"SELECT * FROM Account STARTPOSITION {start_position} MAXRESULTS {max_results}"
-                )
+                query = f"SELECT * FROM Account STARTPOSITION {start_position} MAXRESULTS {max_results}"
                 encoded_query = quote(query)
                 url = f"{self.api_base}{self.realm_id}/query?query={encoded_query}"
 
-                print(f"Batch {batch_count}: Requesting accounts at position {start_position}")
+                print(
+                    f"Batch {batch_count}: Requesting accounts at position {start_position}"
+                )
 
                 response = requests.get(url, headers=self._get_auth_headers())
 
@@ -1290,21 +1384,27 @@ class QBOService:
 
                     # If we got fewer accounts than the max, we're done
                     if len(batch) < max_results:
-                        print(f"Batch {batch_count}: Less than max results, finished retrieving")
+                        print(
+                            f"Batch {batch_count}: Less than max results, finished retrieving"
+                        )
                         break
 
                     # Otherwise, update the start position for the next batch
                     start_position += max_results
                 else:
                     error_text = (
-                        response.text[:200] + "..." if len(response.text) > 200 else response.text
+                        response.text[:200] + "..."
+                        if len(response.text) > 200
+                        else response.text
                     )
                     print(f"Error fetching accounts: {response.status_code}")
                     print(f"Error details: {error_text}")
                     break
 
             print("==== ACCOUNT RETRIEVAL SUMMARY ====")
-            print(f"Successfully retrieved {len(accounts)} accounts in {batch_count} batches")
+            print(
+                f"Successfully retrieved {len(accounts)} accounts in {batch_count} batches"
+            )
 
             # Sort accounts by name for easier selection in the UI
             accounts.sort(key=lambda x: x.get("Name", "").lower())
@@ -1348,7 +1448,9 @@ class QBOService:
                 print(f"Retrieved {len(payment_methods)} payment methods")
             else:
                 error_text = (
-                    response.text[:200] + "..." if len(response.text) > 200 else response.text
+                    response.text[:200] + "..."
+                    if len(response.text) > 200
+                    else response.text
                 )
                 print(f"Error fetching payment methods: {response.status_code}")
                 print(f"Error details: {error_text}")

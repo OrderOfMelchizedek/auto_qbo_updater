@@ -13,7 +13,9 @@ from .exceptions import ExternalAPIException, RetryableException
 logger = logging.getLogger(__name__)
 
 
-def exponential_backoff(attempt: int, base_delay: float = 1.0, max_delay: float = 60.0) -> float:
+def exponential_backoff(
+    attempt: int, base_delay: float = 1.0, max_delay: float = 60.0
+) -> float:
     """Calculate exponential backoff delay."""
     delay = min(base_delay * (2**attempt), max_delay)
     # Add jitter to prevent thundering herd
@@ -29,7 +31,13 @@ def is_retryable_error(exception: Exception) -> bool:
 
     # Retry external API errors with specific status codes
     if isinstance(exception, ExternalAPIException):
-        if exception.status_code in [429, 500, 502, 503, 504]:  # Rate limit or server errors
+        if exception.status_code in [
+            429,
+            500,
+            502,
+            503,
+            504,
+        ]:  # Rate limit or server errors
             return True
 
     # Retry connection errors
@@ -112,7 +120,9 @@ def retry_api_call(func: Callable, service_name: str, *args, **kwargs):
     @retry_on_failure(
         max_attempts=3,
         exceptions=(Exception,),
-        on_retry=lambda e, attempt: logger.info(f"Retrying {service_name} call, attempt {attempt}"),
+        on_retry=lambda e, attempt: logger.info(
+            f"Retrying {service_name} call, attempt {attempt}"
+        ),
     )
     def wrapped_call():
         return func(*args, **kwargs)

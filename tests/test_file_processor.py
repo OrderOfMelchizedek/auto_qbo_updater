@@ -76,7 +76,9 @@ class TestFileProcessor(unittest.TestCase):
         self.assertEqual(result[0]["Gift Amount"], "100.00")
 
         # Verify GeminiService was called correctly - it's called only once since we have all required fields
-        self.gemini_service.extract_donation_data.assert_called_once_with(test_image_path)
+        self.gemini_service.extract_donation_data.assert_called_once_with(
+            test_image_path
+        )
 
     def disabled_test_process_pdf(self):
         """Test processing a PDF file."""
@@ -150,7 +152,9 @@ class TestFileProcessor(unittest.TestCase):
         # Verify the prompt manager was used correctly
         self.mock_prompt_manager.get_prompt.assert_called_with(
             "csv_extraction_prompt",
-            {"csv_content": "donor_name,gift_amount,gift_date\nJohn Doe,100.00,01/01/2025\n"},
+            {
+                "csv_content": "donor_name,gift_amount,gift_date\nJohn Doe,100.00,01/01/2025\n"
+            },
         )
 
     def disabled_test_process_with_validation_missing_fields(self):
@@ -197,7 +201,10 @@ class TestFileProcessor(unittest.TestCase):
         self.mock_prompt_manager.get_prompt.side_effect = side_effect
 
         # Configure the gemini service to return different results on each call
-        self.gemini_service.extract_donation_data.side_effect = [[initial_data], [reprocessed_data]]
+        self.gemini_service.extract_donation_data.side_effect = [
+            [initial_data],
+            [reprocessed_data],
+        ]
 
         # Process the image
         result = self.file_processor.process(test_image_path, ".jpg")
@@ -223,7 +230,9 @@ class TestFileProcessor(unittest.TestCase):
 
         # Verify get_prompt was called with the reprocess_prompt
         self.assertEqual(self.mock_prompt_manager.get_prompt.call_count, 1)
-        self.assertEqual(self.mock_prompt_manager.get_prompt.call_args[0][0], "reprocess_prompt")
+        self.assertEqual(
+            self.mock_prompt_manager.get_prompt.call_args[0][0], "reprocess_prompt"
+        )
 
     def test_unsupported_file_type(self):
         """Test handling of unsupported file types."""
