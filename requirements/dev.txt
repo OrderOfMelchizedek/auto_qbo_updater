@@ -1,0 +1,8 @@
+-r base.txt
+
+# Linting and code quality tools
+flake8==6.1.0
+black==23.12.1
+isort==5.13.2
+bandit==1.7.5
+safety==2.3.5
