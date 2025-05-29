@@ -9,6 +9,8 @@ from datetime import datetime
 from flask import Blueprint, current_app, jsonify, request, session
 from werkzeug.utils import secure_filename
 
+from src.utils.s3_storage import S3Storage
+
 logger = logging.getLogger(__name__)
 
 files_bp = Blueprint("files", __name__)
@@ -52,9 +54,9 @@ def upload_start():
 def upload_files_async():
     """Handle file upload with async processing via Celery."""
     try:
-        from services.validation import log_audit_event
-        from utils.result_store import ResultStore
-        from utils.tasks import process_files_task
+        from src.services.validation import log_audit_event
+        from src.utils.result_store import ResultStore
+        from src.utils.tasks import process_files_task
 
         result_store = ResultStore()
 
@@ -86,26 +88,57 @@ def upload_files_async():
             request_ip=request.remote_addr,
         )
 
-        # Process each file
-        file_paths = []
+        # Initialize S3 storage
+        s3_storage = S3Storage()
+
+        # Process each file and upload to S3
+        s3_references = []
+        total_size = 0
+
         for file in files:
             if file and file.filename:
-                # Generate secure filename
-                original_filename = secure_filename(file.filename)
-                unique_filename = f"{uuid.uuid4()}_{original_filename}"
-                file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_filename)
+                try:
+                    # Generate secure filename
+                    original_filename = secure_filename(file.filename)
 
-                # Save file
-                file.save(file_path)
-                file_paths.append(
-                    {
-                        "temp_path": file_path,
-                        "original_filename": original_filename,
-                        "content_type": file.content_type or "application/octet-stream",
+                    # Read file content
+                    file_content = file.read()
+
+                    # Generate S3 key
+                    s3_key = s3_storage.generate_key(session_id, original_filename)
+
+                    # Upload to S3
+                    s3_ref = s3_storage.upload_file(
+                        file_content, s3_key, content_type=file.content_type or "application/octet-stream"
+                    )
+
+                    # Add metadata
+                    file_info = {
+                        "filename": original_filename,
+                        "s3_key": s3_key,
+                        "bucket": s3_ref["bucket"],
+                        "size": s3_ref["size"],
+                        "content_type": file.content_type,
                     }
-                )
+                    s3_references.append(file_info)
+                    total_size += s3_ref["size"]
 
-                logger.info(f"Saved file for async processing: {original_filename}")
+                    logger.info(f"Uploaded file to S3: {original_filename} (key: {s3_key})")
+
+                except Exception as e:
+                    logger.error(f"Error uploading file {file.filename} to S3: {str(e)}")
+                    # Clean up any uploaded files
+                    for ref in s3_references:
+                        try:
+                            s3_storage.delete_file(ref["s3_key"])
+                        except:
+                            pass
+                    return (
+                        jsonify({"success": False, "message": f"Error uploading file {file.filename}: {str(e)}"}),
+                        500,
+                    )
+
+        logger.info(f"Uploaded {len(s3_references)} files ({total_size / 1024 / 1024:.1f} MB) to S3")
 
         # Get QBO config if authenticated
         qbo_config = None
@@ -120,9 +153,9 @@ def upload_files_async():
                     "token_expires_at": qbo_service.token_expires_at,
                 }
 
-        # Submit to Celery with correct parameters
+        # Submit to Celery with S3 references
         task = process_files_task.delay(
-            file_references=file_paths,  # Changed from file_paths to file_references
+            s3_references=s3_references,  # Use S3 references instead of local files
             session_id=session_id,
             qbo_config=qbo_config,
             gemini_model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-preview-04-17"),
@@ -133,7 +166,7 @@ def upload_files_async():
             task.id,
             {
                 "session_id": session_id,
-                "file_count": len(file_paths),
+                "file_count": len(s3_references),
                 "status": "pending",
                 "created_at": datetime.utcnow().isoformat(),
             },
@@ -146,7 +179,7 @@ def upload_files_async():
                 "success": True,
                 "task_id": task.id,
                 "session_id": session_id,
-                "message": f"Processing {len(file_paths)} files...",
+                "message": f"Processing {len(s3_references)} files...",
             }
         )
 

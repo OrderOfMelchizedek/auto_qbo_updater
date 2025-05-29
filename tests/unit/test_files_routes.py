@@ -71,10 +71,17 @@ class TestFilesRoutes:
             data = json.loads(response.data)
             assert "error" in data
 
+    @patch("src.utils.s3_storage.S3Storage")
     @patch("utils.tasks.process_files_task")
     @patch("utils.result_store.ResultStore")
-    def test_upload_async_success(self, mock_store_class, mock_task, client, mock_file):
+    def test_upload_async_success(self, mock_store_class, mock_task, mock_s3_class, client, mock_file):
         """Test async file upload."""
+        # Mock S3 storage
+        mock_s3 = Mock()
+        mock_s3_class.return_value = mock_s3
+        mock_s3.generate_key.return_value = "test-key"
+        mock_s3.upload_file.return_value = {"bucket": "test-bucket", "size": 1024, "key": "test-key"}
+
         # Mock Celery task
         mock_task_instance = Mock()
         mock_task_instance.id = "task-123"
@@ -103,8 +110,13 @@ class TestFilesRoutes:
             # Verify task was submitted
             mock_task.delay.assert_called_once()
             call_args = mock_task.delay.call_args[1]
-            assert len(call_args["file_references"]) == 1
-            assert call_args["file_references"][0]["original_filename"] == "test_donation.csv"
+            assert len(call_args["s3_references"]) == 1
+            assert call_args["s3_references"][0]["filename"] == "test_donation.csv"
+            # Check that s3_key starts with "uploads/" and ends with "test_donation.csv"
+            assert call_args["s3_references"][0]["s3_key"].startswith("uploads/")
+            assert call_args["s3_references"][0]["s3_key"].endswith("test_donation.csv")
+            # Bucket name comes from environment variable or default
+            assert "bucket" in call_args["s3_references"][0]
 
     def test_upload_async_no_files(self, client):
         """Test async upload with no files."""
