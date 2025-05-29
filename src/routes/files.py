@@ -97,7 +97,13 @@ def upload_files_async():
 
                 # Save file
                 file.save(file_path)
-                file_paths.append({"path": file_path, "original_name": original_filename})
+                file_paths.append(
+                    {
+                        "temp_path": file_path,
+                        "original_filename": original_filename,
+                        "content_type": file.content_type or "application/octet-stream",
+                    }
+                )
 
                 logger.info(f"Saved file for async processing: {original_filename}")
 

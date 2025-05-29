@@ -446,10 +446,11 @@ def get_environment():
 def get_all_items():
     """Get all items from QuickBooks."""
     try:
-        qbo_service = current_app.qbo_service
-
-        if not qbo_service.is_token_valid():
+        # Check QBO authentication
+        if not session.get("qbo_authenticated"):
             return jsonify({"error": "QuickBooks not authenticated"}), 401
+
+        qbo_service = current_app.qbo_service
 
         items = qbo_service.get_all_items()
         return jsonify(items)
@@ -463,10 +464,11 @@ def get_all_items():
 def get_all_accounts():
     """Get all accounts from QuickBooks."""
     try:
-        qbo_service = current_app.qbo_service
-
-        if not qbo_service.is_token_valid():
+        # Check QBO authentication
+        if not session.get("qbo_authenticated"):
             return jsonify({"error": "QuickBooks not authenticated"}), 401
+
+        qbo_service = current_app.qbo_service
 
         accounts = qbo_service.get_all_accounts()
 
@@ -493,10 +495,11 @@ def get_all_accounts():
 def get_all_payment_methods():
     """Get all payment methods from QuickBooks."""
     try:
-        qbo_service = current_app.qbo_service
-
-        if not qbo_service.is_token_valid():
+        # Check QBO authentication
+        if not session.get("qbo_authenticated"):
             return jsonify({"error": "QuickBooks not authenticated"}), 401
+
+        qbo_service = current_app.qbo_service
 
         payment_methods = qbo_service.get_all_payment_methods()
         return jsonify(payment_methods)

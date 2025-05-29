@@ -104,7 +104,7 @@ class TestFilesRoutes:
             mock_task.delay.assert_called_once()
             call_args = mock_task.delay.call_args[1]
             assert len(call_args["file_references"]) == 1
-            assert call_args["file_references"][0]["original_name"] == "test_donation.csv"
+            assert call_args["file_references"][0]["original_filename"] == "test_donation.csv"
 
     def test_upload_async_no_files(self, client):
         """Test async upload with no files."""
