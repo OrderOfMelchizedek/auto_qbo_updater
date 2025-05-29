@@ -235,9 +235,7 @@ def import_customers_thread():
         # Get existing customers to avoid duplicates
         add_log("Fetching existing customers from QBO Sandbox...")
         existing_customers = qbo_service.get_all_customers()
-        existing_names = [
-            customer.get("DisplayName", "").lower() for customer in existing_customers
-        ]
+        existing_names = [customer.get("DisplayName", "").lower() for customer in existing_customers]
         add_log(f"Found {len(existing_customers)} existing customers in QBO Sandbox.")
 
         # Create a list of customers to import (excluding those to skip)
