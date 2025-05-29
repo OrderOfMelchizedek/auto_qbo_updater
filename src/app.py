@@ -1,9 +1,28 @@
 """Main Flask application for FOM to QBO automation."""
 
+import os
+import sys
+
+# Debug: Print Python path and environment info
+print(f"Python version: {sys.version}")
+print(f"Current working directory: {os.getcwd()}")
+print(f"__file__: {__file__}")
+print(f"DYNO env var (Heroku indicator): {os.environ.get('DYNO', 'Not on Heroku')}")
+
+# Load environment variables immediately
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Debug: Check if .env file exists
+if os.path.exists(".env"):
+    print(".env file found")
+else:
+    print(".env file NOT found")
+
 import argparse
 import json
 import mimetypes
-import os
 import re
 import tempfile
 import uuid
@@ -335,8 +354,7 @@ def cleanup_uploaded_file(file_path):
         print(f"Error cleaning up file {file_path}: {str(e)}")
 
 
-# Run validation before any other initialization
-validate_environment()
+# Note: Environment validation moved to create_app() to ensure it runs after gunicorn initialization
 
 
 # Define model aliases
@@ -390,6 +408,35 @@ app = Flask(__name__)
 import time
 
 app.start_time = time.time()
+
+# Environment variables are already loaded at the top of the file
+
+# Debug: Print environment variables (sanitized)
+print("Environment variables check:")
+for var in ["FLASK_SECRET_KEY", "GEMINI_API_KEY", "QBO_CLIENT_ID", "QBO_CLIENT_SECRET", "QBO_REDIRECT_URI"]:
+    value = os.environ.get(var)
+    if value:
+        # Print first 4 chars only for security
+        print(f"  {var}: {'*' * 4}{value[:4]}...{value[-4:]}")
+    else:
+        print(f"  {var}: NOT SET")
+
+# Validate environment variables after Flask initialization
+# This ensures gunicorn has fully loaded the environment
+try:
+    validate_environment()
+except ValueError as e:
+    print(f"Environment validation failed: {e}")
+    # On Heroku, sometimes env vars take a moment to be available
+    # Let's check if we're on Heroku and give it another try
+    if os.environ.get("DYNO"):
+        print("Detected Heroku environment, retrying environment check...")
+        import time
+
+        time.sleep(2)  # Give Heroku a moment
+        validate_environment()
+    else:
+        raise
 
 # Set Flask secret key from environment variable (already validated)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY")
