@@ -238,7 +238,7 @@ jobs:
   deploy:
     name: Deploy to Heroku
     runs-on: ubuntu-latest
-    needs: build
+    needs: [test, security]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/heroku-deployment')
 
     steps:
