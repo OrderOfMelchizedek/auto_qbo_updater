@@ -252,14 +252,29 @@ jobs:
       env:
         HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
       run: |
-        # Add Heroku remote
-        heroku git:remote -a ${{ secrets.HEROKU_APP_NAME }} || echo "Remote might already exist"
+        # Check if app exists, create if it doesn't
+        if ! heroku apps:info -a ${{ secrets.HEROKU_APP_NAME }} >/dev/null 2>&1; then
+          echo "App ${{ secrets.HEROKU_APP_NAME }} doesn't exist. Creating it..."
+          heroku create ${{ secrets.HEROKU_APP_NAME }} || echo "App creation failed - it might already exist"
+        else
+          echo "App ${{ secrets.HEROKU_APP_NAME }} exists"
+        fi
 
-        # Set buildpack if not already set
-        heroku buildpacks:set heroku/python -a ${{ secrets.HEROKU_APP_NAME }} || echo "Buildpack might already be set"
+        # Add git remote using HTTPS with token auth
+        git remote remove heroku 2>/dev/null || true
+        git remote add heroku https://heroku:${HEROKU_API_KEY}@git.heroku.com/${{ secrets.HEROKU_APP_NAME }}.git
+
+        # Set buildpack
+        heroku buildpacks:set heroku/python -a ${{ secrets.HEROKU_APP_NAME }} || echo "Failed to set buildpack"
 
         # Deploy
+        echo "Deploying to Heroku..."
         git push heroku heroku-deployment:main --force
+
+        # Set required environment variables if not already set
+        echo "Ensuring required environment variables are set..."
+        heroku config:get FLASK_SECRET_KEY -a ${{ secrets.HEROKU_APP_NAME }} >/dev/null 2>&1 || \
+          heroku config:set FLASK_SECRET_KEY=$(openssl rand -base64 32) -a ${{ secrets.HEROKU_APP_NAME }}
 
         # Run release phase if Procfile has release command
         if grep -q "release:" Procfile; then
@@ -267,24 +282,45 @@ jobs:
           heroku run release -a ${{ secrets.HEROKU_APP_NAME }}
         fi
 
-        # Health check
+        # Scale dynos if needed
+        heroku ps:scale web=1 -a ${{ secrets.HEROKU_APP_NAME }} || echo "Failed to scale web dyno"
+
+        # Health check with retries
         echo "Waiting 30 seconds for app to start..."
         sleep 30
 
-        echo "Performing health check..."
-        HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://${{ secrets.HEROKU_APP_NAME }}.herokuapp.com/health)
+        MAX_RETRIES=3
+        RETRY_COUNT=0
 
-        if [ "$HEALTH_STATUS" = "200" ]; then
-          echo "✅ Health check passed!"
-          HEALTH_RESPONSE=$(curl -s https://${{ secrets.HEROKU_APP_NAME }}.herokuapp.com/health)
-          if [[ "$HEALTH_RESPONSE" == *"healthy"* ]]; then
-            echo "✅ App is healthy!"
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+          echo "Performing health check (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)..."
+          HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://${{ secrets.HEROKU_APP_NAME }}.herokuapp.com/health)
+
+          if [ "$HEALTH_STATUS" = "200" ]; then
+            echo "✅ Health check passed!"
+            HEALTH_RESPONSE=$(curl -s https://${{ secrets.HEROKU_APP_NAME }}.herokuapp.com/health)
+            if [[ "$HEALTH_RESPONSE" == *"healthy"* ]]; then
+              echo "✅ App is healthy!"
+              exit 0
+            else
+              echo "⚠️ Health check response doesn't contain 'healthy'"
+              echo "Response: $HEALTH_RESPONSE"
+            fi
           else
-            echo "❌ Health check response doesn't contain 'healthy'"
-            echo "Response: $HEALTH_RESPONSE"
-            exit 1
+            echo "⚠️ Health check returned status: $HEALTH_STATUS"
           fi
-        else
-          echo "❌ Health check failed with status: $HEALTH_STATUS"
-          exit 1
-        fi
+
+          RETRY_COUNT=$((RETRY_COUNT + 1))
+          if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "Waiting 20 seconds before retry..."
+            sleep 20
+          fi
+        done
+
+        echo "❌ Health check failed after $MAX_RETRIES attempts"
+
+        # Show recent logs for debugging
+        echo "Recent app logs:"
+        heroku logs --tail -n 50 -a ${{ secrets.HEROKU_APP_NAME }} || echo "Failed to fetch logs"
+
+        exit 1
