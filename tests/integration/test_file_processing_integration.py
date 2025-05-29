@@ -5,6 +5,8 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
+from PIL import Image
+import io
 
 # Add src to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src")))
@@ -37,12 +39,8 @@ class TestFileProcessingIntegration(unittest.TestCase):
 
         shutil.rmtree(self.temp_dir)
 
-    @patch("src.utils.gemini_service.genai")
-    def test_csv_to_donations_flow(self, mock_genai):
+    def test_csv_to_donations_flow(self):
         """Test complete flow from CSV file to donation data."""
-        # Set up mock Gemini
-        mock_genai.configure = MagicMock()
-
         # Create a test CSV file
         csv_content = """Donor Name,Gift Amount,Gift Date,Check No.
 John Smith,100.00,2024-01-15,1234
@@ -52,133 +50,113 @@ Jane Doe,250.50,2024-01-16,1235
         with open(csv_path, "w") as f:
             f.write(csv_content)
 
-        # Mock Gemini response
-        mock_model = MagicMock()
-        mock_response = MagicMock()
-        mock_response.text = """[
-            {
-                "Donor Name": "John Smith",
-                "Gift Amount": "100.00",
-                "Gift Date": "2024-01-15",
-                "Check No.": "1234",
-                "customerLookup": "Smith, John"
-            },
-            {
-                "Donor Name": "Jane Doe",
-                "Gift Amount": "250.50",
-                "Gift Date": "2024-01-16",
-                "Check No.": "1235",
-                "customerLookup": "Doe, Jane"
-            }
-        ]"""
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
+        # Mock the extract_text_data method directly
+        with patch.object(GeminiService, 'extract_text_data') as mock_extract:
+            mock_extract.return_value = [
+                {
+                    "Donor Name": "John Smith",
+                    "Gift Amount": "100.00",
+                    "Gift Date": "2024-01-15",
+                    "Check No.": "1234",
+                    "customerLookup": "Smith, John"
+                },
+                {
+                    "Donor Name": "Jane Doe",
+                    "Gift Amount": "250.50",
+                    "Gift Date": "2024-01-16",
+                    "Check No.": "1235",
+                    "customerLookup": "Doe, Jane"
+                }
+            ]
 
-        # Create services and process file
-        gemini_service = GeminiService(api_key="test-key")
-        file_processor = FileProcessor(gemini_service)
+            # Create services and process file
+            gemini_service = GeminiService(api_key="test-key")
+            file_processor = FileProcessor(gemini_service)
 
-        # Process the CSV
-        result = file_processor.process(csv_path, ".csv")
+            # Process the CSV
+            result = file_processor.process(csv_path, ".csv")
 
-        # Verify results
-        self.assertIsNotNone(result)
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["Donor Name"], "John Smith")
-        self.assertEqual(result[0]["Gift Amount"], "100.00")
-        self.assertEqual(result[1]["Donor Name"], "Jane Doe")
-        self.assertEqual(result[1]["Gift Amount"], "250.50")
+            # Verify results
+            self.assertIsNotNone(result)
+            self.assertEqual(len(result), 2)
+            self.assertEqual(result[0]["Donor Name"], "John Smith")
+            self.assertEqual(result[0]["Gift Amount"], "100.00")
+            self.assertEqual(result[1]["Donor Name"], "Jane Doe")
+            self.assertEqual(result[1]["Gift Amount"], "250.50")
 
-    @patch("src.utils.gemini_service.genai")
-    @patch("PIL.Image.open")
-    def test_image_to_donations_flow(self, mock_image_open, mock_genai):
+    def test_image_to_donations_flow(self):
         """Test complete flow from image file to donation data."""
-        # Set up mock Gemini
-        mock_genai.configure = MagicMock()
-
-        # Create a test image file
+        # Create a real test image file (1x1 pixel PNG)
         image_path = os.path.join(self.temp_dir, "test_donation.jpg")
-        with open(image_path, "wb") as f:
-            f.write(b"fake image data")
+        
+        # Create a minimal 1x1 pixel image
+        img = Image.new('RGB', (1, 1), color='white')
+        img.save(image_path, 'JPEG')
 
-        # Mock PIL Image
-        mock_image = MagicMock()
-        mock_image_open.return_value = mock_image
+        # Mock the extract_donation_data method directly
+        with patch.object(GeminiService, 'extract_donation_data') as mock_extract:
+            mock_extract.return_value = {
+                "Donor Name": "Test Donor",
+                "Gift Amount": "500.00",
+                "Gift Date": "2024-01-20",
+                "Check No.": "5678",
+                "customerLookup": "Donor, Test"
+            }
 
-        # Mock Gemini response
-        mock_model = MagicMock()
-        mock_response = MagicMock()
-        mock_response.text = """[{
-            "Donor Name": "Test Donor",
-            "Gift Amount": "500.00",
-            "Gift Date": "2024-01-20",
-            "Check No.": "5678",
-            "customerLookup": "Donor, Test"
-        }]"""
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
+            # Create services and process file
+            gemini_service = GeminiService(api_key="test-key")
+            file_processor = FileProcessor(gemini_service)
 
-        # Create services and process file
-        gemini_service = GeminiService(api_key="test-key")
-        file_processor = FileProcessor(gemini_service)
+            # Process the image
+            result = file_processor.process(image_path, ".jpg")
 
-        # Process the image
-        result = file_processor.process(image_path, ".jpg")
+            # Verify results
+            self.assertIsNotNone(result)
+            self.assertEqual(result["Donor Name"], "Test Donor")
+            self.assertEqual(result["Gift Amount"], "500.00")
 
-        # Verify results
-        self.assertIsNotNone(result)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["Donor Name"], "Test Donor")
-        self.assertEqual(result[0]["Gift Amount"], "500.00")
-
-    @patch("src.utils.gemini_service.genai")
-    def test_batch_processing_multiple_files(self, mock_genai):
+    def test_batch_processing_multiple_files(self):
         """Test processing multiple files in sequence."""
-        # Set up mock Gemini
-        mock_genai.configure = MagicMock()
-
         # Create multiple test files
         files = []
         for i in range(3):
-            csv_content = f"Donor Name,Gift Amount,Gift Date,Check No.\\nDonor {i},100.00,2024-01-{i+1:02d},{i+1000}\\n"
+            csv_content = f"Donor Name,Gift Amount,Gift Date,Check No.\nDonor {i},100.00,2024-01-{i+1:02d},{i+1000}\n"
             csv_path = os.path.join(self.temp_dir, f"test_{i}.csv")
             with open(csv_path, "w") as f:
                 f.write(csv_content)
             files.append(csv_path)
 
-        # Mock Gemini responses
-        mock_model = MagicMock()
-        responses = []
-        for i in range(3):
-            mock_response = MagicMock()
-            mock_response.text = f"""[{{
-                "Donor Name": "Donor {i}",
-                "Gift Amount": "100.00",
-                "Gift Date": "2024-01-{i+1:02d}",
-                "Check No.": "{i+1000}",
-                "customerLookup": "{i}, Donor"
-            }}]"""
-            responses.append(mock_response)
+        # Mock the extract_text_data method to return different results
+        def mock_extract_side_effect(prompt_text):
+            # Extract the file index from the CSV content in the prompt
+            for i in range(3):
+                if f"Donor {i}" in prompt_text:
+                    return [{
+                        "Donor Name": f"Donor {i}",
+                        "Gift Amount": "100.00",
+                        "Gift Date": f"2024-01-{i+1:02d}",
+                        "Check No.": str(i+1000),
+                        "customerLookup": f"{i}, Donor"
+                    }]
+            return []
 
-        mock_model.generate_content.side_effect = responses
-        mock_genai.GenerativeModel.return_value = mock_model
+        with patch.object(GeminiService, 'extract_text_data', side_effect=mock_extract_side_effect):
+            # Create services
+            gemini_service = GeminiService(api_key="test-key")
+            file_processor = FileProcessor(gemini_service)
 
-        # Create services
-        gemini_service = GeminiService(api_key="test-key")
-        file_processor = FileProcessor(gemini_service)
+            # Process all files
+            all_results = []
+            for file_path in files:
+                result = file_processor.process(file_path, ".csv")
+                if result:
+                    all_results.extend(result)
 
-        # Process all files
-        all_results = []
-        for file_path in files:
-            result = file_processor.process(file_path, ".csv")
-            if result:
-                all_results.extend(result)
-
-        # Verify results
-        self.assertEqual(len(all_results), 3)
-        for i, donation in enumerate(all_results):
-            self.assertEqual(donation["Donor Name"], f"Donor {i}")
-            self.assertEqual(donation["Check No."], str(i + 1000))
+            # Verify results
+            self.assertEqual(len(all_results), 3)
+            for i, donation in enumerate(all_results):
+                self.assertEqual(donation["Donor Name"], f"Donor {i}")
+                self.assertEqual(donation["Check No."], str(i + 1000))
 
 
 if __name__ == "__main__":
