@@ -9,17 +9,7 @@ import pandas as pd
 import redis
 import requests
 from dotenv import load_dotenv
-from flask import (
-    Flask,
-    Response,
-    flash,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    session,
-    url_for,
-)
+from flask import Flask, Response, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_session import Session
@@ -37,11 +27,7 @@ try:
     )
     from src.utils.file_processor import FileProcessor
     from src.utils.gemini_service import GeminiService
-    from src.utils.progress_logger import (
-        init_progress_logger,
-        log_progress,
-        progress_logger,
-    )
+    from src.utils.progress_logger import init_progress_logger, log_progress, progress_logger
     from src.utils.qbo_service import QBOService
 except ModuleNotFoundError:
     # Fall back to relative imports if running directly from src directory
@@ -153,9 +139,7 @@ def configure_logging():
                 encoding="utf-8",  # 5MB
             )
             audit_handler.setLevel(logging.INFO)
-            audit_formatter = logging.Formatter(
-                "%(asctime)s - AUDIT - %(levelname)s - %(message)s"
-            )
+            audit_formatter = logging.Formatter("%(asctime)s - AUDIT - %(levelname)s - %(message)s")
             audit_handler.setFormatter(audit_formatter)
 
             # Create separate audit logger
@@ -224,10 +208,7 @@ def sanitize_for_logging(data):
             elif isinstance(value, dict):
                 sanitized[key] = sanitize_for_logging(value)
             elif isinstance(value, list):
-                sanitized[key] = [
-                    sanitize_for_logging(item) if isinstance(item, dict) else item
-                    for item in value
-                ]
+                sanitized[key] = [sanitize_for_logging(item) if isinstance(item, dict) else item for item in value]
             else:
                 sanitized[key] = value
         return sanitized
@@ -305,9 +286,7 @@ def process_single_file(file_data, qbo_authenticated):
         file_storage.seek(0)
 
         if file_size > MAX_FILE_SIZE:
-            result["error"] = (
-                f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB)"
-            )
+            result["error"] = f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB)"
             return result
 
         # Generate secure filename and save
@@ -349,9 +328,7 @@ def process_single_file(file_data, qbo_authenticated):
                             donation["matchConfidence"] = "High"
 
             result["success"] = True
-            log_progress(
-                f"Successfully processed {original_filename}: {len(result['donations'])} donations found"
-            )
+            log_progress(f"Successfully processed {original_filename}: {len(result['donations'])} donations found")
         else:
             result["error"] = f"No donation data extracted from {original_filename}"
 
@@ -380,9 +357,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB per file
 # Donations older than this many days are flagged as potentially incorrect
 DATE_WARNING_DAYS = int(os.getenv("DATE_WARNING_DAYS", "365"))  # Default: 1 year
 # Donations with future dates more than this many days are rejected
-FUTURE_DATE_LIMIT_DAYS = int(
-    os.getenv("FUTURE_DATE_LIMIT_DAYS", "7")
-)  # Default: 1 week
+FUTURE_DATE_LIMIT_DAYS = int(os.getenv("FUTURE_DATE_LIMIT_DAYS", "7"))  # Default: 1 week
 
 
 def generate_secure_filename(original_filename):
@@ -514,18 +489,12 @@ def validate_environment():
             missing_vars.append(f"  - {var_name}: {description}")
 
     if missing_vars:
-        error_msg = "Missing required environment variables:\n" + "\n".join(
-            missing_vars
-        )
-        error_msg += (
-            "\n\nPlease set these in your .env file. See .env.example for reference."
-        )
+        error_msg = "Missing required environment variables:\n" + "\n".join(missing_vars)
+        error_msg += "\n\nPlease set these in your .env file. See .env.example for reference."
         raise ValueError(error_msg)
 
     # Validate optional but recommended variables
-    optional_vars = {
-        "QBO_ENVIRONMENT": ("sandbox", "QuickBooks environment (sandbox/production)")
-    }
+    optional_vars = {"QBO_ENVIRONMENT": ("sandbox", "QuickBooks environment (sandbox/production)")}
 
     for var_name, (default, description) in optional_vars.items():
         if not os.environ.get(var_name):
@@ -535,18 +504,12 @@ def validate_environment():
     # Validate QBO_ENVIRONMENT value if set
     qbo_env = os.environ.get("QBO_ENVIRONMENT")
     if qbo_env and qbo_env not in ["sandbox", "production"]:
-        raise ValueError(
-            f"Invalid QBO_ENVIRONMENT: '{qbo_env}'. Must be 'sandbox' or 'production'."
-        )
+        raise ValueError(f"Invalid QBO_ENVIRONMENT: '{qbo_env}'. Must be 'sandbox' or 'production'.")
 
     # Validate URL format for redirect URI
     redirect_uri = os.environ.get("QBO_REDIRECT_URI")
-    if redirect_uri and not (
-        redirect_uri.startswith("http://") or redirect_uri.startswith("https://")
-    ):
-        raise ValueError(
-            f"Invalid QBO_REDIRECT_URI: '{redirect_uri}'. Must start with http:// or https://"
-        )
+    if redirect_uri and not (redirect_uri.startswith("http://") or redirect_uri.startswith("https://")):
+        raise ValueError(f"Invalid QBO_REDIRECT_URI: '{redirect_uri}'. Must start with http:// or https://")
 
 
 # Run validation before any other initialization
@@ -626,9 +589,7 @@ def deduplicate_and_synthesize_donations(existing_donations, new_donations):
                 unique_key = f"OTHER_{donor_name}_{amount}_{gift_date}"
             else:
                 # Skip donations without enough identifying information
-                print(
-                    f"Skipping donation without sufficient identifying info: {donation}"
-                )
+                print(f"Skipping donation without sufficient identifying info: {donation}")
                 continue
 
         # Store in dictionary (will overwrite if duplicate key exists)
@@ -647,9 +608,7 @@ def deduplicate_and_synthesize_donations(existing_donations, new_donations):
         # Skip suspicious entries (e.g., check numbers that are too short or don't look valid)
         if check_no and len(check_no) < 3 and check_no.isdigit():
             # Check numbers like "195" are suspicious - real checks are usually 4+ digits
-            print(
-                f"WARNING: Suspicious check number '{check_no}' - may be a page number or reference"
-            )
+            print(f"WARNING: Suspicious check number '{check_no}' - may be a page number or reference")
             # Still process it but log the warning
 
         # Create unique key
@@ -665,18 +624,14 @@ def deduplicate_and_synthesize_donations(existing_donations, new_donations):
                 unique_key = f"OTHER_{donor_name}_{amount}_{gift_date}"
             else:
                 # Skip donations without enough identifying information
-                print(
-                    f"Skipping new donation without sufficient identifying info: {new_donation}"
-                )
+                print(f"Skipping new donation without sufficient identifying info: {new_donation}")
                 continue
 
         # Check if this key already exists
         if unique_key in unique_donations:
             # Merge with existing donation
             print(f"Merging donation with key: {unique_key}")
-            unique_donations[unique_key] = synthesize_donation_data(
-                unique_donations[unique_key], new_donation
-            )
+            unique_donations[unique_key] = synthesize_donation_data(unique_donations[unique_key], new_donation)
             merge_count += 1
         else:
             # Add as new donation
@@ -692,9 +647,7 @@ def deduplicate_and_synthesize_donations(existing_donations, new_donations):
         if "internalId" not in donation or not donation["internalId"]:
             donation["internalId"] = f"donation_{i}"
 
-    print(
-        f"Deduplication complete: {len(result)} unique donations (merged {merge_count}, added {new_count})"
-    )
+    print(f"Deduplication complete: {len(result)} unique donations (merged {merge_count}, added {new_count})")
 
     return result
 
@@ -745,12 +698,7 @@ def synthesize_donation_data(existing, new):
             merged[field] = new_val
             merged_fields.append(field)
         # Take longer/more complete value for text fields
-        elif (
-            existing_val
-            and new_val
-            and isinstance(existing_val, str)
-            and isinstance(new_val, str)
-        ):
+        elif existing_val and new_val and isinstance(existing_val, str) and isinstance(new_val, str):
             # Safely strip whitespace
             existing_stripped = existing_val.strip() if existing_val else ""
             new_stripped = new_val.strip() if new_val else ""
@@ -910,9 +858,7 @@ def configure_session(app):
                 # Handle Heroku Redis SSL URLs
                 if redis_url.startswith("rediss://"):
                     # For SSL Redis connections, we need special handling
-                    app.config["SESSION_REDIS"] = redis.from_url(
-                        redis_url, ssl_cert_reqs=None
-                    )
+                    app.config["SESSION_REDIS"] = redis.from_url(redis_url, ssl_cert_reqs=None)
                 else:
                     app.config["SESSION_REDIS"] = redis.from_url(redis_url)
                 print("Using Redis for session storage")
@@ -924,9 +870,7 @@ def configure_session(app):
             configure_filesystem_sessions(app)
     else:
         # Use filesystem for development
-        print(
-            "No REDIS_URL found. Using filesystem for session storage (development mode)"
-        )
+        print("No REDIS_URL found. Using filesystem for session storage (development mode)")
         configure_filesystem_sessions(app)
 
     # Common session configuration
@@ -996,22 +940,16 @@ def health_check():
             "qbo_configured": all([qbo_service.client_id, qbo_service.client_secret]),
             "qbo_environment": qbo_service.environment,
             "session_type": app.config.get("SESSION_TYPE", "unknown"),
-            "session_storage": (
-                "Redis" if app.config.get("SESSION_TYPE") == "redis" else "Filesystem"
-            ),
+            "session_storage": ("Redis" if app.config.get("SESSION_TYPE") == "redis" else "Filesystem"),
         },
         "system": {
-            "memory_usage_mb": round(
-                psutil.Process().memory_info().rss / 1024 / 1024, 1
-            ),
+            "memory_usage_mb": round(psutil.Process().memory_info().rss / 1024 / 1024, 1),
             "cpu_percent": psutil.Process().cpu_percent(),
             "disk_free_gb": round(psutil.disk_usage("/").free / 1024**3, 1),
         },
         "auth": {
             "qbo_authenticated": qbo_service.is_token_valid(),
-            "qbo_token_expires_at": (
-                qbo_service.token_expires_at if qbo_service.access_token else None
-            ),
+            "qbo_token_expires_at": (qbo_service.token_expires_at if qbo_service.access_token else None),
             "qbo_token_expires_in_hours": None,
         },
     }
@@ -1019,13 +957,9 @@ def health_check():
     # Calculate token expiration time
     if qbo_service.token_expires_at:
         try:
-            expires_at = datetime.fromisoformat(
-                qbo_service.token_expires_at.replace("Z", "+00:00")
-            )
+            expires_at = datetime.fromisoformat(qbo_service.token_expires_at.replace("Z", "+00:00"))
             time_diff = expires_at - datetime.now().replace(tzinfo=expires_at.tzinfo)
-            health_status["auth"]["qbo_token_expires_in_hours"] = round(
-                time_diff.total_seconds() / 3600, 1
-            )
+            health_status["auth"]["qbo_token_expires_in_hours"] = round(time_diff.total_seconds() / 3600, 1)
         except Exception as e:
             logger.warning(f"Error calculating token expiration: {e}")
 
@@ -1104,9 +1038,7 @@ def readiness_check():
         try:
             start_time = time.time()
             # Simple test prompt
-            result = gemini_service.generate_text(
-                "Test connectivity. Respond with 'OK'."
-            )
+            result = gemini_service.generate_text("Test connectivity. Respond with 'OK'.")
             response_time = round((time.time() - start_time) * 1000, 1)
 
             if result and "OK" in result.upper():
@@ -1181,10 +1113,7 @@ def readiness_check():
                 readiness_status["checks_performed"].append(service_name)
 
                 # If any critical service is unhealthy, mark as not ready
-                if (
-                    service_name in ["quickbooks", "gemini"]
-                    and result["status"] == "unhealthy"
-                ):
+                if service_name in ["quickbooks", "gemini"] and result["status"] == "unhealthy":
                     readiness_status["status"] = "not_ready"
 
             except Exception as e:
@@ -1200,9 +1129,7 @@ def readiness_check():
 @app.route("/qbo/auth-status")
 def qbo_auth_status():
     """Check QBO authentication status."""
-    authenticated = (
-        qbo_service.access_token is not None and qbo_service.realm_id is not None
-    )
+    authenticated = qbo_service.access_token is not None and qbo_service.realm_id is not None
 
     # Check if we just connected to QBO and need to resume file processing
     just_connected = session.pop("qbo_just_connected", False)
@@ -1259,13 +1186,9 @@ def upload_files():
             log_progress("Preparing to analyze your documents", force_summary=True)
 
         # Check if QBO is authenticated for customer matching
-        qbo_authenticated = (
-            qbo_service.access_token is not None and qbo_service.realm_id is not None
-        )
+        qbo_authenticated = qbo_service.access_token is not None and qbo_service.realm_id is not None
         if not qbo_authenticated:
-            log_progress(
-                "QuickBooks connection not detected - will process files without customer matching"
-            )
+            log_progress("QuickBooks connection not detected - will process files without customer matching")
         else:
             log_progress("Connected to QuickBooks - will match customers automatically")
 
@@ -1311,10 +1234,7 @@ def upload_files():
         log_progress(f"Received {len(files)} file(s) - analyzing content now...")
         if file_info:
             file_display = [f"{f['filename']} ({f['size_mb']} MB)" for f in file_info]
-            log_progress(
-                f"Processing files: {', '.join(file_display[:3])}"
-                + ("..." if len(file_display) > 3 else "")
-            )
+            log_progress(f"Processing files: {', '.join(file_display[:3])}" + ("..." if len(file_display) > 3 else ""))
 
         # Placeholder for extracted donation data
         donations = []
@@ -1351,9 +1271,7 @@ def upload_files():
 
                     if ext not in ALLOWED_EXTENSIONS:
                         errors.append(f"File type not allowed: {original_filename}")
-                        log_progress(
-                            f"Skipping {original_filename} - file type not allowed"
-                        )
+                        log_progress(f"Skipping {original_filename} - file type not allowed")
                         continue
 
                     # Check file size before saving
@@ -1379,9 +1297,7 @@ def upload_files():
                     # Validate file content
                     is_valid, error_msg = validate_file_content(file_path)
                     if not is_valid:
-                        errors.append(
-                            f"Invalid file content: {original_filename} - {error_msg}"
-                        )
+                        errors.append(f"Invalid file content: {original_filename} - {error_msg}")
                         log_progress(f"Skipping {original_filename} - {error_msg}")
                         cleanup_uploaded_file(file_path)
                         uploaded_files.remove(file_path)
@@ -1396,9 +1312,7 @@ def upload_files():
 
             # Process all files concurrently
             if files_to_process:
-                log_progress(
-                    f"Processing {len(files_to_process)} files concurrently..."
-                )
+                log_progress(f"Processing {len(files_to_process)} files concurrently...")
 
                 # Count expected batches
                 total_batches = 0
@@ -1417,25 +1331,17 @@ def upload_files():
                     else:
                         total_batches += 1
 
-                log_progress(
-                    f"Processing {total_batches} batches across {len(files_to_process)} files..."
-                )
+                log_progress(f"Processing {total_batches} batches across {len(files_to_process)} files...")
 
                 # Process files concurrently
-                concurrent_donations, concurrent_errors = (
-                    file_processor.process_files_concurrently(
-                        files_to_process, task_id=session_id
-                    )
+                concurrent_donations, concurrent_errors = file_processor.process_files_concurrently(
+                    files_to_process, task_id=session_id
                 )
 
                 # Add data source and internal IDs to donations
                 for idx, donation in enumerate(concurrent_donations):
                     # Determine data source
-                    data_source = (
-                        "CSV"
-                        if any(fp.endswith(".csv") for fp, _ in files_to_process)
-                        else "LLM"
-                    )
+                    data_source = "CSV" if any(fp.endswith(".csv") for fp, _ in files_to_process) else "LLM"
                     source_prefix = "csv" if data_source == "CSV" else "llm"
 
                     donation["dataSource"] = data_source
@@ -1448,9 +1354,7 @@ def upload_files():
                 donations.extend(concurrent_donations)
                 errors.extend(concurrent_errors)
 
-                log_progress(
-                    f"Concurrent processing complete: {len(donations)} donations extracted"
-                )
+                log_progress(f"Concurrent processing complete: {len(donations)} donations extracted")
         else:
             # Single file processing (keep existing logic)
             for file in files:
@@ -1465,9 +1369,7 @@ def upload_files():
 
                     if ext not in ALLOWED_EXTENSIONS:
                         errors.append(f"File type not allowed: {original_filename}")
-                        log_progress(
-                            f"Skipping {original_filename} - file type not allowed"
-                        )
+                        log_progress(f"Skipping {original_filename} - file type not allowed")
                         continue
 
                     # Check file size before saving
@@ -1493,18 +1395,14 @@ def upload_files():
                     # Validate file content
                     is_valid, error_msg = validate_file_content(file_path)
                     if not is_valid:
-                        errors.append(
-                            f"Invalid file content: {original_filename} - {error_msg}"
-                        )
+                        errors.append(f"Invalid file content: {original_filename} - {error_msg}")
                         log_progress(f"Skipping {original_filename} - {error_msg}")
                         cleanup_uploaded_file(file_path)
                         uploaded_files.remove(file_path)
                         continue
 
                     file_size_mb = file_size / (1024 * 1024)
-                    log_progress(
-                        f"File validated: {original_filename} ({file_size_mb:.1f}MB)"
-                    )
+                    log_progress(f"File validated: {original_filename} ({file_size_mb:.1f}MB)")
 
                     # Process different file types
                     file_ext = ext  # We already have the extension
@@ -1514,19 +1412,13 @@ def upload_files():
                         file_type = (
                             "spreadsheet"
                             if file_ext == ".csv"
-                            else (
-                                "image"
-                                if file_ext in [".jpg", ".jpeg", ".png"]
-                                else "PDF document"
-                            )
+                            else ("image" if file_ext in [".jpg", ".jpeg", ".png"] else "PDF document")
                         )
                         log_progress(f"Reading {file_type}: {original_filename}")
 
                         log_progress(f"Analyzing content of {original_filename}...")
                         extracted_data = file_processor.process(file_path, file_ext)
-                        log_progress(
-                            f"Content analysis complete for {original_filename}"
-                        )
+                        log_progress(f"Content analysis complete for {original_filename}")
 
                         # Set the data source based on file type
                         data_source = "CSV" if file_ext == ".csv" else "LLM"
@@ -1535,21 +1427,15 @@ def upload_files():
                         if extracted_data:
                             # Check if we have a list of donations or a single donation
                             if isinstance(extracted_data, list):
-                                log_progress(
-                                    f"Found {len(extracted_data)} donation records in {original_filename}"
-                                )
-                                log_progress(
-                                    f"Processing individual donations from {original_filename}..."
-                                )
+                                log_progress(f"Found {len(extracted_data)} donation records in {original_filename}")
+                                log_progress(f"Processing individual donations from {original_filename}...")
                                 for idx, donation in enumerate(extracted_data):
                                     if idx % 5 == 0 and idx > 0:
                                         log_progress(
                                             f"Processed {idx} of {len(extracted_data)} donations from {original_filename}"
                                         )
                                     donation["dataSource"] = data_source
-                                    donation["internalId"] = (
-                                        f"{source_prefix}_{len(donations) + idx}"
-                                    )
+                                    donation["internalId"] = f"{source_prefix}_{len(donations) + idx}"
                                     donation["qbSyncStatus"] = "Pending"
                                     # Only initialize as Unknown if no status was set during matching
                                     if "qbCustomerStatus" not in donation:
@@ -1558,21 +1444,15 @@ def upload_files():
                             else:
                                 # Single donation (typically from image)
                                 extracted_data["dataSource"] = data_source
-                                extracted_data["internalId"] = (
-                                    f"{source_prefix}_{len(donations)}"
-                                )
+                                extracted_data["internalId"] = f"{source_prefix}_{len(donations)}"
                                 extracted_data["qbSyncStatus"] = "Pending"
                                 # Only initialize as Unknown if no status was set during matching
                                 if "qbCustomerStatus" not in extracted_data:
                                     extracted_data["qbCustomerStatus"] = "Unknown"
                                 donations.append(extracted_data)
                         else:
-                            log_progress(
-                                f"Could not extract donation data from {original_filename}"
-                            )
-                            errors.append(
-                                f"No donation data could be extracted from {original_filename}"
-                            )
+                            log_progress(f"Could not extract donation data from {original_filename}")
+                            errors.append(f"No donation data could be extracted from {original_filename}")
                     else:
                         log_progress(f"Unsupported file type: {file_ext}")
                         errors.append(f"Unsupported file type: {file_ext}")
@@ -1597,9 +1477,7 @@ def upload_files():
         # Apply smart deduplication and data synthesis
         log_progress("Finalizing donation records...")
         log_progress(f"Merging with existing {initial_count} donations...")
-        session["donations"] = deduplicate_and_synthesize_donations(
-            session["donations"], donations
-        )
+        session["donations"] = deduplicate_and_synthesize_donations(session["donations"], donations)
 
         # Calculate merge statistics
         final_count = len(session["donations"])
@@ -1641,9 +1519,7 @@ def upload_files():
             for file_path in uploaded_files:
                 cleanup_uploaded_file(file_path)
 
-            message = "No donation data could be extracted. " + (
-                ", ".join(errors) if errors else ""
-            )
+            message = "No donation data could be extracted. " + (", ".join(errors) if errors else "")
             if warnings:
                 message += " " + (", ".join(warnings))
 
@@ -1717,8 +1593,7 @@ def test_progress():
     return jsonify(
         {
             "sessionId": test_session_id,
-            "message": "Test progress session started. Connect to /progress-stream/"
-            + test_session_id,
+            "message": "Test progress session started. Connect to /progress-stream/" + test_session_id,
         }
     )
 
@@ -1824,9 +1699,7 @@ def remove_invalid_donations():
     invalid_ids = request.json["invalidIds"]
     if not invalid_ids or not isinstance(invalid_ids, list):
         return (
-            jsonify(
-                {"success": False, "message": "Invalid IDs must be a non-empty list"}
-            ),
+            jsonify({"success": False, "message": "Invalid IDs must be a non-empty list"}),
             400,
         )
 
@@ -1852,8 +1725,7 @@ def qbo_status():
     """Check if QBO is authenticated."""
     return jsonify(
         {
-            "authenticated": qbo_service.access_token is not None
-            and qbo_service.realm_id is not None,
+            "authenticated": qbo_service.access_token is not None and qbo_service.realm_id is not None,
             "realmId": qbo_service.realm_id,
             "tokenExpiry": (
                 qbo_service.token_expires_at
@@ -1925,9 +1797,7 @@ def qbo_callback():
             try:
                 customers = qbo_service.get_all_customers()
                 customer_count = len(customers)
-                logger.info(
-                    f"Pre-fetched {customer_count} customers for future matching"
-                )
+                logger.info(f"Pre-fetched {customer_count} customers for future matching")
 
                 # Store success message including customer count
                 flash(
@@ -1999,14 +1869,12 @@ def find_customer(donation_id):
                 if customer:
                     # Compare addresses
                     address_match = True
-                    if donation.get("Address - Line 1") and donation.get(
-                        "Address - Line 1"
-                    ) != customer.get("BillAddr", {}).get("Line1", ""):
+                    if donation.get("Address - Line 1") and donation.get("Address - Line 1") != customer.get(
+                        "BillAddr", {}
+                    ).get("Line1", ""):
                         address_match = False
 
-                    donation["qbCustomerStatus"] = (
-                        "Matched" if address_match else "Matched-AddressMismatch"
-                    )
+                    donation["qbCustomerStatus"] = "Matched" if address_match else "Matched-AddressMismatch"
                     donation["qboCustomerId"] = customer.get("Id")
                     session["donations"] = donations
 
@@ -2083,9 +1951,7 @@ def get_all_customers():
     except Exception as e:
         print(f"Error fetching customers: {str(e)}")
         return (
-            jsonify(
-                {"success": False, "message": f"Error fetching customers: {str(e)}"}
-            ),
+            jsonify({"success": False, "message": f"Error fetching customers: {str(e)}"}),
             500,
         )
 
@@ -2118,9 +1984,7 @@ def manual_match_customer(donation_id):
         # Get customer details from QBO
         query = f"SELECT * FROM Customer WHERE Id = '{customer_id}'"
         encoded_query = quote(query)
-        url = (
-            f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
-        )
+        url = f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
         response = requests.get(url, headers=qbo_service._get_auth_headers())
 
         customer = None
@@ -2190,9 +2054,7 @@ def create_customer(donation_id):
                 )
 
             # Use Donor Name if customerLookup is empty
-            display_name = donation.get("customerLookup") or donation.get(
-                "Donor Name", ""
-            )
+            display_name = donation.get("customerLookup") or donation.get("Donor Name", "")
 
             # Build customer data with required name fields
             customer_data = {
@@ -2210,9 +2072,7 @@ def create_customer(donation_id):
             }
 
             # Ensure at least one name field is populated
-            if not any(
-                [display_name, customer_data["GivenName"], customer_data["FamilyName"]]
-            ):
+            if not any([display_name, customer_data["GivenName"], customer_data["FamilyName"]]):
                 customer_data["DisplayName"] = "Unknown Donor"
 
             result = qbo_service.create_customer(customer_data)
@@ -2259,9 +2119,7 @@ def update_customer(donation_id):
 
             if not donation.get("qboCustomerId"):
                 return (
-                    jsonify(
-                        {"success": False, "message": "No QBO customer ID available"}
-                    ),
+                    jsonify({"success": False, "message": "No QBO customer ID available"}),
                     400,
                 )
 
@@ -2375,9 +2233,7 @@ def create_sales_receipt(donation_id):
             check_date = donation.get("Check Date", "")
 
             # Validate the date
-            is_valid, warning_msg, parsed_date = validate_donation_date(
-                check_date, "Check Date"
-            )
+            is_valid, warning_msg, parsed_date = validate_donation_date(check_date, "Check Date")
 
             if not is_valid:
                 return jsonify({"success": False, "message": warning_msg}), 400
@@ -2414,9 +2270,7 @@ def create_sales_receipt(donation_id):
             memo = donation.get("Memo", "")
 
             # Format description, limiting to reasonable length
-            description = (
-                f"{check_no}_{check_date}_{gift_amount}_{last_name}_{first_name}"
-            )
+            description = f"{check_no}_{check_date}_{gift_amount}_{last_name}_{first_name}"
             if memo:
                 description += f"_{memo}"
 
@@ -2443,14 +2297,10 @@ def create_sales_receipt(donation_id):
             print(
                 f"Checking for existing sales receipt with check_no: {check_no}, date: {check_date}, customer: {donation['qboCustomerId']}"
             )
-            existing_receipt = qbo_service.find_sales_receipt(
-                check_no, check_date, donation["qboCustomerId"]
-            )
+            existing_receipt = qbo_service.find_sales_receipt(check_no, check_date, donation["qboCustomerId"])
 
             if existing_receipt:
-                print(
-                    f"Found existing sales receipt with ID: {existing_receipt.get('Id')}"
-                )
+                print(f"Found existing sales receipt with ID: {existing_receipt.get('Id')}")
                 # Update donation record with existing receipt ID
                 donation["qbSyncStatus"] = "Sent"
                 donation["qboSalesReceiptId"] = existing_receipt.get("Id")
@@ -2469,14 +2319,10 @@ def create_sales_receipt(donation_id):
             # Prepare sales receipt data
             sales_receipt_data = {
                 "CustomerRef": {"value": donation["qboCustomerId"]},
-                "PaymentMethodRef": {
-                    "value": payment_method_id  # May be custom or default 'CHECK'
-                },
+                "PaymentMethodRef": {"value": payment_method_id},  # May be custom or default 'CHECK'
                 "PaymentRefNum": check_no,
                 "TxnDate": check_date,
-                "DepositToAccountRef": {
-                    "value": deposit_account_id  # May be custom or default '12000'
-                },
+                "DepositToAccountRef": {"value": deposit_account_id},  # May be custom or default '12000'
                 "DocNumber": doc_number,
                 "Line": [
                     {
@@ -2580,12 +2426,8 @@ def create_batch_sales_receipts():
 
     # Get the default values from request or use defaults
     default_item_ref = request.json.get("defaultItemRef", "1")  # Default fallback
-    default_account_id = request.json.get(
-        "defaultDepositToAccountId", "12000"
-    )  # Default fallback
-    default_payment_method_id = request.json.get(
-        "defaultPaymentMethodId", "CHECK"
-    )  # Default fallback
+    default_account_id = request.json.get("defaultDepositToAccountId", "12000")  # Default fallback
+    default_payment_method_id = request.json.get("defaultPaymentMethodId", "CHECK")  # Default fallback
 
     # Log what we're sending for debugging
     print(
@@ -2659,9 +2501,7 @@ def create_batch_sales_receipts():
             today = pd.Timestamp.now().strftime("%Y-%m-%d")
             check_date = donation.get("Check Date", "")
             # Validate the date
-            is_valid, warning_msg, parsed_date = validate_donation_date(
-                check_date, "Check Date"
-            )
+            is_valid, warning_msg, parsed_date = validate_donation_date(check_date, "Check Date")
 
             if not is_valid:
                 results.append(
@@ -2675,15 +2515,11 @@ def create_batch_sales_receipts():
                 continue
 
             if warning_msg:
-                print(
-                    f"Date validation warning for donation {donation['internalId']}: {warning_msg}"
-                )
+                print(f"Date validation warning for donation {donation['internalId']}: {warning_msg}")
 
             if parsed_date:
                 check_date = parsed_date.strftime("%Y-%m-%d")
-                print(
-                    f"Using Check Date: {check_date} for donation {donation['internalId']}"
-                )
+                print(f"Using Check Date: {check_date} for donation {donation['internalId']}")
             else:
                 check_date = today
 
@@ -2694,9 +2530,7 @@ def create_batch_sales_receipts():
                     raise ValueError("Gift amount must be greater than zero")
             except ValueError as e:
                 # Skip donations with invalid amounts
-                error_msg = (
-                    f"Invalid Gift Amount: {donation.get('Gift Amount')} - {str(e)}"
-                )
+                error_msg = f"Invalid Gift Amount: {donation.get('Gift Amount')} - {str(e)}"
                 results.append(
                     {
                         "internalId": donation["internalId"],
@@ -2718,9 +2552,7 @@ def create_batch_sales_receipts():
             memo = donation.get("Memo", "")
 
             # Format description
-            description = (
-                f"{check_no}_{check_date}_{gift_amount}_{last_name}_{first_name}"
-            )
+            description = f"{check_no}_{check_date}_{gift_amount}_{last_name}_{first_name}"
             if memo:
                 description += f"_{memo}"
 
@@ -2741,21 +2573,15 @@ def create_batch_sales_receipts():
             # If we still don't have a valid item_ref, use '1' as the last resort
             if not item_ref or (isinstance(item_ref, str) and item_ref.strip() == ""):
                 item_ref = "1"
-            print(
-                f"Using item_ref: {item_ref} for batch donation {donation.get('internalId')}"
-            )
+            print(f"Using item_ref: {item_ref} for batch donation {donation.get('internalId')}")
 
             # Prepare sales receipt data with all required fields
             sales_receipt_data = {
                 "CustomerRef": {"value": donation["qboCustomerId"]},
-                "PaymentMethodRef": {
-                    "value": default_payment_method_id  # Use the parameter from request
-                },
+                "PaymentMethodRef": {"value": default_payment_method_id},  # Use the parameter from request
                 "PaymentRefNum": check_no,
                 "TxnDate": check_date,
-                "DepositToAccountRef": {
-                    "value": default_account_id  # Use the parameter from request
-                },
+                "DepositToAccountRef": {"value": default_account_id},  # Use the parameter from request
                 "DocNumber": doc_number,
                 "Line": [
                     {
@@ -2772,9 +2598,7 @@ def create_batch_sales_receipts():
             }
 
             # Check for existing sales receipt before creating
-            existing_receipt = qbo_service.find_sales_receipt(
-                check_no, check_date, donation["qboCustomerId"]
-            )
+            existing_receipt = qbo_service.find_sales_receipt(check_no, check_date, donation["qboCustomerId"])
 
             if existing_receipt:
                 # Sales receipt already exists - update donation and continue
@@ -2888,9 +2712,7 @@ def clear_all_donations():
         # Ensure session is saved
         session.modified = True
 
-        return jsonify(
-            {"success": True, "message": "All donations cleared successfully"}
-        )
+        return jsonify({"success": True, "message": "All donations cleared successfully"})
     except Exception as e:
         print(f"Error clearing donations: {str(e)}")
         return jsonify({"success": False, "message": "Error clearing donations"}), 500
@@ -2914,9 +2736,7 @@ def generate_report():
     for donation in donations:
         # Skip entries with missing or invalid gift amounts
         if "Gift Amount" not in donation or not donation["Gift Amount"]:
-            print(
-                f"Skipping donation with missing Gift Amount: {donation.get('Donor Name', 'Unknown')}"
-            )
+            print(f"Skipping donation with missing Gift Amount: {donation.get('Donor Name', 'Unknown')}")
             continue
 
         donor_name = donation.get("Donor Name", "Unknown Donor")
@@ -2924,17 +2744,11 @@ def generate_report():
         city = donation.get("City", "")
         state = donation.get("State", "")
         zipcode = donation.get("ZIP", "")
-        address_line = (
-            f"{address}, {city}, {state} {zipcode}"
-            if all([address, city, state, zipcode])
-            else ""
-        )
+        address_line = f"{address}, {city}, {state} {zipcode}" if all([address, city, state, zipcode]) else ""
 
         # Create a multi-line address for text report format
         address_line_1 = address
-        address_line_2 = (
-            f"{city}, {state} {zipcode}" if all([city, state, zipcode]) else ""
-        )
+        address_line_2 = f"{city}, {state} {zipcode}" if all([city, state, zipcode]) else ""
 
         # Safely convert gift amount to float
         try:
@@ -3057,9 +2871,7 @@ def test_qbo_customers():
         # Try to get a customer count first (lightweight operation)
         query = "SELECT COUNT(*) FROM Customer"
         encoded_query = quote(query)
-        url = (
-            f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
-        )
+        url = f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
         response = requests.get(url, headers=qbo_service._get_auth_headers())
 
         customer_count = 0
@@ -3073,9 +2885,7 @@ def test_qbo_customers():
         customers = []
         query = "SELECT * FROM Customer MAXRESULTS 10"
         encoded_query = quote(query)
-        url = (
-            f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
-        )
+        url = f"{qbo_service.api_base}{qbo_service.realm_id}/query?query={encoded_query}"
         response = requests.get(url, headers=qbo_service._get_auth_headers())
 
         if response.status_code == 200:
@@ -3127,15 +2937,11 @@ def test_customer_matching():
             )
 
         donation_data = request.json
-        customer_lookup = donation_data.get(
-            "customerLookup", donation_data.get("Donor Name", "")
-        )
+        customer_lookup = donation_data.get("customerLookup", donation_data.get("Donor Name", ""))
 
         if not customer_lookup:
             return (
-                jsonify(
-                    {"success": False, "message": "No customer lookup value provided"}
-                ),
+                jsonify({"success": False, "message": "No customer lookup value provided"}),
                 400,
             )
 
@@ -3147,8 +2953,7 @@ def test_customer_matching():
         if (
             customer
             and donation_data.get("Address - Line 1")
-            and donation_data.get("Address - Line 1")
-            != customer.get("BillAddr", {}).get("Line1", "")
+            and donation_data.get("Address - Line 1") != customer.get("BillAddr", {}).get("Line1", "")
         ):
             address_match = False
 
@@ -3235,9 +3040,7 @@ def preview_sales_receipt(donation_id):
                 gift_amount = float(gift_amount_str)
             else:
                 # Remove currency symbols, commas, and other formatting
-                gift_amount = float(
-                    gift_amount_str.replace("$", "").replace(",", "").strip()
-                )
+                gift_amount = float(gift_amount_str.replace("$", "").replace(",", "").strip())
         except (ValueError, TypeError) as e:
             print(f"Error parsing gift amount '{gift_amount_str}': {str(e)}")
             gift_amount = 0.0  # Default to zero if parsing fails
@@ -3247,9 +3050,7 @@ def preview_sales_receipt(donation_id):
         memo = donation.get("Memo", "")
 
         # Format description
-        description = (
-            f"{check_no}_{gift_date}_{gift_amount_str}_{last_name}_{first_name}"
-        )
+        description = f"{check_no}_{gift_date}_{gift_amount_str}_{last_name}_{first_name}"
         if memo:
             description += f"_{memo}"
 
@@ -3302,8 +3103,7 @@ def qbo_environment_info():
         {
             "environment": qbo_service.environment,
             "apiBaseUrl": qbo_service.api_base,
-            "authenticated": qbo_service.access_token is not None
-            and qbo_service.realm_id is not None,
+            "authenticated": qbo_service.access_token is not None and qbo_service.realm_id is not None,
             "realmId": qbo_service.realm_id if qbo_service.realm_id else None,
         }
     )
@@ -3466,8 +3266,7 @@ def get_all_accounts():
             # Check if this is an Undeposited Funds account by name or account type
             if (
                 account.get("Name", "").lower() == "undeposited funds"
-                or account.get("AccountSubType", "").lower()
-                == "undepositedFunds".lower()
+                or account.get("AccountSubType", "").lower() == "undepositedFunds".lower()
             ):
                 undeposited_funds = {
                     "id": account.get("Id"),
@@ -3503,9 +3302,7 @@ def get_all_accounts():
     except Exception as e:
         print(f"Error fetching accounts: {str(e)}")
         return (
-            jsonify(
-                {"success": False, "message": f"Error fetching accounts: {str(e)}"}
-            ),
+            jsonify({"success": False, "message": f"Error fetching accounts: {str(e)}"}),
             500,
         )
 
@@ -3580,9 +3377,7 @@ def create_account():
             )
         else:
             return (
-                jsonify(
-                    {"success": False, "message": "Failed to create account in QBO"}
-                ),
+                jsonify({"success": False, "message": "Failed to create account in QBO"}),
                 500,
             )
 
@@ -3661,9 +3456,7 @@ def create_payment_method():
         # Get payment method data from request
         if not request.json:
             return (
-                jsonify(
-                    {"success": False, "message": "No payment method data provided"}
-                ),
+                jsonify({"success": False, "message": "No payment method data provided"}),
                 400,
             )
 
@@ -3671,9 +3464,7 @@ def create_payment_method():
         payment_method_data = request.json
         if "name" not in payment_method_data or not payment_method_data["name"]:
             return (
-                jsonify(
-                    {"success": False, "message": "Payment method name is required"}
-                ),
+                jsonify({"success": False, "message": "Payment method name is required"}),
                 400,
             )
 
@@ -3681,9 +3472,7 @@ def create_payment_method():
         qbo_payment_method_data = {"Name": payment_method_data["name"], "Active": True}
 
         # Create the payment method
-        created_payment_method = qbo_service.create_payment_method(
-            qbo_payment_method_data
-        )
+        created_payment_method = qbo_service.create_payment_method(qbo_payment_method_data)
 
         if created_payment_method:
             return jsonify(
@@ -3773,13 +3562,9 @@ def debug_donations():
 
 if __name__ == "__main__":
     # Display the environment when starting
-    print(
-        f"====== Starting with QuickBooks Online {qbo_environment.upper()} environment ======"
-    )
+    print(f"====== Starting with QuickBooks Online {qbo_environment.upper()} environment ======")
     print(f"API Base URL: {qbo_service.api_base}")
-    print(
-        f"To change environments, restart with: python src/app.py --env [sandbox|production]"
-    )
+    print(f"To change environments, restart with: python src/app.py --env [sandbox|production]")
     print("================================================================")
 
     app.run(debug=True)

@@ -20,12 +20,8 @@ class TestCSVParser(unittest.TestCase):
         self.test_csv_path = os.path.join(self.temp_dir, "test_donations.csv")
         with open(self.test_csv_path, "w", newline="", encoding="utf-8") as f:
             f.write("donor_name,gift_amount,gift_date,address,city,state,zip,memo\n")
-            f.write(
-                "John Doe,100.00,01/01/2025,123 Main St,Springfield,IL,62701,Test donation\n"
-            )
-            f.write(
-                "Jane Smith,50.00,01/02/2025,456 Elm St,Springfield,IL,62701,Second test\n"
-            )
+            f.write("John Doe,100.00,01/01/2025,123 Main St,Springfield,IL,62701,Test donation\n")
+            f.write("Jane Smith,50.00,01/02/2025,456 Elm St,Springfield,IL,62701,Second test\n")
 
     def tearDown(self):
         # Clean up the temporary directory
@@ -71,9 +67,7 @@ class TestCSVParser(unittest.TestCase):
     def test_parse_csv_with_different_headers(self):
         """Test parsing a CSV with different header names."""
         # Create a test CSV with different header names
-        different_headers_csv_path = os.path.join(
-            self.temp_dir, "different_headers.csv"
-        )
+        different_headers_csv_path = os.path.join(self.temp_dir, "different_headers.csv")
         with open(different_headers_csv_path, "w", newline="", encoding="utf-8") as f:
             f.write("name,amount,date,notes\n")
             f.write("John Doe,100.00,01/01/2025,Test donation\n")

@@ -18,8 +18,6 @@ try:
     )
 except ImportError:
     # Fallback for different test environments
-    import sys
-
     sys.path.append("../src")
     from app import (
         normalize_amount,
@@ -36,9 +34,7 @@ class TestDataValidation(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         # Mock environment variables for date validation
-        self.env_patcher = patch.dict(
-            os.environ, {"DATE_WARNING_DAYS": "365", "FUTURE_DATE_LIMIT_DAYS": "7"}
-        )
+        self.env_patcher = patch.dict(os.environ, {"DATE_WARNING_DAYS": "365", "FUTURE_DATE_LIMIT_DAYS": "7"})
         self.env_patcher.start()
 
     def tearDown(self):
@@ -64,9 +60,7 @@ class TestDataValidation(unittest.TestCase):
 
         self.assertTrue(is_valid)
         self.assertIsNotNone(warning_msg)
-        self.assertIn(
-            "years old", warning_msg
-        )  # Actual message format includes "years old"
+        self.assertIn("years old", warning_msg)  # Actual message format includes "years old"
         self.assertIsNotNone(parsed_date)
 
     def test_validate_donation_date_future_valid(self):
@@ -88,9 +82,7 @@ class TestDataValidation(unittest.TestCase):
 
         self.assertFalse(is_valid)
         self.assertIsNotNone(warning_msg)
-        self.assertIn(
-            "days in the future", warning_msg
-        )  # Check for actual message format
+        self.assertIn("days in the future", warning_msg)  # Check for actual message format
         self.assertIsNone(parsed_date)
 
     def test_validate_donation_date_invalid_format(self):
@@ -146,9 +138,7 @@ class TestDataValidation(unittest.TestCase):
         # Very long check number
         long_check = "A" * 100
         normalized = normalize_check_number(long_check)
-        self.assertEqual(
-            normalized, "A" * 100
-        )  # No truncation in current implementation
+        self.assertEqual(normalized, "A" * 100)  # No truncation in current implementation
 
         # Check number with special characters
         special_check = "CHK#12345@BANK"
@@ -315,9 +305,7 @@ class TestDonationDataValidation(unittest.TestCase):
         for donation in incomplete_donations:
             # Check for missing fields
             required_fields = ["Donor Name", "Gift Amount", "Check No."]
-            missing_fields = [
-                field for field in required_fields if not donation.get(field)
-            ]
+            missing_fields = [field for field in required_fields if not donation.get(field)]
             self.assertGreater(len(missing_fields), 0)
 
     def test_donation_field_limits(self):
@@ -330,9 +318,7 @@ class TestDonationDataValidation(unittest.TestCase):
         # Test very large amount
         huge_amount = "999999999999.99"
         normalized_amount = normalize_amount(huge_amount)
-        self.assertEqual(
-            normalized_amount, "999999999999.99"
-        )  # normalize_amount returns string
+        self.assertEqual(normalized_amount, "999999999999.99")  # normalize_amount returns string
 
         # Test very long check number
         long_check = "1" * 100

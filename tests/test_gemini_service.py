@@ -97,9 +97,7 @@ class TestGeminiService(unittest.TestCase):
     @patch("PyPDF2.PdfReader")
     @patch("fitz.open")
     @patch("utils.gemini_service.Image.open")
-    def test_extract_donation_data_pdf(
-        self, mock_image_open, mock_fitz_open, mock_pdf_reader, mock_splitext
-    ):
+    def test_extract_donation_data_pdf(self, mock_image_open, mock_fitz_open, mock_pdf_reader, mock_splitext):
         """Test extraction from a PDF file."""
         # Mock file extension check
         mock_splitext.return_value = ["test", ".pdf"]
@@ -116,9 +114,7 @@ class TestGeminiService(unittest.TestCase):
         ]
 
         # Mock the extract_json_from_text method to return our test data
-        with patch.object(
-            self.service, "_extract_json_from_text", return_value=expected_data
-        ):
+        with patch.object(self.service, "_extract_json_from_text", return_value=expected_data):
             # Mock response from Gemini for PDF
             mock_response = MagicMock()
             mock_response.text = """

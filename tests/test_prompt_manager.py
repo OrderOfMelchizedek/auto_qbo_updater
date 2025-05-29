@@ -16,9 +16,7 @@ class TestPromptManager(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
 
         # Create a test prompt file
-        self.test_prompt_content = (
-            "This is a test prompt with {{placeholder}} for testing."
-        )
+        self.test_prompt_content = "This is a test prompt with {{placeholder}} for testing."
         self.test_prompt_path = os.path.join(self.temp_dir, "test_prompt.md")
         with open(self.test_prompt_path, "w") as f:
             f.write(self.test_prompt_content)
@@ -65,17 +63,13 @@ class TestPromptManager(unittest.TestCase):
         with open(os.path.join(self.temp_dir, "second_prompt.md"), "w") as f:
             f.write(second_prompt_content)
 
-        combined_prompt = self.prompt_manager.combine_prompts(
-            ["test_prompt", "second_prompt"]
-        )
+        combined_prompt = self.prompt_manager.combine_prompts(["test_prompt", "second_prompt"])
         expected = f"{self.test_prompt_content}\n\n{second_prompt_content}"
         self.assertEqual(combined_prompt, expected)
 
     def test_combine_prompts_with_missing(self):
         """Test combining prompts when one is missing."""
-        combined_prompt = self.prompt_manager.combine_prompts(
-            ["test_prompt", "nonexistent_prompt"]
-        )
+        combined_prompt = self.prompt_manager.combine_prompts(["test_prompt", "nonexistent_prompt"])
         self.assertEqual(combined_prompt, self.test_prompt_content)
 
 

@@ -70,11 +70,7 @@ class ProgressLogger:
             current_time = time.time()
             time_since_last = current_time - self.last_summary_time
 
-            if (
-                force_summary
-                or time_since_last >= self.summary_interval
-                or len(self.logs) >= 3
-            ):
+            if force_summary or time_since_last >= self.summary_interval or len(self.logs) >= 3:
                 print(
                     f"[ProgressLogger] Creating summary (force={force_summary}, time_since_last={time_since_last:.1f}s, log_count={len(self.logs)})"
                 )
@@ -91,9 +87,7 @@ class ProgressLogger:
 
         try:
             # Prepare logs for summarization
-            log_messages = [
-                log["message"] for log in self.logs[-10:]
-            ]  # Last 10 messages
+            log_messages = [log["message"] for log in self.logs[-10:]]  # Last 10 messages
             print(f"[ProgressLogger] Summarizing {len(log_messages)} messages")
 
             # Use simple summary to avoid Gemini API overhead
@@ -109,20 +103,14 @@ class ProgressLogger:
             if self.session_id in self.recent_summaries:
                 self.recent_summaries[self.session_id].append(message)
                 # Keep only last 10 summaries
-                self.recent_summaries[self.session_id] = self.recent_summaries[
-                    self.session_id
-                ][-10:]
+                self.recent_summaries[self.session_id] = self.recent_summaries[self.session_id][-10:]
 
             # Send to subscribers
             if self.session_id in self.subscribers:
-                print(
-                    f"[ProgressLogger] Sending summary to subscriber for session {self.session_id}"
-                )
+                print(f"[ProgressLogger] Sending summary to subscriber for session {self.session_id}")
                 self.subscribers[self.session_id].put(message)
             else:
-                print(
-                    f"[ProgressLogger] No subscriber found for session {self.session_id}"
-                )
+                print(f"[ProgressLogger] No subscriber found for session {self.session_id}")
 
             # Clear processed logs
             self.logs = []
@@ -220,9 +208,7 @@ IMPORTANT: Output exactly 2 lines of text, nothing else."""
                         current_time = time.time()
                         if current_time - self.last_summary_time >= 3.0:
                             if self.logs:
-                                print(
-                                    f"[ProgressLogger] Forcing periodic update for session {session_id}"
-                                )
+                                print(f"[ProgressLogger] Forcing periodic update for session {session_id}")
                                 self._create_summary()
                                 self.last_summary_time = current_time
 
