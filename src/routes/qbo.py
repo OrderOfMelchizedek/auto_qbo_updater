@@ -453,7 +453,15 @@ def get_all_items():
         qbo_service = current_app.qbo_service
 
         items = qbo_service.get_all_items()
-        return jsonify(items)
+
+        # Find default donation item (503 - Gifts)
+        default_item = None
+        for item in items:
+            if item.get("Name") == "503 - Gifts" or item.get("Name") == "Gifts":
+                default_item = {"id": item.get("Id"), "name": item.get("Name")}
+                break
+
+        return jsonify({"success": True, "items": items, "default_item": default_item})
 
     except Exception as e:
         logger.error(f"Error fetching items: {str(e)}", exc_info=True)
@@ -502,7 +510,13 @@ def get_all_payment_methods():
         qbo_service = current_app.qbo_service
 
         payment_methods = qbo_service.get_all_payment_methods()
-        return jsonify(payment_methods)
+
+        # Transform to expected format
+        formatted_methods = []
+        for method in payment_methods:
+            formatted_methods.append({"id": method.get("Id"), "name": method.get("Name"), "type": method.get("Type")})
+
+        return jsonify({"success": True, "paymentMethods": formatted_methods})
 
     except Exception as e:
         logger.error(f"Error fetching payment methods: {str(e)}", exc_info=True)
