@@ -16,13 +16,31 @@ A web application to process donation information for Friends of Mwangaza, inclu
 ```
 fom_to_qbo_automation/
 ├── src/                    # Application source code
-│   ├── app.py             # Main Flask application
+│   ├── app.py             # Main Flask application (541 lines)
 │   ├── config/            # Configuration modules
+│   │   ├── logging_config.py
+│   │   └── session_config.py
+│   ├── routes/            # Flask blueprints (modular routing)
+│   │   ├── auth.py        # QBO authentication routes
+│   │   ├── donations.py   # Donation CRUD operations
+│   │   ├── files.py       # File upload and processing
+│   │   ├── health.py      # Health checks and monitoring
+│   │   └── qbo.py         # QuickBooks integration routes
+│   ├── services/          # Business logic services
+│   │   ├── deduplication.py  # Donation deduplication
+│   │   └── validation.py     # Data validation
 │   ├── utils/             # Utility modules
+│   │   ├── file_processor.py    # File processing
+│   │   ├── gemini_service.py    # Gemini AI integration
+│   │   ├── qbo_service.py       # QuickBooks API
+│   │   └── ...                  # Other utilities
 │   ├── static/            # Frontend assets
 │   └── templates/         # HTML templates
 ├── tests/                  # Test suites
 │   ├── unit/              # Unit tests
+│   │   ├── test_*_routes.py    # Blueprint tests
+│   │   ├── test_validation.py  # Service tests
+│   │   └── test_deduplication.py
 │   ├── integration/       # Integration tests
 │   └── e2e/               # End-to-end tests
 ├── scripts/                # Utility scripts
@@ -30,6 +48,8 @@ fom_to_qbo_automation/
 │   └── utils/             # Other utilities
 ├── docs/                   # Documentation
 │   ├── architecture/      # Architecture docs
+│   │   ├── MODULARIZATION_PLAN.md
+│   │   └── MODULAR_STRUCTURE.md
 │   ├── deployment/        # Deployment guides
 │   ├── development/       # Development guides
 │   └── api/               # API documentation
