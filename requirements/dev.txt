@@ -1,8 +1,8 @@
--r base.txt
+-r test.txt
 
 # Linting and code quality tools
 flake8==6.1.0
-black==23.12.1
+black==24.3.0
 isort==5.13.2
-bandit==1.7.5
-safety==2.3.5
+bandit==1.7.8
+safety==3.0.1
