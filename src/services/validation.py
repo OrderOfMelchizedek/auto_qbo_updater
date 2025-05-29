@@ -167,7 +167,7 @@ def validate_environment():
         raise ValueError(f"Invalid QBO_REDIRECT_URI: '{redirect_uri}'. Must start with http:// or https://")
 
 
-def normalize_check_number(check_no: Optional[str]) -> str:
+def normalize_check_number(check_no: Optional[str]) -> Optional[str]:
     """
     Normalize check number for comparison.
 
@@ -175,17 +175,23 @@ def normalize_check_number(check_no: Optional[str]) -> str:
         check_no: Check number to normalize
 
     Returns:
-        Normalized check number string
+        Normalized check number string or None if invalid
     """
     if not check_no:
-        return ""
-    # Remove leading zeros and spaces
-    normalized = str(check_no).strip().lstrip("0")
+        return None
+    # Extract digits only
+    import re
+
+    check_str = re.sub(r"[^0-9]", "", str(check_no))
+    if not check_str:
+        return None
+    # Remove leading zeros
+    normalized = check_str.lstrip("0")
     # If all zeros were removed, ensure at least '0' remains
     return normalized if normalized else "0"
 
 
-def normalize_amount(amount: Optional[Union[str, float, int]]) -> str:
+def normalize_amount(amount: Optional[Union[str, float, int]]) -> Optional[str]:
     """
     Normalize amount for comparison.
 
@@ -193,20 +199,22 @@ def normalize_amount(amount: Optional[Union[str, float, int]]) -> str:
         amount: Amount to normalize
 
     Returns:
-        Normalized amount string formatted to 2 decimal places
+        Normalized amount string formatted to 2 decimal places, or None if invalid
     """
-    if not amount:
-        return ""
+    if not amount and amount != 0:
+        return None
     # Remove currency symbols, commas, and spaces
     amount_str = str(amount).replace("$", "").replace(",", "").strip()
+    if not amount_str:
+        return None
     try:
         # Convert to float and format to 2 decimal places
         return f"{float(amount_str):.2f}"
     except:
-        return amount_str
+        return None
 
 
-def normalize_donor_name(name: Optional[str]) -> str:
+def normalize_donor_name(name: Optional[str]) -> Optional[str]:
     """
     Normalize donor name for comparison.
 
@@ -214,16 +222,30 @@ def normalize_donor_name(name: Optional[str]) -> str:
         name: Donor name to normalize
 
     Returns:
-        Normalized donor name (lowercase, no punctuation, normalized whitespace)
+        Normalized donor name with proper capitalization
     """
     if not name:
-        return ""
-    # Convert to lowercase, remove punctuation, normalize whitespace
-    name = re.sub(r"[^\w\s]", "", str(name).lower())
-    return " ".join(name.split())
+        return None
+    # Clean and normalize
+    name = str(name).strip()
+    if not name:
+        return None
+    # Title case with special handling for apostrophes and hyphens
+    words = []
+    for word in name.split():
+        if "'" in word:
+            parts = word.split("'")
+            word = "'".join(p.capitalize() for p in parts)
+        elif "-" in word:
+            parts = word.split("-")
+            word = "-".join(p.capitalize() for p in parts)
+        else:
+            word = word.capitalize()
+        words.append(word)
+    return " ".join(words)
 
 
-def normalize_date(date_str: Optional[str]) -> str:
+def normalize_date(date_str: Optional[str]) -> Optional[str]:
     """
     Normalize date string to consistent format.
 
@@ -231,17 +253,17 @@ def normalize_date(date_str: Optional[str]) -> str:
         date_str: Date string to normalize
 
     Returns:
-        Normalized date in YYYY-MM-DD format, or original string if parsing fails
+        Normalized date in YYYY-MM-DD format, or None if parsing fails
     """
     if not date_str:
-        return ""
+        return None
     try:
         # Try to parse various date formats
         parsed_date = dateutil.parser.parse(str(date_str))
         return parsed_date.strftime("%Y-%m-%d")
     except:
-        # If parsing fails, return the original string
-        return str(date_str).strip()
+        # If parsing fails, return None
+        return None
 
 
 def log_audit_event(

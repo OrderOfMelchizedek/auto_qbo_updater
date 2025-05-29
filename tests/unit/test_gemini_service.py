@@ -36,6 +36,8 @@ class TestGeminiService(unittest.TestCase):
         self.mock_prompt_manager.combine_prompts.return_value = "Combined test prompt"
 
         # Initialize the service
+        # Mock genai.configure to avoid API key validation
+        self.mock_genai.configure = MagicMock()
         self.service = GeminiService(self.api_key)
 
         # Create a temp directory for test files
@@ -63,7 +65,9 @@ class TestGeminiService(unittest.TestCase):
 
         # Mock Image.open
         with patch("src.utils.gemini_service.Image.open") as mock_image_open:
+            # Create a proper PIL Image mock
             mock_image = MagicMock()
+            mock_image.spec = Image.Image
             mock_image_open.return_value = mock_image
 
             # Mock response from Gemini
@@ -150,7 +154,9 @@ class TestGeminiService(unittest.TestCase):
             mock_fitz_open.return_value = mock_doc
 
             # Mock PIL Image
+            # Create a proper PIL Image mock
             mock_image = MagicMock()
+            mock_image.spec = Image.Image
             mock_image_open.return_value = mock_image
 
             # Call the method being tested

@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from services.validation import normalize_amount, normalize_check_number, normalize_date, normalize_donor_name
+from .validation import normalize_amount, normalize_check_number, normalize_date, normalize_donor_name
 
 logger = logging.getLogger(__name__)
 

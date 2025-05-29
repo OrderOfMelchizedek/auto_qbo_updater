@@ -115,7 +115,7 @@ def qbo_status():
 @auth_bp.route("/authorize")
 def qbo_authorize():
     """Initiate QuickBooks OAuth flow."""
-    auth_url = get_qbo_service().get_auth_url()
+    auth_url = get_qbo_service().get_authorization_url()
     return redirect(auth_url)
 
 
@@ -135,15 +135,18 @@ def qbo_callback():
 
         # Exchange code for tokens
         qbo_service = get_qbo_service()
-        token_response = qbo_service.exchange_code_for_tokens(code)
+        success = qbo_service.get_tokens(code, realm_id)
 
-        if token_response:
+        if success:
             # Store in session
             session["qbo_authenticated"] = True
             session["qbo_company_id"] = realm_id
-            session["qbo_access_token"] = token_response.get("access_token")
-            session["qbo_refresh_token"] = token_response.get("refresh_token")
-            session["qbo_token_expires_at"] = token_response.get("expires_at")
+            # Get token info from service
+            if qbo_service.token_expires_at:
+                from datetime import datetime
+
+                expires_at = datetime.fromtimestamp(qbo_service.token_expires_at).isoformat()
+                session["qbo_token_expires_at"] = expires_at
 
             # Log the authentication event
             from services.validation import log_audit_event
@@ -161,7 +164,7 @@ def qbo_callback():
             return redirect("/?qbo_connected=true")
         else:
             logger.error("Failed to exchange code for tokens")
-            return redirect("/?qbo_error=token_exchange_failed")
+            return redirect("/?qbo_error=Failed to exchange authorization code for tokens")
 
     except Exception as e:
         logger.error(f"OAuth callback error: {str(e)}", exc_info=True)

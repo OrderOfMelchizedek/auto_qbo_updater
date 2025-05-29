@@ -87,3 +87,20 @@ def make_celery(app_name=__name__):
 
 # Create the Celery app
 celery_app = make_celery("fom_qbo_automation")
+
+
+def get_redis_client():
+    """Get Redis client for health checks."""
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+    if redis_url.startswith("rediss://"):
+        # SSL Redis connection
+        import redis
+
+        return redis.from_url(redis_url, ssl_cert_reqs=None)
+    elif redis_url:
+        import redis
+
+        return redis.from_url(redis_url)
+    else:
+        return None

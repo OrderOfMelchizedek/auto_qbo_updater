@@ -17,33 +17,53 @@ os.environ["GEMINI_API_KEY"] = "test-gemini-key"
 os.environ["QBO_CLIENT_ID"] = "test-client-id"
 os.environ["QBO_CLIENT_SECRET"] = "test-client-secret"
 os.environ["QBO_REDIRECT_URI"] = "http://localhost/callback"
+os.environ["MAX_FILES_PER_UPLOAD"] = "20"
 
 
-@pytest.fixture(autouse=True)
-def mock_redis():
-    """Mock Redis for all tests to avoid connection errors."""
-    with patch("redis.from_url") as mock_from_url, patch("redis.Redis") as mock_redis_class:
+# Mock Redis before importing the app
+class MockRedis:
+    """Mock Redis client for testing."""
 
-        # Create a mock Redis instance
-        mock_redis_instance = Mock()
-        mock_redis_instance.ping.return_value = True
-        mock_redis_instance.get.return_value = None
-        mock_redis_instance.set.return_value = True
-        mock_redis_instance.setex.return_value = True
-        mock_redis_instance.delete.return_value = True
-        mock_redis_instance.exists.return_value = False
+    def __init__(self, *args, **kwargs):
+        self.data = {}
 
-        # Configure the mocks
-        mock_from_url.return_value = mock_redis_instance
-        mock_redis_class.return_value = mock_redis_instance
+    def ping(self):
+        return True
 
-        yield mock_redis_instance
+    def get(self, key):
+        return self.data.get(key)
+
+    def set(self, key, value):
+        self.data[key] = value
+        return True
+
+    def setex(self, key, time, value):
+        self.data[key] = value
+        return True
+
+    def delete(self, key):
+        if key in self.data:
+            del self.data[key]
+        return True
+
+    def exists(self, key):
+        return key in self.data
+
+    def info(self):
+        return {"redis_version": "test", "used_memory_human": "1M"}
+
+
+# Patch Redis globally for all tests
+redis_patch = patch("redis.from_url", return_value=MockRedis())
+redis_patch.start()
+redis_class_patch = patch("redis.Redis", MockRedis)
+redis_class_patch.start()
 
 
 @pytest.fixture
 def app():
     """Create and configure a test Flask application."""
-    # Import here to ensure environment variables are set
+    # Import here after Redis is mocked
     from src.app import app as flask_app
 
     # Configure app for testing
