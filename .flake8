@@ -50,7 +50,9 @@ ignore =
     # F841: Local variable assigned but never used - sometimes intentional
     F841,
     # E226: Missing whitespace around arithmetic operator - common in f-strings
-    E226
+    E226,
+    # F824: Global variable is unused - false positive for globals modified in functions
+    F824
 
 # Per-file exceptions for special cases
 per-file-ignores =
