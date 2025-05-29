@@ -229,6 +229,20 @@ class GeminiService:
                 # Use the helper method to extract JSON
                 verification_result = self._extract_json_from_text(text_response)
                 if verification_result:
+                    # Handle case where Gemini returns a list instead of a single object
+                    if isinstance(verification_result, list):
+                        print(f"WARNING: Gemini returned a list of {len(verification_result)} items for customer verification")
+                        # Take the first item if it exists
+                        if verification_result:
+                            verification_result = verification_result[0]
+                        else:
+                            # Empty list - treat as no match
+                            return {
+                                "validMatch": False,
+                                "mismatchReason": "Gemini returned empty verification results",
+                                "matchConfidence": "none"
+                            }
+                    
                     print(f"Match verification result: valid match = {verification_result.get('validMatch', False)}")
                     if verification_result.get("validMatch") == False:
                         print(f"Mismatch reason: {verification_result.get('mismatchReason', 'No reason provided')}")

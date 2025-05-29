@@ -1,1 +1,8 @@
+# Production dependencies
 -r base.txt
+
+# Production server
+gunicorn==22.0.0
+
+# Monitoring
+sentry-sdk[flask]==1.14.0

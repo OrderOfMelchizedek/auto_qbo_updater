@@ -1,20 +1,4 @@
-Flask==2.3.3
-Flask-Session==0.8.0
-Flask-WTF==1.2.2
-Flask-Limiter==3.12
-redis==5.0.1
-python-dotenv==1.0.0
-requests==2.31.0
-pyjwt[crypto]>=2.0.0
-requests_oauthlib>=1.0.0
-google-generativeai==0.5.4
-Pillow
-PyPDF2==3.0.1
-pdf2image==1.17.0
-python-multipart==0.0.6
-pandas
-gunicorn==21.2.0
-PyMuPDF==1.23.7
-python-magic==0.4.27
-psutil==5.9.8
-pytest-cov==6.1.1
+# Production requirements
+# For development, use: pip install -r requirements/dev.txt
+# For testing, use: pip install -r requirements/test.txt
+-r requirements/prod.txt

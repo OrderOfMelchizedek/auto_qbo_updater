@@ -7,7 +7,7 @@ on:
     branches: [ master, main, heroku-deployment ]
 
 env:
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: '3.13'
 
 jobs:
   lint:
@@ -74,7 +74,7 @@ jobs:
     
     strategy:
       matrix:
-        python-version: ['3.11', '3.12']
+        python-version: ['3.11', '3.12', '3.13']
     
     steps:
     - uses: actions/checkout@v4
@@ -136,7 +136,7 @@ jobs:
         PYTHONPATH=src pytest tests/integration -v
     
     - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.12'
+      if: matrix.python-version == '3.13'
       uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml

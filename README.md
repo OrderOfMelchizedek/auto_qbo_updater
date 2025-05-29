@@ -11,6 +11,55 @@ A web application to process donation information for Friends of Mwangaza, inclu
 - QuickBooks Online integration for customer management and sales receipt creation
 - Generate donation reports
 
+## Project Structure
+
+```
+fom_to_qbo_automation/
+├── src/                    # Application source code
+│   ├── app.py             # Main Flask application (541 lines)
+│   ├── config/            # Configuration modules
+│   │   ├── logging_config.py
+│   │   └── session_config.py
+│   ├── routes/            # Flask blueprints (modular routing)
+│   │   ├── auth.py        # QBO authentication routes
+│   │   ├── donations.py   # Donation CRUD operations
+│   │   ├── files.py       # File upload and processing
+│   │   ├── health.py      # Health checks and monitoring
+│   │   └── qbo.py         # QuickBooks integration routes
+│   ├── services/          # Business logic services
+│   │   ├── deduplication.py  # Donation deduplication
+│   │   └── validation.py     # Data validation
+│   ├── utils/             # Utility modules
+│   │   ├── file_processor.py    # File processing
+│   │   ├── gemini_service.py    # Gemini AI integration
+│   │   ├── qbo_service.py       # QuickBooks API
+│   │   └── ...                  # Other utilities
+│   ├── static/            # Frontend assets
+│   └── templates/         # HTML templates
+├── tests/                  # Test suites
+│   ├── unit/              # Unit tests
+│   │   ├── test_*_routes.py    # Blueprint tests
+│   │   ├── test_validation.py  # Service tests
+│   │   └── test_deduplication.py
+│   ├── integration/       # Integration tests
+│   └── e2e/               # End-to-end tests
+├── scripts/                # Utility scripts
+│   ├── monitoring/        # Log monitoring scripts
+│   └── utils/             # Other utilities
+├── docs/                   # Documentation
+│   ├── architecture/      # Architecture docs
+│   │   ├── MODULARIZATION_PLAN.md
+│   │   └── MODULAR_STRUCTURE.md
+│   ├── deployment/        # Deployment guides
+│   ├── development/       # Development guides
+│   └── api/               # API documentation
+├── requirements/           # Dependency files
+│   ├── base.txt          # Core dependencies
+│   ├── dev.txt           # Development dependencies
+│   ├── prod.txt          # Production dependencies
+│   └── test.txt          # Testing dependencies
+└── Makefile               # Common commands
+
 ## Setup
 
 1. Clone this repository
@@ -23,11 +72,15 @@ A web application to process donation information for Friends of Mwangaza, inclu
    - macOS/Linux: `source venv/bin/activate`
 4. Install dependencies:
    ```
-   pip install -r requirements.txt
+   # Production dependencies
+   make install
+   
+   # Development dependencies (includes testing tools)
+   make install-dev
    ```
 5. Copy `.env.example` to `.env` and add your API keys:
    ```
-   cp .env.example .env
+   make setup
    ```
    Then edit `.env` with your credentials:
    - Generate a Flask secret key: `python -c 'import secrets; print(secrets.token_hex(32))'`
@@ -36,20 +89,20 @@ A web application to process donation information for Friends of Mwangaza, inclu
 6. Run the application:
    ```
    # Run with default settings (Sandbox QBO, Gemini Flash model)
-   python run.py
+   make run
    
-   # Run with Gemini Flash model (explicit, using alias)
-   python run.py --model gemini-flash
+   # Or use the Python script directly:
+   python src/run.py
    
    # Run with Gemini Pro model (better quality but slower)
-   python run.py --model gemini-pro
+   python src/run.py --model gemini-pro
    
    # Run with Production environment
-   python run.py --env production
+   python src/run.py --env production
    
    # Full model names can also be used
-   python run.py --model gemini-2.5-flash-preview-05-20
-   python run.py --model gemini-2.5-pro-preview-05-06
+   python src/run.py --model gemini-2.5-flash-preview-05-20
+   python src/run.py --model gemini-2.5-pro-preview-05-06
    ```
 
 ## QuickBooks Online Integration

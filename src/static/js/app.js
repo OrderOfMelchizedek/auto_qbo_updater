@@ -8,11 +8,28 @@ function getCSRFToken() {
     return token ? token.getAttribute('content') : '';
 }
 
-// Helper function to add CSRF token to fetch headers
+// Helper function to add CSRF token to fetch headers with timeout support
 function fetchWithCSRF(url, options = {}) {
     options.headers = options.headers || {};
     options.headers['X-CSRFToken'] = getCSRFToken();
-    return fetch(url, options);
+    
+    // Add timeout support (default 60 seconds for most requests)
+    const timeout = options.timeout || 60000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    return fetch(url, { ...options, signal: controller.signal })
+        .then(response => {
+            clearTimeout(timeoutId);
+            return response;
+        })
+        .catch(error => {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error('Request timed out. The server is taking too long to respond.');
+            }
+            throw error;
+        });
 }
 
 // Show merge history for a donation
@@ -161,27 +178,7 @@ function renderDonationTable() {
             tr.classList.add('merged-donation');
         }
         
-        // Create source cell with icon
-        const sourceCell = document.createElement('td');
-        if (donation.dataSource === 'Mixed') {
-            sourceCell.innerHTML = '<i class="fas fa-code-branch source-mixed" title="Merged from multiple sources"></i>';
-        } else if (donation.dataSource === 'LLM') {
-            sourceCell.innerHTML = '<i class="fas fa-file-image source-llm" title="Extracted from Image/PDF"></i>';
-        } else if (donation.dataSource === 'CSV') {
-            sourceCell.innerHTML = '<i class="fas fa-file-csv source-csv" title="Imported from CSV"></i>';
-        }
-        
-        // Add merge indicator if present
-        if (donation.mergeHistory && donation.mergeHistory.length > 0) {
-            const mergeDetails = donation.mergeHistory.map(h => 
-                `Merged ${h.mergedFields.join(', ')} from ${h.sourceData.donor || 'Unknown'}`
-            ).join('\n');
-            sourceCell.innerHTML += ` <span class="badge bg-info" style="cursor: pointer;" title="${mergeDetails}" onclick="showMergeHistory('${donation.internalId}')">${donation.mergeHistory.length}</span>`;
-        }
-        
-        tr.appendChild(sourceCell);
-        
-        // Create other cells
+        // Create cells for all fields
         const fields = [
             'customerLookup', 'Donor Name', 'Check No.', 'Gift Amount', 
             'Check Date', 'Address - Line 1', 'City', 'State', 'ZIP', 'Memo'
@@ -465,31 +462,28 @@ function renderDonationTable() {
         const actionsCell = document.createElement('td');
         let actionsHtml = '';
         
-        // Only show QBO actions for LLM-extracted donations
-        if (donation.dataSource === 'LLM') {
-            
-            // Create, manual match or update customer buttons, depending on status
-            if (donation.qbCustomerStatus === 'New') {
-                // Manual match button to select from existing customers
-                actionsHtml += `<button class="btn btn-sm btn-outline-primary me-1 manual-match-btn" data-id="${donation.internalId}" title="Manually select customer from QBO">
-                    <i class="fas fa-link"></i>
-                </button>`;
-                // Create new customer button
-                actionsHtml += `<button class="btn btn-sm btn-outline-info me-1 create-customer-btn" data-id="${donation.internalId}" title="Create new customer in QBO">
-                    <i class="fas fa-user-plus"></i>
-                </button>`;
-            } else if (donation.qbCustomerStatus === 'Matched-AddressMismatch') {
-                actionsHtml += `<button class="btn btn-sm btn-outline-warning me-1 update-customer-btn" data-id="${donation.internalId}" title="Update customer address in QBO">
-                    <i class="fas fa-user-edit"></i>
-                </button>`;
-            }
-            
-            // Send to QBO button (only if not already sent)
-            if (donation.qbSyncStatus !== 'Sent') {
-                actionsHtml += `<button class="btn btn-sm btn-outline-success me-1 send-to-qbo-btn" data-id="${donation.internalId}" title="Send to QuickBooks Online">
-                    <i class="fas fa-paper-plane"></i>
-                </button>`;
-            }
+        // Show QBO actions for all donations
+        // Create, manual match or update customer buttons, depending on status
+        if (donation.qbCustomerStatus === 'New' || !donation.qbCustomerStatus) {
+            // Manual match button to select from existing customers
+            actionsHtml += `<button class="btn btn-sm btn-outline-primary me-1 manual-match-btn" data-id="${donation.internalId}" title="Manually select customer from QBO">
+                <i class="fas fa-link"></i>
+            </button>`;
+            // Create new customer button
+            actionsHtml += `<button class="btn btn-sm btn-outline-info me-1 create-customer-btn" data-id="${donation.internalId}" title="Create new customer in QBO">
+                <i class="fas fa-user-plus"></i>
+            </button>`;
+        } else if (donation.qbCustomerStatus === 'Matched-AddressMismatch' || donation.qbCustomerStatus === 'Matched-AddressNeedsReview') {
+            actionsHtml += `<button class="btn btn-sm btn-outline-warning me-1 update-customer-btn" data-id="${donation.internalId}" title="Update customer address in QBO">
+                <i class="fas fa-user-edit"></i>
+            </button>`;
+        }
+        
+        // Send to QBO button (only if not already sent and customer is matched)
+        if (donation.qbSyncStatus !== 'Sent' && donation.qbCustomerStatus === 'Matched') {
+            actionsHtml += `<button class="btn btn-sm btn-outline-success me-1 send-to-qbo-btn" data-id="${donation.internalId}" title="Send to QuickBooks Online">
+                <i class="fas fa-paper-plane"></i>
+            </button>`;
         }
         
         // Delete button for all donations
@@ -1220,13 +1214,20 @@ function populatePaymentMethodSelects() {
                 } else {
                     console.warn(`Default payment method ID ${defaultPaymentMethodId} not found in QBO payment methods`);
                     
-                    // Add the default "CHECK" method if missing
-                    if (defaultPaymentMethodId === 'CHECK') {
+                    // Add common payment methods if missing
+                    const commonMethods = [
+                        { id: 'CHECK', name: 'Check' },
+                        { id: 'Cash', name: 'Cash' },
+                        { id: 'Credit Card', name: 'Credit Card' }
+                    ];
+                    
+                    const methodToAdd = commonMethods.find(m => m.id === defaultPaymentMethodId);
+                    if (methodToAdd) {
                         const option = document.createElement('option');
-                        option.value = 'CHECK';
-                        option.textContent = 'Check';
+                        option.value = methodToAdd.id;
+                        option.textContent = methodToAdd.name;
                         select.appendChild(option);
-                        select.value = 'CHECK';
+                        select.value = methodToAdd.id;
                     }
                 }
             }
@@ -2398,6 +2399,187 @@ function uploadAndProcessFiles(files) {
         });
 }
 
+// Async upload function using Celery
+function uploadAndProcessFilesAsync(files) {
+    // Create form data
+    const formData = new FormData();
+    // Handle FileList (not a real array)
+    for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+    }
+    
+    // Show uploading indicator
+    const uploadButton = document.getElementById('uploadButton');
+    uploadButton.disabled = true;
+    uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Processing...';
+    
+    // Show progress display immediately
+    showProgressDisplay();
+    
+    // Store session ID and task ID for later use
+    let sessionId = null;
+    let taskId = null;
+    
+    // First get a session ID by starting the upload
+    fetchWithCSRF('/upload-start', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(startData => {
+        if (startData.sessionId) {
+            sessionId = startData.sessionId;
+            // Start progress stream immediately
+            console.log('Starting progress stream with session ID:', sessionId);
+            startProgressStream(sessionId);
+            
+            // Add session ID to form data
+            formData.append('sessionId', sessionId);
+            
+            // Small delay to ensure SSE connection is established, then upload
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    fetchWithCSRF('/upload-async', {
+                        method: 'POST',
+                        body: formData
+                    }).then(resolve);
+                }, 100);
+            });
+        } else {
+            // Fallback to async upload without session
+            return fetchWithCSRF('/upload-async', {
+                method: 'POST',
+                body: formData
+            });
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            if (response.status === 413) {
+                throw new Error("File size too large. Maximum size is 50MB per upload.");
+            }
+            return response.json().then(data => {
+                throw new Error(data.message || `Server error: ${response.status}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            taskId = data.task_id;
+            showToast('Files queued for processing. Checking status...', 'info');
+            
+            // Poll for task completion
+            const pollInterval = setInterval(() => {
+                fetchWithCSRF(`/task-status/${taskId}`)
+                    .then(response => response.json())
+                    .then(statusData => {
+                        if (statusData.state === 'SUCCESS') {
+                            clearInterval(pollInterval);
+                            
+                            // Process the result
+                            const result = statusData.result;
+                            if (result.success) {
+                                // Update session with donations
+                                if (result.donations && result.donations.length > 0) {
+                                    // Log donation data to debug customer matching
+                                    console.log('[TASK RESULT] Received donations:', result.donations.length);
+                                    result.donations.slice(0, 4).forEach((donation, idx) => {
+                                        console.log(`[TASK RESULT] Donation ${idx}:`, {
+                                            donor: donation['Donor Name'],
+                                            status: donation.qbCustomerStatus,
+                                            id: donation.qboCustomerId,
+                                            matchMethod: donation.matchMethod,
+                                            matchConfidence: donation.matchConfidence
+                                        });
+                                    });
+                                    
+                                    // Store donations in session via API call
+                                    fetchWithCSRF('/donations/update-session', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({
+                                            donations: result.donations
+                                        })
+                                    }).then(() => {
+                                        // Process the upload response
+                                        const processedCount = processUploadResponse(result);
+                                        
+                                        if (processedCount === 0) {
+                                            showToast('No donation data found in the uploaded files', 'warning');
+                                        } else {
+                                            showToast(`Successfully processed ${processedCount} donations`, 'success');
+                                        }
+                                        
+                                        // Clear the file list
+                                        document.getElementById('fileList').innerHTML = '';
+                                        document.getElementById('uploadPreview').classList.add('d-none');
+                                        
+                                        // Hide progress display after a delay
+                                        setTimeout(hideProgressDisplay, 2000);
+                                    });
+                                } else {
+                                    showToast(result.message || 'No donations found', 'warning');
+                                    setTimeout(hideProgressDisplay, 1000);
+                                }
+                            } else {
+                                showToast(result.message || 'Processing failed', 'danger');
+                                setTimeout(hideProgressDisplay, 1000);
+                            }
+                            
+                            // Reset upload button
+                            uploadButton.disabled = false;
+                            uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
+                            
+                        } else if (statusData.state === 'FAILURE') {
+                            clearInterval(pollInterval);
+                            showToast('Processing failed: ' + statusData.error, 'danger');
+                            
+                            // Hide progress display on error
+                            setTimeout(hideProgressDisplay, 1000);
+                            
+                            // Reset upload button
+                            uploadButton.disabled = false;
+                            uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
+                        }
+                        // Continue polling for PENDING, RUNNING states
+                    })
+                    .catch(error => {
+                        console.error('Error checking task status:', error);
+                    });
+            }, 2000); // Poll every 2 seconds
+            
+        } else {
+            showToast(data.message || 'Error queuing files', 'danger');
+            // Hide progress display on error
+            setTimeout(hideProgressDisplay, 1000);
+            
+            // Reset upload button
+            uploadButton.disabled = false;
+            uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
+        }
+    })
+    .catch(error => {
+        console.error('Error uploading files:', error);
+        let errorMessage = 'Error uploading and processing files';
+        
+        // Show more specific error messages
+        if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        showToast(errorMessage, 'danger');
+        
+        // Hide progress display on error
+        setTimeout(hideProgressDisplay, 1000);
+        
+        // Reset upload button
+        uploadButton.disabled = false;
+        uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
+    });
+}
+
 // Progress display functions
 function showProgressDisplay() {
     const progressDisplay = document.getElementById('progressDisplay');
@@ -2452,8 +2634,16 @@ function startProgressStream(sessionId) {
         
         currentProgressStream.onerror = function(event) {
             console.error('Progress stream error:', event);
-            currentProgressStream.close();
-            currentProgressStream = null;
+            if (currentProgressStream) {
+                currentProgressStream.close();
+                currentProgressStream = null;
+            }
+            
+            // Show error to user if we were actively processing
+            const statusDiv = document.getElementById('processingStatus');
+            if (statusDiv && statusDiv.textContent.includes('Processing')) {
+                showToast("Connection interrupted. Please check if your files were processed.", "warning");
+            }
         };
     } catch (e) {
         console.error('Error starting progress stream:', e);
@@ -2495,7 +2685,12 @@ function checkAuthAndProcessFiles() {
                 // Process the files
                 showToast("Connected to QuickBooks successfully! Processing your files now.", "success");
                 if (window.pendingFiles && window.pendingFiles.length > 0) {
-                    uploadAndProcessFiles(window.pendingFiles);
+                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || true;
+                    if (useAsyncProcessing) {
+                        uploadAndProcessFilesAsync(window.pendingFiles);
+                    } else {
+                        uploadAndProcessFilesAsync(window.pendingFiles);
+                    }
                 }
             }
         })
@@ -2578,7 +2773,12 @@ function checkQBOAuthStatus() {
                 if (data.justConnected && window.pendingFiles && window.pendingFiles.length > 0) {
                     console.log("Just connected to QBO and have pending files - processing them now");
                     showToast("Connected to QuickBooks successfully! Processing your files now.", "success");
-                    uploadAndProcessFiles(window.pendingFiles);
+                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || true;
+                    if (useAsyncProcessing) {
+                        uploadAndProcessFilesAsync(window.pendingFiles);
+                    } else {
+                        uploadAndProcessFilesAsync(window.pendingFiles);
+                    }
                     window.pendingFiles = null; // Clear pending files
                 }
             } else {
@@ -2865,7 +3065,12 @@ document.addEventListener('DOMContentLoaded', function() {
         // If we have pending files, process them
         if (window.pendingFiles && window.pendingFiles.length > 0) {
             showToast("Processing without QuickBooks connection. Customer matching will be unavailable.", "warning");
-            uploadAndProcessFiles(window.pendingFiles);
+            const useAsyncProcessing = window.USE_ASYNC_PROCESSING || true;
+            if (useAsyncProcessing) {
+                uploadAndProcessFilesAsync(window.pendingFiles);
+            } else {
+                uploadAndProcessFilesAsync(window.pendingFiles);
+            }
             window.pendingFiles = null; // Clear pending files
         }
     });
@@ -2972,12 +3177,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         return;
                     }
                     // If QBO is already connected, proceed with file processing
-                    uploadAndProcessFiles(files);
+                    // Check if we should use async processing (can be configured)
+                    const useAsyncProcessing = window.USE_ASYNC_PROCESSING || true;
+                    if (useAsyncProcessing) {
+                        uploadAndProcessFilesAsync(files);
+                    } else {
+                        uploadAndProcessFilesAsync(files);
+                    }
                 })
                 .catch(error => {
                     console.error("Error checking QBO auth status:", error);
                     // Proceed with file processing if there's an error checking auth
-                    uploadAndProcessFiles(files);
+                    uploadAndProcessFilesAsync(files);
                 });
         } else {
             showToast('Please select files to upload', 'warning');
