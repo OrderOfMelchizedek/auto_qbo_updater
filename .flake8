@@ -48,7 +48,9 @@ ignore =
     # F811: Redefinition of unused - often happens in tests
     F811,
     # F841: Local variable assigned but never used - sometimes intentional
-    F841
+    F841,
+    # E226: Missing whitespace around arithmetic operator - common in f-strings
+    E226
 
 # Per-file exceptions for special cases
 per-file-ignores =
