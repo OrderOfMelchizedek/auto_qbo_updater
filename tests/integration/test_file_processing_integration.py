@@ -40,6 +40,9 @@ class TestFileProcessingIntegration(unittest.TestCase):
     @patch("utils.gemini_service.genai")
     def test_csv_to_donations_flow(self, mock_genai):
         """Test complete flow from CSV file to donation data."""
+        # Set up mock Gemini
+        mock_genai.configure = MagicMock()
+
         # Create a test CSV file
         csv_content = """Donor Name,Gift Amount,Gift Date,Check No.
 John Smith,100.00,2024-01-15,1234
@@ -72,7 +75,7 @@ Jane Doe,250.50,2024-01-16,1235
         mock_genai.GenerativeModel.return_value = mock_model
 
         # Create services and process file
-        gemini_service = GeminiService()
+        gemini_service = GeminiService(api_key="test-key")
         file_processor = FileProcessor(gemini_service)
 
         # Process the CSV
@@ -90,6 +93,9 @@ Jane Doe,250.50,2024-01-16,1235
     @patch("PIL.Image.open")
     def test_image_to_donations_flow(self, mock_image_open, mock_genai):
         """Test complete flow from image file to donation data."""
+        # Set up mock Gemini
+        mock_genai.configure = MagicMock()
+
         # Create a test image file
         image_path = os.path.join(self.temp_dir, "test_donation.jpg")
         with open(image_path, "wb") as f:
@@ -113,7 +119,7 @@ Jane Doe,250.50,2024-01-16,1235
         mock_genai.GenerativeModel.return_value = mock_model
 
         # Create services and process file
-        gemini_service = GeminiService()
+        gemini_service = GeminiService(api_key="test-key")
         file_processor = FileProcessor(gemini_service)
 
         # Process the image
@@ -128,6 +134,9 @@ Jane Doe,250.50,2024-01-16,1235
     @patch("utils.gemini_service.genai")
     def test_batch_processing_multiple_files(self, mock_genai):
         """Test processing multiple files in sequence."""
+        # Set up mock Gemini
+        mock_genai.configure = MagicMock()
+
         # Create multiple test files
         files = []
         for i in range(3):
@@ -155,7 +164,7 @@ Jane Doe,250.50,2024-01-16,1235
         mock_genai.GenerativeModel.return_value = mock_model
 
         # Create services
-        gemini_service = GeminiService()
+        gemini_service = GeminiService(api_key="test-key")
         file_processor = FileProcessor(gemini_service)
 
         # Process all files
