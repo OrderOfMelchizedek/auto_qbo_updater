@@ -243,6 +243,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for Heroku deployment
 
     - name: Install Heroku CLI
       run: |
@@ -258,6 +260,12 @@ jobs:
           heroku create ${{ secrets.HEROKU_APP_NAME }} || echo "App creation failed - it might already exist"
         else
           echo "App ${{ secrets.HEROKU_APP_NAME }} exists"
+        fi
+
+        # Ensure we have full git history (in case fetch-depth: 0 didn't work)
+        if [ -f .git/shallow ]; then
+          echo "Repository is shallow, unshallowing..."
+          git fetch --unshallow || echo "Failed to unshallow, continuing anyway"
         fi
 
         # Add git remote using HTTPS with token auth
