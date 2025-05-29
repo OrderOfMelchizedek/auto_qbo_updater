@@ -64,7 +64,7 @@ class DeduplicationService:
             
             # Check for suspicious check numbers
             check_no = normalize_check_number(new_donation.get('Check No.', ''))
-            if check_no and len(check_no) < 3 and check_no.isdigit():
+            if check_no and len(check_no) <= 3 and check_no.isdigit():
                 # Check numbers like "195" are suspicious - real checks are usually 4+ digits
                 print(f"WARNING: Suspicious check number '{check_no}' - may be a page number or reference")
                 # Still process it but log the warning
@@ -176,7 +176,8 @@ class DeduplicationService:
             'Donor Name', 'First Name', 'Last Name', 'Full Name',
             'Address - Line 1', 'City', 'State', 'ZIP',
             'Organization Name', 'Email', 'Phone',
-            'Check Date', 'Deposit Date', 'Deposit Method'
+            'Check Date', 'Deposit Date', 'Deposit Method',
+            'Gift Amount', 'Check No.'
         ]
         
         for field in simple_merge_fields:

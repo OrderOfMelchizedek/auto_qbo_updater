@@ -31,16 +31,17 @@ def sanitize_for_logging(data: Union[Dict, str, List, Any]) -> Union[Dict, str, 
         sanitized = {}
         for key, value in data.items():
             key_lower = key.lower()
-            # Sensitive field patterns
-            if any(pattern in key_lower for pattern in [
+            # Check if value is a dict first to allow recursion
+            if isinstance(value, dict):
+                sanitized[key] = sanitize_for_logging(value)
+            elif isinstance(value, list):
+                sanitized[key] = [sanitize_for_logging(item) if isinstance(item, dict) else item for item in value]
+            # Sensitive field patterns - only redact if not a dict/list
+            elif any(pattern in key_lower for pattern in [
                 'password', 'secret', 'token', 'key', 'auth', 'credential',
                 'ssn', 'social', 'tax', 'account_number', 'routing', 'bank'
             ]):
                 sanitized[key] = '[REDACTED]'
-            elif isinstance(value, dict):
-                sanitized[key] = sanitize_for_logging(value)
-            elif isinstance(value, list):
-                sanitized[key] = [sanitize_for_logging(item) if isinstance(item, dict) else item for item in value]
             else:
                 sanitized[key] = value
         return sanitized
@@ -79,7 +80,10 @@ def validate_donation_date(date_str: str, field_name: str = "date") -> Tuple[boo
         
         # Check if date is in the future
         if parsed_date > today:
-            days_future = (parsed_date - today).days
+            # Calculate days difference
+            # Since parsed_date is at midnight and today has time, we need to handle this carefully
+            days_future = (parsed_date.date() - today.date()).days
+            
             if days_future > FUTURE_DATE_LIMIT_DAYS:
                 return False, f"{field_name} is {days_future} days in the future (max allowed: {FUTURE_DATE_LIMIT_DAYS} days)", None
             elif days_future > 0:
