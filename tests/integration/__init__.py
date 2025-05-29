@@ -1,1 +1,1 @@
-# Integration tests for FOM to QBO automation
+"""Integration tests for FOM to QBO automation."""

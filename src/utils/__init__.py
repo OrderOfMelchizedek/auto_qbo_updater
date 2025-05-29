@@ -1,1 +1,1 @@
-# This file marks the utils directory as a Python package
+"""Utilities package for FOM to QBO automation."""

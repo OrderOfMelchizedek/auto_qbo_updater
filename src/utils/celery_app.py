@@ -13,7 +13,6 @@ load_dotenv()
 
 def make_celery(app_name=__name__):
     """Create and configure Celery instance."""
-
     # Get Redis URL from environment
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
