@@ -20,7 +20,7 @@ class TestFileProcessor(unittest.TestCase):
         self.gemini_service = MagicMock()
 
         # Mock PromptManager
-        self.prompt_manager_patcher = patch("utils.file_processor.PromptManager")
+        self.prompt_manager_patcher = patch("src.utils.file_processor.PromptManager")
         self.mock_prompt_manager_class = self.prompt_manager_patcher.start()
         self.mock_prompt_manager = MagicMock()
         self.mock_prompt_manager_class.return_value = self.mock_prompt_manager

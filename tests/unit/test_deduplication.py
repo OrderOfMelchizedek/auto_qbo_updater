@@ -45,7 +45,7 @@ class TestDeduplicationService:
             }
         ]
 
-        with patch("services.deduplication.logger") as mock_logger:
+        with patch("src.services.deduplication.logger") as mock_logger:
             result = DeduplicationService.deduplicate_donations(existing, new)
 
         assert len(result) == 1
@@ -145,7 +145,7 @@ class TestDeduplicationService:
             "qbCustomerStatus": "New",
         }
 
-        with patch("services.deduplication.logger") as mock_logger:
+        with patch("src.services.deduplication.logger") as mock_logger:
             result = DeduplicationService.merge_donation_data(existing, new)
 
         assert result["Address - Line 1"] == "123 Main St"
@@ -157,7 +157,7 @@ class TestDeduplicationService:
         existing = {"Memo": "First memo", "Check No.": "1001", "Gift Amount": "100.00"}
         new = {"Memo": "Second memo", "Check No.": "1001", "Gift Amount": "100.00"}
 
-        with patch("services.deduplication.logger") as mock_logger:
+        with patch("src.services.deduplication.logger") as mock_logger:
             result = DeduplicationService.merge_donation_data(existing, new)
 
         assert result["Memo"] == "First memo; Second memo"
@@ -221,7 +221,7 @@ class TestDeduplicationService:
             {"Check No.": "1001", "Gift Amount": "100.00", "Donor Name": "John Doe", "Address - Line 1": "123 Main St"}
         ]
 
-        with patch("services.deduplication.logger") as mock_logger:
+        with patch("src.services.deduplication.logger") as mock_logger:
             result = DeduplicationService.deduplicate_donations(existing, new)
 
         donation = result[0]

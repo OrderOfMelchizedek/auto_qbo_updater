@@ -18,7 +18,7 @@ class TestGeminiService(unittest.TestCase):
         self.api_key = "test_api_key"
 
         # Create a mock for the Gemini service
-        self.gemini_service_patcher = patch("utils.gemini_service.genai")
+        self.gemini_service_patcher = patch("src.utils.gemini_service.genai")
         self.mock_genai = self.gemini_service_patcher.start()
 
         # Setup the mock GenerativeModel
@@ -26,7 +26,7 @@ class TestGeminiService(unittest.TestCase):
         self.mock_genai.GenerativeModel.return_value = self.mock_model
 
         # Mock PromptManager
-        self.prompt_manager_patcher = patch("utils.gemini_service.PromptManager")
+        self.prompt_manager_patcher = patch("src.utils.gemini_service.PromptManager")
         self.mock_prompt_manager_class = self.prompt_manager_patcher.start()
         self.mock_prompt_manager = MagicMock()
         self.mock_prompt_manager_class.return_value = self.mock_prompt_manager
@@ -62,7 +62,7 @@ class TestGeminiService(unittest.TestCase):
         mock_open.side_effect = [mock_file, mock_file]
 
         # Mock Image.open
-        with patch("utils.gemini_service.Image.open") as mock_image_open:
+        with patch("src.utils.gemini_service.Image.open") as mock_image_open:
             mock_image = MagicMock()
             mock_image_open.return_value = mock_image
 
@@ -96,7 +96,7 @@ class TestGeminiService(unittest.TestCase):
     @patch("os.path.splitext")
     @patch("PyPDF2.PdfReader")
     @patch("fitz.open")
-    @patch("utils.gemini_service.Image.open")
+    @patch("src.utils.gemini_service.Image.open")
     def test_extract_donation_data_pdf(self, mock_image_open, mock_fitz_open, mock_pdf_reader, mock_splitext):
         """Test extraction from a PDF file."""
         # Mock file extension check
@@ -239,7 +239,7 @@ class TestGeminiService(unittest.TestCase):
         mock_open.side_effect = [mock_file, mock_file]
 
         # Mock Image.open to raise an exception for PIL error testing
-        with patch("utils.gemini_service.Image.open") as mock_image_open:
+        with patch("src.utils.gemini_service.Image.open") as mock_image_open:
             mock_image_open.side_effect = Exception("Image error")
 
             # Mock API error

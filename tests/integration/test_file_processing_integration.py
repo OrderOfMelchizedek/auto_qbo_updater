@@ -37,7 +37,7 @@ class TestFileProcessingIntegration(unittest.TestCase):
 
         shutil.rmtree(self.temp_dir)
 
-    @patch("utils.gemini_service.genai")
+    @patch("src.utils.gemini_service.genai")
     def test_csv_to_donations_flow(self, mock_genai):
         """Test complete flow from CSV file to donation data."""
         # Set up mock Gemini
@@ -89,7 +89,7 @@ Jane Doe,250.50,2024-01-16,1235
         self.assertEqual(result[1]["Donor Name"], "Jane Doe")
         self.assertEqual(result[1]["Gift Amount"], "250.50")
 
-    @patch("utils.gemini_service.genai")
+    @patch("src.utils.gemini_service.genai")
     @patch("PIL.Image.open")
     def test_image_to_donations_flow(self, mock_image_open, mock_genai):
         """Test complete flow from image file to donation data."""
@@ -131,7 +131,7 @@ Jane Doe,250.50,2024-01-16,1235
         self.assertEqual(result[0]["Donor Name"], "Test Donor")
         self.assertEqual(result[0]["Gift Amount"], "500.00")
 
-    @patch("utils.gemini_service.genai")
+    @patch("src.utils.gemini_service.genai")
     def test_batch_processing_multiple_files(self, mock_genai):
         """Test processing multiple files in sequence."""
         # Set up mock Gemini

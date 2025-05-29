@@ -12,26 +12,6 @@ import pytest
 from werkzeug.datastructures import FileStorage
 
 
-@pytest.fixture
-def client(monkeypatch, tmp_path):
-    """Create a test client for the Flask app."""
-    # Set required environment variables
-    monkeypatch.setenv("FLASK_SECRET_KEY", "test-secret-key")
-    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
-    monkeypatch.setenv("QBO_CLIENT_ID", "test-client-id")
-    monkeypatch.setenv("QBO_CLIENT_SECRET", "test-client-secret")
-    monkeypatch.setenv("QBO_REDIRECT_URI", "http://localhost/callback")
-    monkeypatch.setenv("UPLOAD_FOLDER", str(tmp_path))
-    monkeypatch.setenv("MAX_FILES_PER_UPLOAD", "10")
-
-    # Import after setting env vars
-    from src.app import app
-
-    app.config["TESTING"] = True
-    app.config["UPLOAD_FOLDER"] = str(tmp_path)
-    with app.test_client() as client:
-        yield client
-
 
 @pytest.fixture
 def mock_file():
@@ -64,7 +44,7 @@ class TestFilesRoutes:
 
     def test_upload_start_success(self, client):
         """Test starting a new upload session."""
-        response = client.post("/upload-start")
+        response = client.post("/upload-start", headers={'X-CSRFToken': 'test-token'})
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -81,14 +61,14 @@ class TestFilesRoutes:
     def test_upload_start_error(self, client):
         """Test upload start error handling."""
         with patch("uuid.uuid4", side_effect=Exception("UUID error")):
-            response = client.post("/upload-start")
+            response = client.post("/upload-start", headers={'X-CSRFToken': 'test-token'})
 
             assert response.status_code == 500
             data = json.loads(response.data)
             assert "error" in data
 
-    @patch("routes.files.process_files_task")
-    @patch("routes.files.ResultStore")
+    @patch("src.routes.files.process_files_task")
+    @patch("src.routes.files.ResultStore")
     def test_upload_async_success(self, mock_store_class, mock_task, client, mock_file):
         """Test async file upload."""
         # Mock Celery task
@@ -100,10 +80,10 @@ class TestFilesRoutes:
         mock_store = Mock()
         mock_store_class.return_value = mock_store
 
-        with patch("routes.files.log_audit_event"):
+        with patch("src.routes.files.log_audit_event"):
             # Upload file
             data = {"files": (mock_file, "test_donation.csv")}
-            response = client.post("/upload-async", data=data, content_type="multipart/form-data")
+            response = client.post("/upload-async", data=data, content_type="multipart/form-data", headers={'X-CSRFToken': 'test-token'})
 
             assert response.status_code == 200
             result = json.loads(response.data)
@@ -119,7 +99,7 @@ class TestFilesRoutes:
 
     def test_upload_async_no_files(self, client):
         """Test async upload with no files."""
-        response = client.post("/upload-async", data={}, content_type="multipart/form-data")
+        response = client.post("/upload-async", data={}, content_type="multipart/form-data", headers={'X-CSRFToken': 'test-token'})
 
         assert response.status_code == 400
         data = json.loads(response.data)
@@ -128,20 +108,22 @@ class TestFilesRoutes:
     def test_upload_async_too_many_files(self, client):
         """Test async upload with too many files."""
         # Create 11 mock files (exceeds limit of 10)
-        files = []
+        from werkzeug.datastructures import MultiDict
+        
+        data = MultiDict()
         for i in range(11):
             file = FileStorage(stream=io.BytesIO(b"content"), filename=f"file{i}.csv")
-            files.append(("files", (file, f"file{i}.csv")))
+            data.add('files', file)
 
-        response = client.post("/upload-async", data=files, content_type="multipart/form-data")
+        response = client.post("/upload-async", data=data, content_type="multipart/form-data", headers={'X-CSRFToken': 'test-token'})
 
         assert response.status_code == 400
         data = json.loads(response.data)
         assert "Too many files" in data["error"]
 
-    @patch("routes.files.get_memory_monitor")
-    @patch("routes.files.log_progress")
-    @patch("routes.files.log_audit_event")
+    @patch("src.routes.files.get_memory_monitor")
+    @patch("src.routes.files.log_progress")
+    @patch("src.routes.files.log_audit_event")
     def test_upload_sync_success(
         self, mock_audit, mock_progress, mock_memory_monitor, client, mock_file, mock_qbo_service, mock_file_processor
     ):
@@ -173,7 +155,7 @@ class TestFilesRoutes:
 
             # Upload file
             data = {"files": (mock_file, "test_donation.csv")}
-            response = client.post("/upload", data=data, content_type="multipart/form-data")
+            response = client.post("/upload", data=data, content_type="multipart/form-data", headers={'X-CSRFToken': 'test-token'})
 
             assert response.status_code == 200
             result = json.loads(response.data)
@@ -190,12 +172,12 @@ class TestFilesRoutes:
     def test_upload_sync_with_deduplication(self, client):
         """Test upload with deduplication of donations."""
         with (
-            patch("routes.files.get_memory_monitor"),
-            patch("routes.files.log_progress"),
-            patch("routes.files.log_audit_event"),
+            patch("src.routes.files.get_memory_monitor"),
+            patch("src.routes.files.log_progress"),
+            patch("src.routes.files.log_audit_event"),
             patch("flask.current_app.process_single_file") as mock_process,
             patch("flask.current_app.cleanup_uploaded_file"),
-            patch("services.deduplication.DeduplicationService.deduplicate_donations") as mock_dedup,
+            patch("src.services.deduplication.DeduplicationService.deduplicate_donations") as mock_dedup,
         ):
 
             # Set up existing donations in session
@@ -223,7 +205,7 @@ class TestFilesRoutes:
             # Create mock file
             file = FileStorage(stream=io.BytesIO(b"content"), filename="test.csv")
 
-            response = client.post("/upload", data={"files": (file, "test.csv")}, content_type="multipart/form-data")
+            response = client.post("/upload", data={"files": (file, "test.csv", headers={'X-CSRFToken': 'test-token'})}, content_type="multipart/form-data")
 
             assert response.status_code == 200
             result = json.loads(response.data)
@@ -236,7 +218,7 @@ class TestFilesRoutes:
 
     def test_upload_sync_error_handling(self, client, mock_file):
         """Test sync upload error handling."""
-        with patch("routes.files.get_memory_monitor") as mock_memory_monitor, patch("routes.files.log_audit_event"):
+        with patch("src.routes.files.get_memory_monitor") as mock_memory_monitor, patch("src.routes.files.log_audit_event"):
 
             mock_monitor = Mock()
             mock_memory_monitor.return_value = mock_monitor
@@ -245,7 +227,7 @@ class TestFilesRoutes:
             with patch("flask.current_app.process_single_file", side_effect=Exception("Processing error")):
 
                 response = client.post(
-                    "/upload", data={"files": (mock_file, "test.csv")}, content_type="multipart/form-data"
+                    "/upload", data={"files": (mock_file, "test.csv", headers={'X-CSRFToken': 'test-token'})}, content_type="multipart/form-data"
                 )
 
                 assert response.status_code == 500
@@ -255,8 +237,8 @@ class TestFilesRoutes:
                 # Verify cleanup was called
                 mock_monitor.cleanup.assert_called()
 
-    @patch("routes.files.celery_app")
-    @patch("routes.files.ResultStore")
+    @patch("src.routes.files.celery_app")
+    @patch("src.routes.files.ResultStore")
     def test_task_status_success(self, mock_store_class, mock_celery, client):
         """Test getting task status."""
         # Mock Celery result
@@ -288,7 +270,7 @@ class TestFilesRoutes:
 
     def test_task_status_pending(self, client):
         """Test task status for pending task."""
-        with patch("routes.files.celery_app") as mock_celery, patch("routes.files.ResultStore") as mock_store_class:
+        with patch("src.routes.files.celery_app") as mock_celery, patch("src.routes.files.ResultStore") as mock_store_class:
 
             mock_result = Mock()
             mock_result.state = "PENDING"
@@ -307,7 +289,7 @@ class TestFilesRoutes:
 
     def test_task_status_progress(self, client):
         """Test task status with progress updates."""
-        with patch("routes.files.celery_app") as mock_celery, patch("routes.files.ResultStore") as mock_store_class:
+        with patch("src.routes.files.celery_app") as mock_celery, patch("src.routes.files.ResultStore") as mock_store_class:
 
             mock_result = Mock()
             mock_result.state = "PROGRESS"
@@ -329,7 +311,7 @@ class TestFilesRoutes:
 
     def test_task_status_failure(self, client):
         """Test task status for failed task."""
-        with patch("routes.files.celery_app") as mock_celery, patch("routes.files.ResultStore") as mock_store_class:
+        with patch("src.routes.files.celery_app") as mock_celery, patch("src.routes.files.ResultStore") as mock_store_class:
 
             mock_result = Mock()
             mock_result.state = "FAILURE"

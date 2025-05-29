@@ -26,7 +26,7 @@ class TestBatchProcessingIntegration(unittest.TestCase):
 
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @patch("utils.gemini_service.genai")
+    @patch("src.utils.gemini_service.genai")
     def test_batch_processor_with_progress_logging(self, mock_genai):
         """Test batch processor integration with progress logging."""
         # Set up mock Gemini
@@ -54,7 +54,7 @@ class TestBatchProcessingIntegration(unittest.TestCase):
         # Verify batches created (empty since our fake PDF has no pages)
         self.assertIsInstance(batches, list)
 
-    @patch("utils.gemini_service.genai")
+    @patch("src.utils.gemini_service.genai")
     def test_concurrent_batch_processing(self, mock_genai):
         """Test concurrent processing of multiple batches."""
         # Set up mock Gemini
@@ -95,7 +95,7 @@ class TestBatchProcessingIntegration(unittest.TestCase):
         self.assertEqual(len(donations), 3)
         self.assertEqual(len(errors), 0)
 
-    @patch("utils.batch_processor.ThreadPoolExecutor")
+    @patch("src.utils.batch_processor.ThreadPoolExecutor")
     def test_batch_processing_error_handling(self, mock_executor):
         """Test error handling in batch processing."""
         # Mock executor to simulate an error
@@ -109,7 +109,7 @@ class TestBatchProcessingIntegration(unittest.TestCase):
         mock_executor.return_value = mock_executor_instance
 
         # Create batch processor
-        with patch("utils.gemini_service.genai") as mock_genai:
+        with patch("src.utils.gemini_service.genai") as mock_genai:
             mock_genai.configure = MagicMock()
 
             from utils.gemini_service import GeminiService
@@ -128,7 +128,7 @@ class TestBatchProcessingIntegration(unittest.TestCase):
             )
 
             # Mock as_completed to return our future
-            with patch("utils.batch_processor.as_completed", return_value=[mock_future]):
+            with patch("src.utils.batch_processor.as_completed", return_value=[mock_future]):
                 donations, errors = batch_processor.process_batches_concurrently([batch])
 
             # Verify error was captured

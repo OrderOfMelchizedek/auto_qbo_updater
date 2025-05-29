@@ -39,9 +39,9 @@ def health_check():
         redis_status = "unknown"
         redis_details = {}
         try:
-            from utils.celery_app import get_redis_client
-
-            redis_client = get_redis_client()
+            # Try to get Redis client from app context
+            from flask import current_app
+            redis_client = getattr(current_app, 'redis_client', None)
             if redis_client:
                 # Test Redis with ping
                 redis_client.ping()

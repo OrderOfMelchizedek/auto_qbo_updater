@@ -9,23 +9,6 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 
-@pytest.fixture
-def client(monkeypatch):
-    """Create a test client for the Flask app."""
-    # Set required environment variables
-    monkeypatch.setenv("FLASK_SECRET_KEY", "test-secret-key")
-    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
-    monkeypatch.setenv("QBO_CLIENT_ID", "test-client-id")
-    monkeypatch.setenv("QBO_CLIENT_SECRET", "test-client-secret")
-    monkeypatch.setenv("QBO_REDIRECT_URI", "http://localhost/callback")
-
-    # Import after setting env vars
-    from src.app import app
-
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
-
 
 @pytest.fixture
 def mock_qbo_service():
@@ -82,7 +65,7 @@ class TestQBORoutes:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
 
-        with patch("routes.qbo.get_qbo_service", return_value=mock_qbo_service):
+        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
             response = client.get("/qbo/customer/donation_123")
 
             assert response.status_code == 200
@@ -108,7 +91,7 @@ class TestQBORoutes:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
 
-        with patch("routes.qbo.get_qbo_service", return_value=mock_qbo_service):
+        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
             response = client.get("/qbo/customer/donation_123")
 
             assert response.status_code == 200
@@ -181,7 +164,7 @@ class TestQBORoutes:
         with client.session_transaction() as sess:
             sess["qbo_authenticated"] = True
 
-        with patch("routes.qbo.get_qbo_service", return_value=mock_qbo_service):
+        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
             response = client.get("/qbo/customers/all")
 
             assert response.status_code == 200
@@ -204,15 +187,15 @@ class TestQBORoutes:
             sess["session_id"] = "test-session"
 
         with (
-            patch("routes.qbo.get_qbo_service", return_value=mock_qbo_service),
-            patch("routes.qbo.log_audit_event") as mock_audit,
+            patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service),
+            patch("src.routes.qbo.log_audit_event") as mock_audit,
         ):
 
             response = client.post(
                 "/qbo/customer/manual-match/donation_123",
                 json={"customerId": "customer-123"},
                 content_type="application/json",
-            )
+            , headers={'X-CSRFToken': 'test-token'})
 
             assert response.status_code == 200
             data = json.loads(response.data)
@@ -239,12 +222,12 @@ class TestQBORoutes:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
 
-        with patch("routes.qbo.get_qbo_service", return_value=mock_qbo_service):
+        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
             response = client.post(
                 "/qbo/customer/manual-match/donation_123",
                 json={"customerId": "invalid-id"},
                 content_type="application/json",
-            )
+            , headers={'X-CSRFToken': 'test-token'})
 
             assert response.status_code == 404
             data = json.loads(response.data)
@@ -260,11 +243,11 @@ class TestQBORoutes:
             sess["session_id"] = "test-session"
 
         with (
-            patch("routes.qbo.get_qbo_service", return_value=mock_qbo_service),
-            patch("routes.qbo.log_audit_event") as mock_audit,
+            patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service),
+            patch("src.routes.qbo.log_audit_event") as mock_audit,
         ):
 
-            response = client.post("/qbo/customer/create/donation_123")
+            response = client.post("/qbo/customer/create/donation_123", headers={'X-CSRFToken': 'test-token'})
 
             assert response.status_code == 200
             data = json.loads(response.data)
@@ -300,10 +283,10 @@ class TestQBORoutes:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
 
-        with patch("routes.qbo.get_qbo_service", return_value=mock_qbo_service):
+        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
             response = client.post(
                 "/qbo/customer/create/donation_123", json=custom_data, content_type="application/json"
-            )
+            , headers={'X-CSRFToken': 'test-token'})
 
             assert response.status_code == 200
 
@@ -325,13 +308,13 @@ class TestQBORoutes:
             sess["session_id"] = "test-session"
 
         with (
-            patch("routes.qbo.get_qbo_service", return_value=mock_qbo_service),
-            patch("routes.qbo.log_audit_event") as mock_audit,
+            patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service),
+            patch("src.routes.qbo.log_audit_event") as mock_audit,
         ):
 
             response = client.post(
                 "/qbo/customer/update/donation_123", json=update_data, content_type="application/json"
-            )
+            , headers={'X-CSRFToken': 'test-token'})
 
             assert response.status_code == 200
             data = json.loads(response.data)
@@ -356,7 +339,7 @@ class TestQBORoutes:
             sess["donations"] = [sample_donation]  # No qboCustomerId
             sess["qbo_authenticated"] = True
 
-        response = client.post("/qbo/customer/update/donation_123", json={}, content_type="application/json")
+        response = client.post("/qbo/customer/update/donation_123", json={}, content_type="application/json", headers={'X-CSRFToken': 'test-token'})
 
         assert response.status_code == 400
         data = json.loads(response.data)
@@ -375,11 +358,11 @@ class TestQBORoutes:
             sess["session_id"] = "test-session"
 
         with (
-            patch("routes.qbo.get_qbo_service", return_value=mock_qbo_service),
-            patch("routes.qbo.log_audit_event") as mock_audit,
+            patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service),
+            patch("src.routes.qbo.log_audit_event") as mock_audit,
         ):
 
-            response = client.post("/qbo/sales-receipt/donation_123")
+            response = client.post("/qbo/sales-receipt/donation_123", headers={'X-CSRFToken': 'test-token'})
 
             assert response.status_code == 200
             data = json.loads(response.data)
@@ -406,7 +389,7 @@ class TestQBORoutes:
             sess["donations"] = [sample_donation]  # No qboCustomerId
             sess["qbo_authenticated"] = True
 
-        response = client.post("/qbo/sales-receipt/donation_123")
+        response = client.post("/qbo/sales-receipt/donation_123", headers={'X-CSRFToken': 'test-token'})
 
         assert response.status_code == 400
         data = json.loads(response.data)
@@ -421,8 +404,8 @@ class TestQBORoutes:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
 
-        with patch("routes.qbo.get_qbo_service", return_value=mock_qbo_service):
-            response = client.post("/qbo/sales-receipt/donation_123")
+        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
+            response = client.post("/qbo/sales-receipt/donation_123", headers={'X-CSRFToken': 'test-token'})
 
             assert response.status_code == 500
             data = json.loads(response.data)
