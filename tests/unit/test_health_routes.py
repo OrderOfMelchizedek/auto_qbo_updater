@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 
-
 class TestHealthRoutes:
     """Test health check routes."""
 

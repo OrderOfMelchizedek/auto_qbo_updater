@@ -12,7 +12,6 @@ import pytest
 from werkzeug.datastructures import FileStorage
 
 
-
 @pytest.fixture
 def mock_file():
     """Create a mock file for upload testing."""
@@ -44,7 +43,7 @@ class TestFilesRoutes:
 
     def test_upload_start_success(self, client):
         """Test starting a new upload session."""
-        response = client.post("/upload-start", headers={'X-CSRFToken': 'test-token'})
+        response = client.post("/upload-start", headers={"X-CSRFToken": "test-token"})
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -61,7 +60,7 @@ class TestFilesRoutes:
     def test_upload_start_error(self, client):
         """Test upload start error handling."""
         with patch("uuid.uuid4", side_effect=Exception("UUID error")):
-            response = client.post("/upload-start", headers={'X-CSRFToken': 'test-token'})
+            response = client.post("/upload-start", headers={"X-CSRFToken": "test-token"})
 
             assert response.status_code == 500
             data = json.loads(response.data)
@@ -83,7 +82,9 @@ class TestFilesRoutes:
         with patch("src.routes.files.log_audit_event"):
             # Upload file
             data = {"files": (mock_file, "test_donation.csv")}
-            response = client.post("/upload-async", data=data, content_type="multipart/form-data", headers={'X-CSRFToken': 'test-token'})
+            response = client.post(
+                "/upload-async", data=data, content_type="multipart/form-data", headers={"X-CSRFToken": "test-token"}
+            )
 
             assert response.status_code == 200
             result = json.loads(response.data)
@@ -99,7 +100,9 @@ class TestFilesRoutes:
 
     def test_upload_async_no_files(self, client):
         """Test async upload with no files."""
-        response = client.post("/upload-async", data={}, content_type="multipart/form-data", headers={'X-CSRFToken': 'test-token'})
+        response = client.post(
+            "/upload-async", data={}, content_type="multipart/form-data", headers={"X-CSRFToken": "test-token"}
+        )
 
         assert response.status_code == 400
         data = json.loads(response.data)
@@ -109,13 +112,15 @@ class TestFilesRoutes:
         """Test async upload with too many files."""
         # Create 11 mock files (exceeds limit of 10)
         from werkzeug.datastructures import MultiDict
-        
+
         data = MultiDict()
         for i in range(11):
             file = FileStorage(stream=io.BytesIO(b"content"), filename=f"file{i}.csv")
-            data.add('files', file)
+            data.add("files", file)
 
-        response = client.post("/upload-async", data=data, content_type="multipart/form-data", headers={'X-CSRFToken': 'test-token'})
+        response = client.post(
+            "/upload-async", data=data, content_type="multipart/form-data", headers={"X-CSRFToken": "test-token"}
+        )
 
         assert response.status_code == 400
         data = json.loads(response.data)
@@ -155,7 +160,9 @@ class TestFilesRoutes:
 
             # Upload file
             data = {"files": (mock_file, "test_donation.csv")}
-            response = client.post("/upload", data=data, content_type="multipart/form-data", headers={'X-CSRFToken': 'test-token'})
+            response = client.post(
+                "/upload", data=data, content_type="multipart/form-data", headers={"X-CSRFToken": "test-token"}
+            )
 
             assert response.status_code == 200
             result = json.loads(response.data)
@@ -205,7 +212,12 @@ class TestFilesRoutes:
             # Create mock file
             file = FileStorage(stream=io.BytesIO(b"content"), filename="test.csv")
 
-            response = client.post("/upload", data={"files": (file, "test.csv", headers={'X-CSRFToken': 'test-token'})}, content_type="multipart/form-data")
+            response = client.post(
+                "/upload",
+                data={"files": (file, "test.csv")},
+                content_type="multipart/form-data",
+                headers={"X-CSRFToken": "test-token"},
+            )
 
             assert response.status_code == 200
             result = json.loads(response.data)
@@ -218,7 +230,10 @@ class TestFilesRoutes:
 
     def test_upload_sync_error_handling(self, client, mock_file):
         """Test sync upload error handling."""
-        with patch("src.routes.files.get_memory_monitor") as mock_memory_monitor, patch("src.routes.files.log_audit_event"):
+        with (
+            patch("src.routes.files.get_memory_monitor") as mock_memory_monitor,
+            patch("src.routes.files.log_audit_event"),
+        ):
 
             mock_monitor = Mock()
             mock_memory_monitor.return_value = mock_monitor
@@ -227,7 +242,7 @@ class TestFilesRoutes:
             with patch("flask.current_app.process_single_file", side_effect=Exception("Processing error")):
 
                 response = client.post(
-                    "/upload", data={"files": (mock_file, "test.csv", headers={'X-CSRFToken': 'test-token'})}, content_type="multipart/form-data"
+                    "/upload", data={"files": (mock_file, "test.csv")}, content_type="multipart/form-data"
                 )
 
                 assert response.status_code == 500
@@ -270,7 +285,10 @@ class TestFilesRoutes:
 
     def test_task_status_pending(self, client):
         """Test task status for pending task."""
-        with patch("src.routes.files.celery_app") as mock_celery, patch("src.routes.files.ResultStore") as mock_store_class:
+        with (
+            patch("src.routes.files.celery_app") as mock_celery,
+            patch("src.routes.files.ResultStore") as mock_store_class,
+        ):
 
             mock_result = Mock()
             mock_result.state = "PENDING"
@@ -289,7 +307,10 @@ class TestFilesRoutes:
 
     def test_task_status_progress(self, client):
         """Test task status with progress updates."""
-        with patch("src.routes.files.celery_app") as mock_celery, patch("src.routes.files.ResultStore") as mock_store_class:
+        with (
+            patch("src.routes.files.celery_app") as mock_celery,
+            patch("src.routes.files.ResultStore") as mock_store_class,
+        ):
 
             mock_result = Mock()
             mock_result.state = "PROGRESS"
@@ -311,7 +332,10 @@ class TestFilesRoutes:
 
     def test_task_status_failure(self, client):
         """Test task status for failed task."""
-        with patch("src.routes.files.celery_app") as mock_celery, patch("src.routes.files.ResultStore") as mock_store_class:
+        with (
+            patch("src.routes.files.celery_app") as mock_celery,
+            patch("src.routes.files.ResultStore") as mock_store_class,
+        ):
 
             mock_result = Mock()
             mock_result.state = "FAILURE"

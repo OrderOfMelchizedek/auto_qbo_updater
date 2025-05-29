@@ -63,8 +63,8 @@ class TestOAuthFlow(unittest.TestCase):
     def test_qbo_authorize_redirect(self):
         """Test OAuth authorization redirect."""
         mock_auth_url = "https://appcenter.intuit.com/connect/oauth2?client_id=test"
-        
-        with patch.object(app.qbo_service, 'get_authorization_url', return_value=mock_auth_url):
+
+        with patch.object(app.qbo_service, "get_authorization_url", return_value=mock_auth_url):
             response = self.client.get("/qbo/authorize")
 
             self.assertEqual(response.status_code, 302)
@@ -88,23 +88,29 @@ class TestOAuthFlow(unittest.TestCase):
 
     def test_qbo_callback_success(self):
         """Test successful OAuth callback."""
-        with patch.object(app.qbo_service, 'get_tokens', return_value=True) as mock_get_tokens, \
-             patch.object(app.qbo_service, 'get_all_customers', return_value=[
-                 {"Id": "1", "DisplayName": "Test Customer 1"},
-                 {"Id": "2", "DisplayName": "Test Customer 2"},
-             ]) as mock_get_customers, \
-             patch('src.services.validation.log_audit_event'):
-            
+        with (
+            patch.object(app.qbo_service, "get_tokens", return_value=True) as mock_get_tokens,
+            patch.object(
+                app.qbo_service,
+                "get_all_customers",
+                return_value=[
+                    {"Id": "1", "DisplayName": "Test Customer 1"},
+                    {"Id": "2", "DisplayName": "Test Customer 2"},
+                ],
+            ) as mock_get_customers,
+            patch("src.services.validation.log_audit_event"),
+        ):
+
             # Set token info on the service
             app.qbo_service.token_expires_at = 1234567890
             app.qbo_service.realm_id = "test-realm-123"
-            
+
             response = self.client.get("/qbo/callback?code=test_code&realmId=test_realm")
 
             # Should redirect to index after successful auth
             self.assertEqual(response.status_code, 302)
             self.assertIn("/", response.location)
-            
+
             # Verify get_tokens was called with correct parameters
             mock_get_tokens.assert_called_once_with("test_code", "test_realm")
 
@@ -115,7 +121,7 @@ class TestOAuthFlow(unittest.TestCase):
 
     def test_qbo_callback_token_exchange_failure(self):
         """Test OAuth callback when token exchange fails."""
-        with patch.object(app.qbo_service, 'get_tokens', return_value=False):
+        with patch.object(app.qbo_service, "get_tokens", return_value=False):
             response = self.client.get("/qbo/callback?code=bad_code&realmId=test_realm")
 
             self.assertEqual(response.status_code, 302)
@@ -127,10 +133,8 @@ class TestOAuthFlow(unittest.TestCase):
             sess["qbo_authenticated"] = True
             sess["qbo_company_id"] = "test_realm"
 
-        with patch.object(app.qbo_service, 'clear_tokens'):
-            response = self.client.post("/qbo/disconnect", 
-                                      headers={'X-CSRFToken': 'test-token'},
-                                      json={})
+        with patch.object(app.qbo_service, "clear_tokens"):
+            response = self.client.post("/qbo/disconnect", headers={"X-CSRFToken": "test-token"}, json={})
 
             self.assertEqual(response.status_code, 200)
             data = response.get_json()

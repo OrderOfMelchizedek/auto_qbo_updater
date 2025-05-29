@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 
-
 @pytest.fixture
 def sample_donations():
     """Create sample donation data."""
@@ -109,7 +108,12 @@ class TestDonationsRoutes:
         with patch("src.routes.donations.log_audit_event") as mock_audit:
             update_data = {"Gift Amount": "125.00", "Memo": "Updated memo"}
 
-            response = client.put("/donations/donation_1", json=update_data, content_type="application/json", headers={'X-CSRFToken': 'test-token'})
+            response = client.put(
+                "/donations/donation_1",
+                json=update_data,
+                content_type="application/json",
+                headers={"X-CSRFToken": "test-token"},
+            )
 
             assert response.status_code == 200
             data = json.loads(response.data)
@@ -129,7 +133,12 @@ class TestDonationsRoutes:
         with client.session_transaction() as sess:
             sess["donations"] = sample_donations
 
-        response = client.put("/donations/invalid_id", json={"Gift Amount": "100"}, content_type="application/json", headers={'X-CSRFToken': 'test-token'})
+        response = client.put(
+            "/donations/invalid_id",
+            json={"Gift Amount": "100"},
+            content_type="application/json",
+            headers={"X-CSRFToken": "test-token"},
+        )
 
         assert response.status_code == 404
         data = json.loads(response.data)
@@ -139,8 +148,10 @@ class TestDonationsRoutes:
         """Test error handling when donation not found."""
         with client.session_transaction() as sess:
             sess["donations"] = []  # Empty donations list
-            
-        response = client.put("/donations/donation_1", json={}, content_type="application/json", headers={'X-CSRFToken': 'test-token'})
+
+        response = client.put(
+            "/donations/donation_1", json={}, content_type="application/json", headers={"X-CSRFToken": "test-token"}
+        )
 
         assert response.status_code == 404
         data = json.loads(response.data)
@@ -161,7 +172,7 @@ class TestDonationsRoutes:
             sess["session_id"] = "test-session"
 
         with patch("src.routes.donations.log_audit_event") as mock_audit:
-            response = client.post("/donations/remove-invalid", headers={'X-CSRFToken': 'test-token'})
+            response = client.post("/donations/remove-invalid", headers={"X-CSRFToken": "test-token"})
 
             assert response.status_code == 200
             data = json.loads(response.data)
@@ -185,7 +196,7 @@ class TestDonationsRoutes:
         with client.session_transaction() as sess:
             sess["donations"] = donations
 
-        response = client.post("/donations/remove-invalid", headers={'X-CSRFToken': 'test-token'})
+        response = client.post("/donations/remove-invalid", headers={"X-CSRFToken": "test-token"})
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -201,8 +212,11 @@ class TestDonationsRoutes:
 
         with patch("src.routes.donations.log_audit_event") as mock_audit:
             response = client.post(
-                "/donations/update-session", json={"donations": new_donations}, content_type="application/json"
-            , headers={'X-CSRFToken': 'test-token'})
+                "/donations/update-session",
+                json={"donations": new_donations},
+                content_type="application/json",
+                headers={"X-CSRFToken": "test-token"},
+            )
 
             assert response.status_code == 200
             data = json.loads(response.data)
@@ -221,8 +235,11 @@ class TestDonationsRoutes:
     def test_update_session_donations_invalid_format(self, client):
         """Test bulk update with invalid data format."""
         response = client.post(
-            "/donations/update-session", json={"donations": "not-a-list"}, content_type="application/json"
-        , headers={'X-CSRFToken': 'test-token'})
+            "/donations/update-session",
+            json={"donations": "not-a-list"},
+            content_type="application/json",
+            headers={"X-CSRFToken": "test-token"},
+        )
 
         assert response.status_code == 400
         data = json.loads(response.data)
@@ -230,7 +247,12 @@ class TestDonationsRoutes:
 
     def test_update_session_donations_empty(self, client):
         """Test bulk update with empty donations list."""
-        response = client.post("/donations/update-session", json={"donations": []}, content_type="application/json", headers={'X-CSRFToken': 'test-token'})
+        response = client.post(
+            "/donations/update-session",
+            json={"donations": []},
+            content_type="application/json",
+            headers={"X-CSRFToken": "test-token"},
+        )
 
         assert response.status_code == 200
         data = json.loads(response.data)

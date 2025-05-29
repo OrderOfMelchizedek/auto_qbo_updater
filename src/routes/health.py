@@ -41,7 +41,8 @@ def health_check():
         try:
             # Try to get Redis client from app context
             from flask import current_app
-            redis_client = getattr(current_app, 'redis_client', None)
+
+            redis_client = getattr(current_app, "redis_client", None)
             if redis_client:
                 # Test Redis with ping
                 redis_client.ping()
