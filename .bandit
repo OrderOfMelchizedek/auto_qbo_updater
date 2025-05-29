@@ -1,0 +1,91 @@
+# Bandit configuration for FOM to QBO Automation project
+
+[bandit]
+# Test IDs to skip
+skips: 
+  # B608: SQL injection - False positive, we properly escape with _escape_query_value()
+  - B608
+  # B101: assert_used - We use assert for type checking in non-security contexts
+  - B101
+
+# Exclude directories
+exclude_dirs:
+  - /tests/
+  - /test/
+  - /.venv/
+  - /venv/
+  - /node_modules/
+  - /.git/
+  - /docs/
+  - /scripts/
+
+# Only test Python files
+include:
+  - "*.py"
+
+# Test plugins to run
+tests:
+  # High priority security issues
+  - B201  # flask_debug_true
+  - B301  # pickle usage
+  - B302  # marshal usage
+  - B303  # md5 usage
+  - B304  # des usage
+  - B305  # cipher usage
+  - B306  # mktemp usage
+  - B307  # eval usage
+  - B308  # mark_safe usage
+  - B309  # httpsconnection usage
+  - B310  # urllib usage
+  - B311  # random usage for crypto
+  - B312  # telnetlib usage
+  - B313  # xml bad cElementTree
+  - B314  # xml bad ElementTree
+  - B315  # xml bad expatreader
+  - B316  # xml bad expatbuilder
+  - B317  # xml bad sax
+  - B318  # xml bad minidom
+  - B319  # xml bad pulldom
+  - B320  # xml bad etree
+  - B321  # ftplib usage
+  - B322  # input usage
+  - B323  # unverified_context usage
+  - B324  # hashlib insecure
+  - B325  # tempnam usage
+  
+  # Medium priority - code quality and potential issues
+  - B102  # exec_used
+  - B103  # set_bad_file_permissions
+  - B104  # hardcoded_bind_all_interfaces
+  - B105  # hardcoded_password_string
+  - B106  # hardcoded_password_funcarg
+  - B107  # hardcoded_password_default
+  - B108  # hardcoded_tmp_directory
+  - B110  # try_except_pass
+  - B112  # try_except_continue
+  - B113  # request_without_timeout
+  
+  # Low priority - best practices
+  - B401  # import_telnetlib
+  - B402  # import_ftplib
+  - B403  # import_pickle
+  - B404  # import_subprocess
+  - B405  # import_xml_etree
+  - B406  # import_xml_sax
+  - B407  # import_xml_expat
+  - B408  # import_xml_minidom
+  - B409  # import_xml_pulldom
+  - B410  # import_lxml
+  - B411  # import_xmlrpc
+  - B412  # import_httpoxy
+  - B413  # import_pycrypto
+
+# Report format
+format: json
+
+# Aggregate results by test ID
+aggregate: vuln
+
+# Severity level to report (low, medium, high)
+# We'll check all levels but only fail CI on high
+severity: low

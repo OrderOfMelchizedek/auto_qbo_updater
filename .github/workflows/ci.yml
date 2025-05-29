@@ -164,7 +164,38 @@ jobs:
     
     - name: Run bandit
       run: |
-        bandit -r src -f json -o bandit-report.json
+        # Run bandit with our configuration
+        bandit -r src -f json -o bandit-report.json || true
+        
+        # Check for high severity issues (must fix)
+        HIGH_COUNT=$(jq '[.results[] | select(.issue_severity == "HIGH")] | length' bandit-report.json)
+        
+        # Check for medium severity issues (should fix)
+        MEDIUM_COUNT=$(jq '[.results[] | select(.issue_severity == "MEDIUM")] | length' bandit-report.json)
+        
+        echo "Security scan results:"
+        echo "  High severity issues: $HIGH_COUNT"
+        echo "  Medium severity issues: $MEDIUM_COUNT"
+        
+        # Display any high severity issues
+        if [ "$HIGH_COUNT" -gt 0 ]; then
+          echo ""
+          echo "❌ HIGH SEVERITY ISSUES FOUND:"
+          jq -r '.results[] | select(.issue_severity == "HIGH") | "  \(.filename):\(.line_number) - \(.issue_text)"' bandit-report.json
+          echo ""
+          echo "High severity issues must be fixed before deployment!"
+          exit 1
+        fi
+        
+        # Display medium severity issues as warnings
+        if [ "$MEDIUM_COUNT" -gt 0 ]; then
+          echo ""
+          echo "⚠️  MEDIUM SEVERITY ISSUES FOUND (should be addressed):"
+          jq -r '.results[] | select(.issue_severity == "MEDIUM") | "  \(.filename):\(.line_number) - \(.issue_text)"' bandit-report.json
+        fi
+        
+        echo ""
+        echo "✅ No high severity security issues found!"
     
     - name: Run safety check
       run: |

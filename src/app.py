@@ -3567,4 +3567,6 @@ if __name__ == "__main__":
     print(f"To change environments, restart with: python src/app.py --env [sandbox|production]")
     print("================================================================")
 
-    app.run(debug=True)
+    # Run with debug mode based on environment
+    debug_mode = os.getenv("FLASK_ENV", "production") == "development"
+    app.run(debug=debug_mode)

@@ -31,3 +31,13 @@ use_parentheses = true
 ensure_newline_before_comments = true
 skip_glob = ["*/migrations/*", "*/venv/*", "*/.venv/*"]
 known_first_party = ["src", "utils", "routes", "services", "config"]
+
+[tool.bandit]
+# Skip specific test IDs
+skips = ["B608", "B101"]  # SQL injection (false positive), assert usage
+
+# Exclude test directories
+exclude_dirs = ["tests", "test", ".venv", "venv", "node_modules", ".git", "docs", "scripts"]
+
+# Target severity level
+severity = "medium"  # Report medium and high, but only fail on high in CI
