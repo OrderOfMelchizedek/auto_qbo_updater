@@ -36,7 +36,7 @@ def health_check():
         redis_status = 'unknown'
         redis_details = {}
         try:
-            from src.utils.celery_app import get_redis_client
+            from utils.celery_app import get_redis_client
             redis_client = get_redis_client()
             if redis_client:
                 # Test Redis with ping
@@ -61,7 +61,7 @@ def health_check():
         celery_status = 'unknown'
         celery_details = {}
         try:
-            from src.utils.celery_app import celery_app
+            from utils.celery_app import celery_app
             # Inspect active tasks
             inspect = celery_app.control.inspect()
             stats = inspect.stats()

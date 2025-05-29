@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, session, Response, current_app
 import logging
+import json
 from datetime import datetime
 from services.validation import sanitize_for_logging, log_audit_event
 from services.deduplication import DeduplicationService

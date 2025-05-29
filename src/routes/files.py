@@ -47,8 +47,8 @@ def upload_start():
 def upload_files_async():
     """Handle file upload with async processing via Celery."""
     try:
-        from src.utils.tasks import process_files_task
-        from src.utils.result_store import ResultStore
+        from utils.tasks import process_files_task
+        from utils.result_store import ResultStore
         from services.validation import log_audit_event
         
         result_store = ResultStore()
@@ -346,8 +346,8 @@ def upload_files():
 def get_task_status(task_id):
     """Get status of async processing task."""
     try:
-        from src.utils.celery_app import celery_app
-        from src.utils.result_store import ResultStore
+        from utils.celery_app import celery_app
+        from utils.result_store import ResultStore
         
         result_store = ResultStore()
         

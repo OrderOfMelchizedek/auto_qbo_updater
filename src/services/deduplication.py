@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-from src.services.validation import (
+from services.validation import (
     normalize_check_number,
     normalize_amount,
     normalize_donor_name,
