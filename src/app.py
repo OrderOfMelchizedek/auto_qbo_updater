@@ -1,31 +1,35 @@
-import os
-import json
-import requests
 import argparse
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, Response
-from flask_session import Session
-from flask_wtf.csrf import CSRFProtect
+import json
+import os
+import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import quote
+
+import pandas as pd
+import redis
+import requests
+from dotenv import load_dotenv
+from flask import Flask, Response, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from flask_session import Session
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.utils import secure_filename
-import pandas as pd
-from dotenv import load_dotenv
-from urllib.parse import quote
-import redis
-import tempfile
 
 # Try importing from the src package first
 try:
-    from src.utils.gemini_service import GeminiService
-    from src.utils.qbo_service import QBOService
-    from src.utils.file_processor import FileProcessor
-    from src.utils.progress_logger import progress_logger, init_progress_logger, log_progress
-    from src.utils.memory_monitor import memory_monitor
     from src.utils.exceptions import (
-        FOMQBOException, QBOAPIException, GeminiAPIException, 
-        FileProcessingException, ValidationException
+        FileProcessingException,
+        FOMQBOException,
+        GeminiAPIException,
+        QBOAPIException,
+        ValidationException,
     )
+    from src.utils.file_processor import FileProcessor
+    from src.utils.gemini_service import GeminiService
+    from src.utils.memory_monitor import memory_monitor
+    from src.utils.progress_logger import init_progress_logger, log_progress, progress_logger
+    from src.utils.qbo_service import QBOService
 except ModuleNotFoundError:
     # Fall back to relative imports if running directly from src directory
     from utils.gemini_service import GeminiService
@@ -34,15 +38,20 @@ except ModuleNotFoundError:
     from utils.progress_logger import progress_logger, init_progress_logger, log_progress
     from utils.memory_monitor import memory_monitor
     from utils.exceptions import (
-        FOMQBOException, QBOAPIException, GeminiAPIException,
-        FileProcessingException, ValidationException
+        FOMQBOException,
+        QBOAPIException,
+        GeminiAPIException,
+        FileProcessingException,
+        ValidationException,
     )
 
-import re
-from datetime import datetime
-import dateutil.parser
-import uuid
 import mimetypes
+import re
+import uuid
+from datetime import datetime
+
+import dateutil.parser
+
 try:
     import magic  # python-magic for file content validation
 except ImportError:
@@ -52,53 +61,53 @@ except ImportError:
 # Load environment variables
 load_dotenv()
 
+# Configure logging
+import logging
+import sys
+from logging.handlers import RotatingFileHandler
+
+from services.deduplication import DeduplicationService
+
 # Import from new modular services
 from services.validation import (
+    log_audit_event,
+    normalize_amount,
+    normalize_check_number,
+    normalize_date,
+    normalize_donor_name,
     sanitize_for_logging,
     validate_donation_date,
     validate_environment,
-    normalize_check_number,
-    normalize_amount,
-    normalize_donor_name,
-    normalize_date,
-    log_audit_event
 )
-from services.deduplication import DeduplicationService
 
-# Configure logging
-import logging
-from logging.handlers import RotatingFileHandler
-import sys
 
 def configure_logging():
     """Configure comprehensive logging for development and production."""
     # Determine log level based on environment
-    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
-    is_production = os.getenv('FLASK_ENV', 'development') == 'production'
-    
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    is_production = os.getenv("FLASK_ENV", "development") == "production"
+
     # Create logs directory if it doesn't exist
     try:
-        os.makedirs('logs', exist_ok=True)
+        os.makedirs("logs", exist_ok=True)
     except Exception as e:
         # In production (like Heroku), we may not have write access to create directories
         print(f"Warning: Could not create logs directory: {e}")
         # Continue without file logging
-    
+
     # Enhanced format with more context
     detailed_format = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+        "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
     )
-    simple_format = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s'
-    )
-    
+    simple_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, log_level, logging.INFO))
-    
+
     # Clear existing handlers
     root_logger.handlers.clear()
-    
+
     # Console handler configuration
     console_handler = logging.StreamHandler(sys.stdout)
     if is_production:
@@ -108,198 +117,192 @@ def configure_logging():
         console_handler.setLevel(logging.INFO)
         console_handler.setFormatter(detailed_format)
     root_logger.addHandler(console_handler)
-    
+
     # File handlers - only add if we can write to disk
-    if os.path.exists('logs') or not is_production:
+    if os.path.exists("logs") or not is_production:
         try:
             # General application log
             app_handler = RotatingFileHandler(
-                'logs/fom_qbo.log',
-                maxBytes=10485760,  # 10MB
-                backupCount=5,
-                encoding='utf-8'
+                "logs/fom_qbo.log", maxBytes=10485760, backupCount=5, encoding="utf-8"  # 10MB
             )
             app_handler.setLevel(logging.INFO)
             app_handler.setFormatter(detailed_format)
             root_logger.addHandler(app_handler)
-            
+
             # Error-only log for monitoring
             error_handler = RotatingFileHandler(
-                'logs/errors.log',
-                maxBytes=5242880,  # 5MB
-                backupCount=3,
-                encoding='utf-8'
+                "logs/errors.log", maxBytes=5242880, backupCount=3, encoding="utf-8"  # 5MB
             )
             error_handler.setLevel(logging.ERROR)
             error_handler.setFormatter(detailed_format)
             root_logger.addHandler(error_handler)
-            
+
             # Audit log for security events
             audit_handler = RotatingFileHandler(
-                'logs/audit.log',
-                maxBytes=5242880,  # 5MB
-                backupCount=10,
-                encoding='utf-8'
+                "logs/audit.log", maxBytes=5242880, backupCount=10, encoding="utf-8"  # 5MB
             )
             audit_handler.setLevel(logging.INFO)
-            audit_formatter = logging.Formatter(
-                '%(asctime)s - AUDIT - %(levelname)s - %(message)s'
-            )
+            audit_formatter = logging.Formatter("%(asctime)s - AUDIT - %(levelname)s - %(message)s")
             audit_handler.setFormatter(audit_formatter)
-            
+
             # Create separate audit logger
-            audit_logger = logging.getLogger('audit')
+            audit_logger = logging.getLogger("audit")
             audit_logger.addHandler(audit_handler)
             audit_logger.setLevel(logging.INFO)
         except Exception as e:
             print(f"Warning: Could not create file handlers: {e}")
             # Continue with console logging only
-            audit_logger = logging.getLogger('audit')
+            audit_logger = logging.getLogger("audit")
             audit_logger.addHandler(console_handler)
             audit_logger.setLevel(logging.INFO)
     else:
         # In production without file logging, use console for audit
-        audit_logger = logging.getLogger('audit')
+        audit_logger = logging.getLogger("audit")
         audit_logger.addHandler(console_handler)
         audit_logger.setLevel(logging.INFO)
     audit_logger.propagate = False
-    
+
     # Reduce noise from external libraries
-    logging.getLogger('urllib3').setLevel(logging.WARNING)
-    logging.getLogger('google').setLevel(logging.WARNING)
-    logging.getLogger('werkzeug').setLevel(logging.WARNING)
-    logging.getLogger('requests').setLevel(logging.WARNING)
-    
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("google").setLevel(logging.WARNING)
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
+    logging.getLogger("requests").setLevel(logging.WARNING)
+
     return logging.getLogger(__name__)
+
 
 # Initialize logging
 logger = configure_logging()
-audit_logger = logging.getLogger('audit')
+audit_logger = logging.getLogger("audit")
 
 
 def process_single_file(file_data, qbo_authenticated):
     """Process a single file for donation extraction.
-    
+
     Args:
         file_data: Dictionary containing file information
         qbo_authenticated: Whether QBO is authenticated
-        
+
     Returns:
         Dictionary with processing results
     """
     result = {
-        'success': False,
-        'filename': file_data['filename'],
-        'error': None,
-        'donations': [],
-        'file_path': None,
-        'processing_time': 0
+        "success": False,
+        "filename": file_data["filename"],
+        "error": None,
+        "donations": [],
+        "file_path": None,
+        "processing_time": 0,
     }
-    
+
     import time
+
     start_time = time.time()
-    
+
     try:
-        file_storage = file_data['file_storage']
-        original_filename = file_data['filename']
-        
+        file_storage = file_data["file_storage"]
+        original_filename = file_data["filename"]
+
         # Validate file extension
         _, ext = os.path.splitext(original_filename)
         ext = ext.lower()
-        
+
         if ext not in ALLOWED_EXTENSIONS:
-            result['error'] = f"File type not allowed: {original_filename}"
+            result["error"] = f"File type not allowed: {original_filename}"
             return result
-        
+
         # Check file size
         file_storage.seek(0, os.SEEK_END)
         file_size = file_storage.tell()
         file_storage.seek(0)
-        
+
         if file_size > MAX_FILE_SIZE:
-            result['error'] = f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB)"
+            result["error"] = f"File too large: {original_filename} ({file_size / 1024 / 1024:.1f}MB)"
             return result
-        
+
         # Generate secure filename and save
         secure_name = generate_secure_filename(original_filename)
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
-        
+        file_path = os.path.join(app.config["UPLOAD_FOLDER"], secure_name)
+
         file_storage.save(file_path)
-        result['file_path'] = file_path
-        
+        result["file_path"] = file_path
+
         # Validate file content
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             file_content = f.read()
-        
+
         is_valid = validate_file_content(file_content, original_filename)
         if not is_valid:
-            result['error'] = f"Invalid file content: {original_filename}"
+            result["error"] = f"Invalid file content: {original_filename}"
             cleanup_uploaded_file(file_path)
             return result
-        
+
         # Process the file
         log_progress(f"Processing {original_filename} in parallel...")
         extracted_data = file_processor.process(file_path, ext)
-        
+
         if extracted_data:
             if isinstance(extracted_data, list):
-                result['donations'] = extracted_data
+                result["donations"] = extracted_data
             else:
-                result['donations'] = [extracted_data]
-            
+                result["donations"] = [extracted_data]
+
             # Apply customer matching if QBO is authenticated
-            if qbo_authenticated and result['donations']:
-                for donation in result['donations']:
-                    if donation.get('Donor Name'):
-                        customer = qbo_service.find_customer(donation['Donor Name'])
+            if qbo_authenticated and result["donations"]:
+                for donation in result["donations"]:
+                    if donation.get("Donor Name"):
+                        customer = qbo_service.find_customer(donation["Donor Name"])
                         if customer:
-                            donation['qboCustomerId'] = customer.get('Id')
-                            donation['qbCustomerStatus'] = 'Found'
-                            donation['matchMethod'] = 'Automatic'
-                            donation['matchConfidence'] = 'High'
-            
-            result['success'] = True
+                            donation["qboCustomerId"] = customer.get("Id")
+                            donation["qbCustomerStatus"] = "Found"
+                            donation["matchMethod"] = "Automatic"
+                            donation["matchConfidence"] = "High"
+
+            result["success"] = True
             log_progress(f"Successfully processed {original_filename}: {len(result['donations'])} donations found")
         else:
-            result['error'] = f"No donation data extracted from {original_filename}"
-            
+            result["error"] = f"No donation data extracted from {original_filename}"
+
     except Exception as e:
-        result['error'] = f"Error processing {original_filename}: {str(e)}"
+        result["error"] = f"Error processing {original_filename}: {str(e)}"
         logger.error(f"Error in process_single_file: {e}", exc_info=True)
-        
+
     finally:
-        result['processing_time'] = time.time() - start_time
-        
+        result["processing_time"] = time.time() - start_time
+
     return result
 
+
 # File upload security configuration
-ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.pdf', '.csv'}
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf", ".csv"}
 ALLOWED_MIME_TYPES = {
-    'image/jpeg': ['.jpg', '.jpeg'],
-    'image/png': ['.png'],
-    'application/pdf': ['.pdf'],
-    'text/csv': ['.csv'],
-    'text/plain': ['.csv'],  # Some CSV files are detected as text/plain
+    "image/jpeg": [".jpg", ".jpeg"],
+    "image/png": [".png"],
+    "application/pdf": [".pdf"],
+    "text/csv": [".csv"],
+    "text/plain": [".csv"],  # Some CSV files are detected as text/plain
 }
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB per file
 
 # Date validation configuration
 # Donations older than this many days are flagged as potentially incorrect
-DATE_WARNING_DAYS = int(os.getenv('DATE_WARNING_DAYS', '365'))  # Default: 1 year
+DATE_WARNING_DAYS = int(os.getenv("DATE_WARNING_DAYS", "365"))  # Default: 1 year
 # Donations with future dates more than this many days are rejected
-FUTURE_DATE_LIMIT_DAYS = int(os.getenv('FUTURE_DATE_LIMIT_DAYS', '7'))  # Default: 1 week
+FUTURE_DATE_LIMIT_DAYS = int(os.getenv("FUTURE_DATE_LIMIT_DAYS", "7"))  # Default: 1 week
+
 
 def generate_secure_filename(original_filename):
     """Generate a secure filename with UUID to prevent conflicts and path traversal."""
     # Get file extension
     _, ext = os.path.splitext(original_filename)
     ext = ext.lower()
-    
+
     # Generate unique filename
     unique_id = str(uuid.uuid4())
     secure_name = f"{unique_id}{ext}"
-    
+
     return secure_name
+
 
 def validate_file_content(file_path):
     """Validate file content matches its extension using python-magic."""
@@ -307,18 +310,18 @@ def validate_file_content(file_path):
         # Get file extension
         _, ext = os.path.splitext(file_path)
         ext = ext.lower()
-        
+
         if magic is None:
             # Fallback: just check extension is allowed
             if ext in ALLOWED_EXTENSIONS:
                 return True, None
             else:
                 return False, f"File extension {ext} is not allowed"
-        
+
         # Get MIME type from file content
         mime = magic.Magic(mime=True)
         detected_type = mime.from_file(file_path)
-        
+
         # Check if MIME type is allowed and matches extension
         if detected_type in ALLOWED_MIME_TYPES:
             allowed_exts = ALLOWED_MIME_TYPES[detected_type]
@@ -328,9 +331,10 @@ def validate_file_content(file_path):
                 return False, f"File extension {ext} doesn't match content type {detected_type}"
         else:
             return False, f"File type {detected_type} is not allowed"
-            
+
     except Exception as e:
         return False, f"Error validating file: {str(e)}"
+
 
 def cleanup_uploaded_file(file_path):
     """Safely remove uploaded file and trigger garbage collection."""
@@ -340,36 +344,46 @@ def cleanup_uploaded_file(file_path):
             print(f"Cleaned up file: {file_path}")
             # Force garbage collection after file cleanup
             import gc
+
             gc.collect()
     except Exception as e:
         print(f"Error cleaning up file {file_path}: {str(e)}")
+
 
 # Run validation before any other initialization
 validate_environment()
 
 
-
 # Define model aliases
 MODEL_MAPPING = {
-    'gemini-flash': 'gemini-2.5-flash-preview-04-17',
-    'gemini-pro': 'gemini-2.5-pro-preview-03-25',
+    "gemini-flash": "gemini-2.5-flash-preview-04-17",
+    "gemini-pro": "gemini-2.5-pro-preview-03-25",
     # Include the full model names as keys for consistency
-    'gemini-2.5-flash-preview-04-17': 'gemini-2.5-flash-preview-04-17',
-    'gemini-2.5-pro-preview-03-25': 'gemini-2.5-pro-preview-03-25'
+    "gemini-2.5-flash-preview-04-17": "gemini-2.5-flash-preview-04-17",
+    "gemini-2.5-pro-preview-03-25": "gemini-2.5-pro-preview-03-25",
 }
 
 # Resolve the environment variable model
-gemini_env_model = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash-preview-04-17')
+gemini_env_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-preview-04-17")
 # If the environment variable is an alias, resolve it
 resolved_env_model = MODEL_MAPPING.get(gemini_env_model, gemini_env_model)
 
 # Parse command line arguments for QBO environment and Gemini model
 parser = argparse.ArgumentParser(description="FOM to QBO Automation App")
-parser.add_argument('--env', type=str, choices=['sandbox', 'production'], default=os.getenv('QBO_ENVIRONMENT', 'sandbox'),
-                    help='QuickBooks Online environment (sandbox or production)')
-parser.add_argument('--model', type=str, default=resolved_env_model,
-                    choices=['gemini-flash', 'gemini-pro', 'gemini-2.5-flash-preview-04-17', 'gemini-2.5-pro-preview-03-25'],
-                    help='Gemini model to use (flash for faster responses, pro for better quality)')
+parser.add_argument(
+    "--env",
+    type=str,
+    choices=["sandbox", "production"],
+    default=os.getenv("QBO_ENVIRONMENT", "sandbox"),
+    help="QuickBooks Online environment (sandbox or production)",
+)
+parser.add_argument(
+    "--model",
+    type=str,
+    default=resolved_env_model,
+    choices=["gemini-flash", "gemini-pro", "gemini-2.5-flash-preview-04-17", "gemini-2.5-pro-preview-03-25"],
+    help="Gemini model to use (flash for faster responses, pro for better quality)",
+)
 args, _ = parser.parse_known_args()
 
 # Use the command-line specified environment
@@ -384,60 +398,53 @@ app = Flask(__name__)
 
 # Track application start time for uptime monitoring
 import time
+
 app.start_time = time.time()
 
 # Set Flask secret key from environment variable (already validated)
-app.secret_key = os.environ.get('FLASK_SECRET_KEY')
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB upload limit
+app.secret_key = os.environ.get("FLASK_SECRET_KEY")
+app.config["UPLOAD_FOLDER"] = "uploads"
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB upload limit
 
 # Initialize CSRF protection
 csrf = CSRFProtect(app)
 # Configure CSRF to accept tokens in X-CSRFToken header (for AJAX requests)
-app.config['WTF_CSRF_HEADERS'] = ['X-CSRFToken']
+app.config["WTF_CSRF_HEADERS"] = ["X-CSRFToken"]
 
 # Initialize rate limiter
 # For now, disable rate limiting in production due to Redis SSL issues
 # TODO: Fix Redis SSL configuration for Flask-Limiter
-redis_url = os.environ.get('REDIS_URL')
+redis_url = os.environ.get("REDIS_URL")
 if redis_url:
     # Use memory storage for rate limiting until Redis SSL is fixed
     print("Using memory storage for rate limiting (Redis SSL issue workaround)")
     limiter = Limiter(
-        app=app,
-        key_func=get_remote_address,
-        default_limits=["200 per hour", "50 per minute"],
-        storage_uri="memory://"
+        app=app, key_func=get_remote_address, default_limits=["200 per hour", "50 per minute"], storage_uri="memory://"
     )
 else:
     # Use memory storage for development
     limiter = Limiter(
-        app=app,
-        key_func=get_remote_address,
-        default_limits=["200 per hour", "50 per minute"],
-        storage_uri="memory://"
+        app=app, key_func=get_remote_address, default_limits=["200 per hour", "50 per minute"], storage_uri="memory://"
     )
+
 
 # Configure server-side session storage
 def configure_session(app):
     """Configure server-side session storage with Redis or filesystem fallback."""
-    redis_url = os.environ.get('REDIS_URL')
-    
+    redis_url = os.environ.get("REDIS_URL")
+
     if redis_url:
         # Use Redis for production
         try:
             # Parse Redis URL (handles various formats including Heroku's)
-            if redis_url.startswith(('redis://', 'rediss://')):
-                app.config['SESSION_TYPE'] = 'redis'
+            if redis_url.startswith(("redis://", "rediss://")):
+                app.config["SESSION_TYPE"] = "redis"
                 # Handle Heroku Redis SSL URLs
-                if redis_url.startswith('rediss://'):
+                if redis_url.startswith("rediss://"):
                     # For SSL Redis connections, we need special handling
-                    app.config['SESSION_REDIS'] = redis.from_url(
-                        redis_url, 
-                        ssl_cert_reqs=None
-                    )
+                    app.config["SESSION_REDIS"] = redis.from_url(redis_url, ssl_cert_reqs=None)
                 else:
-                    app.config['SESSION_REDIS'] = redis.from_url(redis_url)
+                    app.config["SESSION_REDIS"] = redis.from_url(redis_url)
                 print("Using Redis for session storage")
             else:
                 raise ValueError("Invalid REDIS_URL format")
@@ -449,36 +456,38 @@ def configure_session(app):
         # Use filesystem for development
         print("No REDIS_URL found. Using filesystem for session storage (development mode)")
         configure_filesystem_sessions(app)
-    
+
     # Common session configuration
-    app.config['SESSION_PERMANENT'] = False
-    app.config['SESSION_USE_SIGNER'] = True
-    app.config['SESSION_KEY_PREFIX'] = 'fom_qbo:'
-    app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
-    
+    app.config["SESSION_PERMANENT"] = False
+    app.config["SESSION_USE_SIGNER"] = True
+    app.config["SESSION_KEY_PREFIX"] = "fom_qbo:"
+    app.config["PERMANENT_SESSION_LIFETIME"] = 3600  # 1 hour
+
     # Initialize Flask-Session
     Session(app)
 
+
 def configure_filesystem_sessions(app):
     """Configure filesystem-based sessions for development."""
-    session_dir = os.path.join(tempfile.gettempdir(), 'fom_qbo_sessions')
+    session_dir = os.path.join(tempfile.gettempdir(), "fom_qbo_sessions")
     os.makedirs(session_dir, exist_ok=True)
-    app.config['SESSION_TYPE'] = 'filesystem'
-    app.config['SESSION_FILE_DIR'] = session_dir
-    app.config['SESSION_FILE_THRESHOLD'] = 100  # Max number of sessions
+    app.config["SESSION_TYPE"] = "filesystem"
+    app.config["SESSION_FILE_DIR"] = session_dir
+    app.config["SESSION_FILE_THRESHOLD"] = 100  # Max number of sessions
+
 
 # Configure session storage
 configure_session(app)
 
 # Create necessary directories
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 # Initialize Redis client for QBO token persistence
 redis_client = None
-redis_url = os.environ.get('REDIS_URL')
+redis_url = os.environ.get("REDIS_URL")
 if redis_url:
     try:
-        if redis_url.startswith('rediss://'):
+        if redis_url.startswith("rediss://"):
             # SSL Redis connection
             redis_client = redis.from_url(redis_url, ssl_cert_reqs=None)
         else:
@@ -492,15 +501,14 @@ if redis_url:
 
 # Initialize services
 gemini_service = GeminiService(
-    api_key=os.getenv('GEMINI_API_KEY'),
-    model_name=gemini_model  # Use the command-line specified model
+    api_key=os.getenv("GEMINI_API_KEY"), model_name=gemini_model  # Use the command-line specified model
 )
 qbo_service = QBOService(
-    client_id=os.getenv('QBO_CLIENT_ID'),
-    client_secret=os.getenv('QBO_CLIENT_SECRET'),
-    redirect_uri=os.getenv('QBO_REDIRECT_URI'),
+    client_id=os.getenv("QBO_CLIENT_ID"),
+    client_secret=os.getenv("QBO_CLIENT_SECRET"),
+    redirect_uri=os.getenv("QBO_REDIRECT_URI"),
     environment=qbo_environment,  # Use the command-line specified environment
-    redis_client=redis_client  # Pass Redis client for token persistence
+    redis_client=redis_client,  # Pass Redis client for token persistence
 )
 # Pass both services to the file processor for integrated customer matching
 file_processor = FileProcessor(gemini_service, qbo_service, progress_logger)
@@ -516,7 +524,7 @@ app.process_single_file = process_single_file
 app.cleanup_uploaded_file = cleanup_uploaded_file
 
 # Import and register blueprints
-from routes import health_bp, auth_bp, files_bp, donations_bp, qbo_bp
+from routes import auth_bp, donations_bp, files_bp, health_bp, qbo_bp
 
 app.register_blueprint(health_bp)
 app.register_blueprint(auth_bp)
@@ -524,19 +532,23 @@ app.register_blueprint(files_bp)
 app.register_blueprint(donations_bp)
 app.register_blueprint(qbo_bp)
 
+
 # Routes
-@app.route('/')
+@app.route("/")
 def index():
     """Render the main application page."""
-    return render_template('index.html')
+    return render_template("index.html")
+
 
 # All other routes have been moved to blueprints in the routes module
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Display the environment when starting
     print(f"====== Starting with QuickBooks Online {qbo_environment.upper()} environment ======")
     print(f"API Base URL: {qbo_service.api_base}")
     print(f"To change environments, restart with: python src/app.py --env [sandbox|production]")
     print("================================================================")
-    
-    app.run(debug=True)
+
+    # Use debug mode only in development
+    debug_mode = os.getenv("FLASK_ENV", "development") == "development"
+    app.run(debug=debug_mode)

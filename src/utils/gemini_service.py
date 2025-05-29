@@ -231,7 +231,9 @@ class GeminiService:
                 if verification_result:
                     # Handle case where Gemini returns a list instead of a single object
                     if isinstance(verification_result, list):
-                        print(f"WARNING: Gemini returned a list of {len(verification_result)} items for customer verification")
+                        print(
+                            f"WARNING: Gemini returned a list of {len(verification_result)} items for customer verification"
+                        )
                         # Take the first item if it exists
                         if verification_result:
                             verification_result = verification_result[0]
@@ -240,9 +242,9 @@ class GeminiService:
                             return {
                                 "validMatch": False,
                                 "mismatchReason": "Gemini returned empty verification results",
-                                "matchConfidence": "none"
+                                "matchConfidence": "none",
                             }
-                    
+
                     print(f"Match verification result: valid match = {verification_result.get('validMatch', False)}")
                     if verification_result.get("validMatch") == False:
                         print(f"Mismatch reason: {verification_result.get('mismatchReason', 'No reason provided')}")

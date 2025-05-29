@@ -1,11 +1,12 @@
 """
 Celery configuration for production/Heroku deployment.
 """
+
 import os
 
 # Get Redis URL and handle SSL
-redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
-if redis_url.startswith('rediss://'):
+redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+if redis_url.startswith("rediss://"):
     redis_url = f"{redis_url}?ssl_cert_reqs=none"
 
 broker_url = redis_url
@@ -30,17 +31,17 @@ broker_pool_limit = 1
 redis_max_connections = 5
 
 # Serialization
-task_serializer = 'json'
-result_serializer = 'json'
-accept_content = ['json']
+task_serializer = "json"
+result_serializer = "json"
+accept_content = ["json"]
 
 # Don't store task results for some operations
 task_ignore_result = False
 task_store_eager_result = False
 
 # Memory optimization
-result_compression = 'gzip'
+result_compression = "gzip"
 result_backend_transport_options = {
-    'master_name': 'mymaster',
-    'visibility_timeout': 300,
+    "master_name": "mymaster",
+    "visibility_timeout": 300,
 }
