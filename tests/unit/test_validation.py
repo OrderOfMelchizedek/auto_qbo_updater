@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from unittest.mock import Mock, patch
 
-from src.services.validation import (
+from services.validation import (
     sanitize_for_logging,
     validate_donation_date,
     validate_environment,

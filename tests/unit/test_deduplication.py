@@ -5,7 +5,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
-from src.services.deduplication import DeduplicationService
+from services.deduplication import DeduplicationService
 
 
 class TestDeduplicationService:
@@ -62,7 +62,7 @@ class TestDeduplicationService:
             }
         ]
         
-        with patch('src.services.deduplication.logger') as mock_logger:
+        with patch('services.deduplication.logger') as mock_logger:
             result = DeduplicationService.deduplicate_donations(existing, new)
         
         assert len(result) == 1
@@ -168,7 +168,7 @@ class TestDeduplicationService:
             'qbCustomerStatus': 'New'
         }
         
-        with patch('src.services.deduplication.logger') as mock_logger:
+        with patch('services.deduplication.logger') as mock_logger:
             result = DeduplicationService.merge_donation_data(existing, new)
         
         assert result['Address - Line 1'] == '123 Main St'
@@ -188,7 +188,7 @@ class TestDeduplicationService:
             'Gift Amount': '100.00'
         }
         
-        with patch('src.services.deduplication.logger') as mock_logger:
+        with patch('services.deduplication.logger') as mock_logger:
             result = DeduplicationService.merge_donation_data(existing, new)
         
         assert result['Memo'] == 'First memo; Second memo'
@@ -283,7 +283,7 @@ class TestDeduplicationService:
             }
         ]
         
-        with patch('src.services.deduplication.logger') as mock_logger:
+        with patch('services.deduplication.logger') as mock_logger:
             result = DeduplicationService.deduplicate_donations(existing, new)
         
         donation = result[0]
