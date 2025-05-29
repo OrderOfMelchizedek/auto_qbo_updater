@@ -101,9 +101,25 @@ def upload_files_async():
 
                 logger.info(f"Saved file for async processing: {original_filename}")
 
-        # Submit to Celery
+        # Get QBO config if authenticated
+        qbo_config = None
+        if qbo_authenticated:
+            qbo_service = current_app.qbo_service
+            if qbo_service.access_token and qbo_service.realm_id:
+                qbo_config = {
+                    "access_token": qbo_service.access_token,
+                    "refresh_token": qbo_service.refresh_token,
+                    "realm_id": qbo_service.realm_id,
+                    "environment": qbo_service.environment,
+                    "token_expires_at": qbo_service.token_expires_at,
+                }
+
+        # Submit to Celery with correct parameters
         task = process_files_task.delay(
-            file_paths=file_paths, session_id=session_id, qbo_authenticated=qbo_authenticated
+            file_references=file_paths,  # Changed from file_paths to file_references
+            session_id=session_id,
+            qbo_config=qbo_config,
+            gemini_model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-preview-04-17"),
         )
 
         # Store task metadata

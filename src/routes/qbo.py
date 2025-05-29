@@ -429,3 +429,78 @@ def create_sales_receipt(donation_id):
     except Exception as e:
         logger.error(f"Error creating sales receipt: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+
+@qbo_bp.route("/environment", methods=["GET"])
+def get_environment():
+    """Get the current QBO environment."""
+    try:
+        qbo_service = current_app.qbo_service
+        return jsonify({"environment": qbo_service.environment})
+    except Exception as e:
+        logger.error(f"Error getting QBO environment: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@qbo_bp.route("/items/all", methods=["GET"])
+def get_all_items():
+    """Get all items from QuickBooks."""
+    try:
+        qbo_service = current_app.qbo_service
+
+        if not qbo_service.is_token_valid():
+            return jsonify({"error": "QuickBooks not authenticated"}), 401
+
+        items = qbo_service.get_all_items()
+        return jsonify(items)
+
+    except Exception as e:
+        logger.error(f"Error fetching items: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@qbo_bp.route("/accounts/all", methods=["GET"])
+def get_all_accounts():
+    """Get all accounts from QuickBooks."""
+    try:
+        qbo_service = current_app.qbo_service
+
+        if not qbo_service.is_token_valid():
+            return jsonify({"error": "QuickBooks not authenticated"}), 401
+
+        accounts = qbo_service.get_all_accounts()
+
+        # Find Undeposited Funds account
+        undeposited_funds = None
+        for account in accounts:
+            if account.get("AccountSubType") == "UndepositedFunds":
+                undeposited_funds = {
+                    "id": account.get("Id"),
+                    "name": account.get("Name"),
+                    "type": account.get("AccountType"),
+                    "subType": account.get("AccountSubType"),
+                }
+                break
+
+        return jsonify({"accounts": accounts, "undepositedFunds": undeposited_funds})
+
+    except Exception as e:
+        logger.error(f"Error fetching accounts: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@qbo_bp.route("/payment-methods/all", methods=["GET"])
+def get_all_payment_methods():
+    """Get all payment methods from QuickBooks."""
+    try:
+        qbo_service = current_app.qbo_service
+
+        if not qbo_service.is_token_valid():
+            return jsonify({"error": "QuickBooks not authenticated"}), 401
+
+        payment_methods = qbo_service.get_all_payment_methods()
+        return jsonify(payment_methods)
+
+    except Exception as e:
+        logger.error(f"Error fetching payment methods: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
