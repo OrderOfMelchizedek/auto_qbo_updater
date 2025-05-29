@@ -9,25 +9,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../s
 
 # Import from src.app since we're in tests directory
 try:
-    from src.app import (
-        normalize_amount,
-        normalize_check_number,
-        normalize_date,
-        normalize_donor_name,
-        validate_donation_date,
-    )
+    from src.app import (normalize_amount, normalize_check_number,
+                         normalize_date, normalize_donor_name,
+                         validate_donation_date)
 except ImportError:
     # Fallback for different test environments
     import sys
 
     sys.path.append("../src")
-    from app import (
-        normalize_amount,
-        normalize_check_number,
-        normalize_date,
-        normalize_donor_name,
-        validate_donation_date,
-    )
+    from app import (normalize_amount, normalize_check_number, normalize_date,
+                     normalize_donor_name, validate_donation_date)
 
 
 class TestDataValidation(unittest.TestCase):
