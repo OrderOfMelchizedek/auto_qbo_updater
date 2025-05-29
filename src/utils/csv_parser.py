@@ -42,7 +42,8 @@ class CSVParser:
             delimiter = None
 
             # Print the first few characters of sample for diagnosis
-            print(f"CSV sample (first 100 chars): '{sample[:100].replace('\n', '\\n').replace('\r', '\\r')}'")
+            sample_preview = sample[:100].replace("\n", "\\n").replace("\r", "\\r")
+            print(f"CSV sample (first 100 chars): '{sample_preview}'")
 
             # Check if CSV sniffer can detect the delimiter
             try:
