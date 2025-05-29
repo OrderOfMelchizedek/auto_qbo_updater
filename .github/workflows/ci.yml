@@ -244,13 +244,47 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install Heroku CLI
+      run: |
+        curl https://cli-assets.heroku.com/install.sh | sh
+
     - name: Deploy to Heroku
-      uses: akhileshns/heroku-deploy@v3.13.15
-      with:
-        heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
-        heroku_app_name: ${{ secrets.HEROKU_APP_NAME }}
-        heroku_email: ${{ secrets.HEROKU_EMAIL }}
-        healthcheck: "https://${{ secrets.HEROKU_APP_NAME }}.herokuapp.com/health"
-        checkstring: "healthy"
-        delay: 30
-        rollbackonhealthcheckfailed: true
+      env:
+        HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+      run: |
+        # Add Heroku remote
+        heroku git:remote -a ${{ secrets.HEROKU_APP_NAME }} || echo "Remote might already exist"
+
+        # Set buildpack if not already set
+        heroku buildpacks:set heroku/python -a ${{ secrets.HEROKU_APP_NAME }} || echo "Buildpack might already be set"
+
+        # Deploy
+        git push heroku heroku-deployment:main --force
+
+        # Run release phase if Procfile has release command
+        if grep -q "release:" Procfile; then
+          echo "Running release phase..."
+          heroku run release -a ${{ secrets.HEROKU_APP_NAME }}
+        fi
+
+        # Health check
+        echo "Waiting 30 seconds for app to start..."
+        sleep 30
+
+        echo "Performing health check..."
+        HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://${{ secrets.HEROKU_APP_NAME }}.herokuapp.com/health)
+
+        if [ "$HEALTH_STATUS" = "200" ]; then
+          echo "✅ Health check passed!"
+          HEALTH_RESPONSE=$(curl -s https://${{ secrets.HEROKU_APP_NAME }}.herokuapp.com/health)
+          if [[ "$HEALTH_RESPONSE" == *"healthy"* ]]; then
+            echo "✅ App is healthy!"
+          else
+            echo "❌ Health check response doesn't contain 'healthy'"
+            echo "Response: $HEALTH_RESPONSE"
+            exit 1
+          fi
+        else
+          echo "❌ Health check failed with status: $HEALTH_STATUS"
+          exit 1
+        fi
