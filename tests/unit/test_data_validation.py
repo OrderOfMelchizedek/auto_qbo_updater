@@ -25,6 +25,21 @@ class TestDataValidation(unittest.TestCase):
         # Mock environment variables for date validation
         self.env_patcher = patch.dict(os.environ, {"DATE_WARNING_DAYS": "365", "FUTURE_DATE_LIMIT_DAYS": "7"})
         self.env_patcher.start()
+        
+        # Reload the validation module to pick up new env vars
+        import importlib
+        import src.services.validation
+        importlib.reload(src.services.validation)
+        
+        # Re-import the functions
+        from src.services.validation import (
+            normalize_amount,
+            normalize_check_number,
+            normalize_date,
+            normalize_donor_name,
+            validate_donation_date,
+        )
+        self.validate_donation_date = validate_donation_date
 
     def tearDown(self):
         """Clean up after tests."""
@@ -34,7 +49,7 @@ class TestDataValidation(unittest.TestCase):
         """Test validation of recent valid date."""
         recent_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
 
-        is_valid, warning_msg, parsed_date = validate_donation_date(recent_date)
+        is_valid, warning_msg, parsed_date = self.validate_donation_date(recent_date)
 
         self.assertTrue(is_valid)
         self.assertIsNone(warning_msg)
@@ -45,7 +60,7 @@ class TestDataValidation(unittest.TestCase):
         # 400 days old - should trigger warning (> 365 days)
         old_date = (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
 
-        is_valid, warning_msg, parsed_date = validate_donation_date(old_date)
+        is_valid, warning_msg, parsed_date = self.validate_donation_date(old_date)
 
         self.assertTrue(is_valid)  # Still valid
         self.assertIsNotNone(warning_msg)  # Should have warning
@@ -57,7 +72,7 @@ class TestDataValidation(unittest.TestCase):
         # 10 days in future - beyond the 7 day limit
         future_date = (datetime.now() + timedelta(days=10)).strftime("%Y-%m-%d")
 
-        is_valid, warning_msg, parsed_date = validate_donation_date(future_date)
+        is_valid, warning_msg, parsed_date = self.validate_donation_date(future_date)
 
         self.assertFalse(is_valid)  # Should be invalid
         self.assertIsNotNone(warning_msg)
@@ -69,7 +84,7 @@ class TestDataValidation(unittest.TestCase):
         # 3 days in future - within the 7 day limit
         future_date = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
 
-        is_valid, warning_msg, parsed_date = validate_donation_date(future_date)
+        is_valid, warning_msg, parsed_date = self.validate_donation_date(future_date)
 
         self.assertTrue(is_valid)  # Should be valid
         self.assertIsNotNone(warning_msg)  # But with warning
@@ -78,7 +93,7 @@ class TestDataValidation(unittest.TestCase):
 
     def test_validate_donation_date_empty(self):
         """Test validation of empty date."""
-        is_valid, warning_msg, parsed_date = validate_donation_date("")
+        is_valid, warning_msg, parsed_date = self.validate_donation_date("")
 
         self.assertTrue(is_valid)
         self.assertIsNone(warning_msg)
@@ -86,7 +101,7 @@ class TestDataValidation(unittest.TestCase):
 
     def test_validate_donation_date_invalid_format(self):
         """Test validation of invalid date format."""
-        is_valid, warning_msg, parsed_date = validate_donation_date("not-a-date")
+        is_valid, warning_msg, parsed_date = self.validate_donation_date("not-a-date")
 
         self.assertFalse(is_valid)
         self.assertIsNotNone(warning_msg)

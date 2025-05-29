@@ -20,19 +20,23 @@ class TestGeminiService(unittest.TestCase):
         # Create a mock for the Gemini service
         self.gemini_service_patcher = patch("src.utils.gemini_service.genai")
         self.mock_genai = self.gemini_service_patcher.start()
+        
+        # Mock PIL modules that Gemini SDK might access
+        import PIL
+        PIL.PngImagePlugin = MagicMock()
 
         # Setup the mock GenerativeModel
         self.mock_model = MagicMock()
         self.mock_genai.GenerativeModel.return_value = self.mock_model
 
         # Mock generate_content to prevent it from processing arguments
-        def mock_generate_content(*args, **kwargs):
-            # Return a mock response without processing the content
+        def mock_generate_content(contents, *args, **kwargs):
+            # Don't process the contents at all - just return appropriate response
             mock_resp = MagicMock()
             mock_resp.text = "[]"  # Default empty response
             return mock_resp
 
-        self.mock_model.generate_content.side_effect = mock_generate_content
+        self.mock_model.generate_content = mock_generate_content
 
         # Mock PromptManager
         self.prompt_manager_patcher = patch("src.utils.gemini_service.PromptManager")
@@ -74,10 +78,10 @@ class TestGeminiService(unittest.TestCase):
 
         # Mock Image.open
         with patch("src.utils.gemini_service.Image.open") as mock_image_open:
-            # Create a proper PIL Image mock
-            mock_image = MagicMock()
-            mock_image.spec = Image.Image
-            mock_image_open.return_value = mock_image
+            # Create a real PIL Image instead of a mock
+            # This is needed because Gemini SDK checks the type
+            test_image = Image.new('RGB', (100, 100), color='white')
+            mock_image_open.return_value = test_image
 
             # Mock response from Gemini
             mock_response = MagicMock()
@@ -90,9 +94,11 @@ class TestGeminiService(unittest.TestCase):
                 "Gift Date": "01/01/2025"
             }
             """
-            # Override the side_effect with return_value for this test
-            self.mock_model.generate_content.side_effect = None
-            self.mock_model.generate_content.return_value = mock_response
+            # Override the default mock for this specific test
+            def custom_generate_content(contents, *args, **kwargs):
+                return mock_response
+            
+            self.mock_model.generate_content = custom_generate_content
 
             # Test the method
             result = self.service.extract_donation_data(test_image_path)
@@ -143,9 +149,11 @@ class TestGeminiService(unittest.TestCase):
                 }
             ]
             """
-            # Override the side_effect with return_value for this test
-            self.mock_model.generate_content.side_effect = None
-            self.mock_model.generate_content.return_value = mock_response
+            # Override the default mock for this specific test
+            def custom_generate_content(contents, *args, **kwargs):
+                return mock_response
+            
+            self.mock_model.generate_content = custom_generate_content
 
             # Mock PyPDF2 reader
             mock_reader_instance = MagicMock()
@@ -167,10 +175,9 @@ class TestGeminiService(unittest.TestCase):
             mock_fitz_open.return_value = mock_doc
 
             # Mock PIL Image
-            # Create a proper PIL Image mock
-            mock_image = MagicMock()
-            mock_image.spec = Image.Image
-            mock_image_open.return_value = mock_image
+            # Create a real PIL Image instead of a mock
+            test_image = Image.new('RGB', (100, 100), color='white')
+            mock_image_open.return_value = test_image
 
             # Call the method being tested
             result = self.service.extract_donation_data("test.pdf")
@@ -201,7 +208,11 @@ class TestGeminiService(unittest.TestCase):
             }
         ]
         """
-        self.mock_model.generate_content.return_value = mock_response
+        # Override the default mock for this specific test
+        def custom_generate_content(contents, *args, **kwargs):
+            return mock_response
+        
+        self.mock_model.generate_content = custom_generate_content
 
         # Test the method
         result = self.service.extract_text_data("Test prompt with CSV data")

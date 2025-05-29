@@ -20,6 +20,24 @@ os.environ["QBO_REDIRECT_URI"] = "http://localhost/callback"
 os.environ["MAX_FILES_PER_UPLOAD"] = "20"
 
 
+# Mock Celery before any imports
+mock_celery_app = Mock()
+mock_celery_app.task = Mock(side_effect=lambda *args, **kwargs: lambda f: f)
+mock_celery_app.Task = Mock
+
+# Create a mock tasks module
+mock_tasks_module = Mock()
+mock_process_files_task = Mock()
+mock_process_files_task.delay.return_value = Mock(id="test-task-id")
+mock_tasks_module.process_files_task = mock_process_files_task
+
+# Mock the modules
+sys.modules["src.utils.celery_app"] = Mock(celery_app=mock_celery_app)
+sys.modules["utils.celery_app"] = Mock(celery_app=mock_celery_app)
+sys.modules["src.utils.tasks"] = mock_tasks_module
+sys.modules["utils.tasks"] = mock_tasks_module
+
+
 # Mock Redis before importing the app
 class MockRedis:
     """Mock Redis client for testing."""
@@ -33,14 +51,22 @@ class MockRedis:
     def get(self, key):
         return self.data.get(key)
 
-    def set(self, key, value, **kwargs):
-        # Handle both positional and keyword arguments
-        # Flask-Session may call with name=key, value=value
-        if "name" in kwargs:
-            key = kwargs["name"]
-        if "value" in kwargs:
-            value = kwargs["value"]
-        self.data[key] = value
+    def set(self, *args, **kwargs):
+        # Handle multiple calling conventions:
+        # 1. Regular Redis: set(key, value, ...)
+        # 2. Flask-Session: set(name=key, value=value, ...)
+        
+        if args:
+            # Traditional positional arguments
+            key = args[0]
+            value = args[1] if len(args) > 1 else kwargs.get("value", "")
+        else:
+            # Keyword arguments (Flask-Session style)
+            key = kwargs.get("name", kwargs.get("key", ""))
+            value = kwargs.get("value", "")
+        
+        if key:
+            self.data[key] = value
         return True
 
     def setex(self, key, time, value, **kwargs):
@@ -169,6 +195,5 @@ def mock_celery_app():
 @pytest.fixture(autouse=True)
 def mock_celery_tasks():
     """Mock Celery tasks to avoid import errors."""
-    with patch("src.utils.tasks.process_files_task") as mock_task:
-        mock_task.delay.return_value = Mock(id="test-task-id")
-        yield mock_task
+    # Tasks are already mocked at module level in sys.modules
+    yield mock_process_files_task

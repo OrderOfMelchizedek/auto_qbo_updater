@@ -214,6 +214,8 @@ class TestNormalizationFunctions:
         assert normalize_check_number("0123") == "123"
         assert normalize_check_number("  456  ") == "456"
         assert normalize_check_number("000") == "0"
+        assert normalize_check_number("#1234") == "1234"
+        assert normalize_check_number("Check 1234") == "1234"
         assert normalize_check_number("") is None
         assert normalize_check_number(None) is None
 

@@ -21,7 +21,7 @@ def auth_status():
         is_authenticated = session.get("qbo_authenticated", False)
 
         # Additional validation - check if we actually have valid tokens
-        if is_authenticated and not qbo_service.get_access_token():
+        if is_authenticated and not qbo_service.access_token:
             # Session says authenticated but no valid token
             session["qbo_authenticated"] = False
             is_authenticated = False

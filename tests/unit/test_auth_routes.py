@@ -12,7 +12,7 @@ import pytest
 class TestAuthRoutes:
     """Test authentication routes."""
 
-    def test_auth_status_authenticated(self, client, mock_qbo_service):
+    def test_auth_status_authenticated(self, client, app, mock_qbo_service):
         """Test auth status when authenticated."""
         mock_qbo_service.access_token = "test-access-token"
         mock_qbo_service.environment = "sandbox"
@@ -23,20 +23,22 @@ class TestAuthRoutes:
             "expires_at": "2024-12-31T23:59:59",
         }
 
-        with patch("src.routes.auth.get_qbo_service", return_value=mock_qbo_service):
-            with client.session_transaction() as sess:
-                sess["qbo_authenticated"] = True
-                sess["qbo_company_id"] = "test-company-123"
-                sess["qbo_token_expires_at"] = "2024-12-31T23:59:59"
+        # Set the mock on the app
+        app.qbo_service = mock_qbo_service
+        
+        with client.session_transaction() as sess:
+            sess["qbo_authenticated"] = True
+            sess["qbo_company_id"] = "test-company-123"
+            sess["qbo_token_expires_at"] = "2024-12-31T23:59:59"
 
-            response = client.get("/qbo/auth-status")
+        response = client.get("/qbo/auth-status")
 
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data["authenticated"] is True
-            assert data["company_id"] == "test-company-123"
-            assert data["environment"] == "sandbox"
-            assert "tokenExpiry" in data  # This was missing in original test
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["authenticated"] is True
+        assert data["company_id"] == "test-company-123"
+        assert data["environment"] == "sandbox"
+        assert "tokenExpiry" in data  # This was missing in original test
 
     def test_auth_status_not_authenticated(self, client, mock_qbo_service):
         """Test auth status when not authenticated."""
@@ -46,11 +48,11 @@ class TestAuthRoutes:
         with patch("src.routes.auth.get_qbo_service", return_value=mock_qbo_service):
             response = client.get("/qbo/auth-status")
 
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data["authenticated"] is False
-            assert data["company_id"] is None
-            assert "tokenExpiry" not in data  # Fixed expectation
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["authenticated"] is False
+        assert data["company_id"] is None
+        assert "tokenExpiry" not in data  # Fixed expectation
 
     def test_qbo_authorize_redirect(self, client, mock_qbo_service):
         """Test QBO authorization redirect."""
@@ -59,8 +61,8 @@ class TestAuthRoutes:
         with patch("src.routes.auth.get_qbo_service", return_value=mock_qbo_service):
             response = client.get("/qbo/authorize")
 
-            assert response.status_code == 302
-            assert response.location == "https://test.intuit.com/auth"
+        assert response.status_code == 302
+        assert response.location == "https://test.intuit.com/auth"
 
     def test_qbo_callback_success(self, client, mock_qbo_service):
         """Test successful QBO callback."""

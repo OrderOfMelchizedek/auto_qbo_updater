@@ -56,6 +56,10 @@ class MemoryMonitor:
         elif stats["rss_mb"] > self.high_memory_threshold_mb:
             print(f"[Memory Monitor] WARNING: Memory usage exceeds {self.high_memory_threshold_mb}MB")
 
+    def log_memory(self, context: str = ""):
+        """Alias for log_memory_usage for backward compatibility."""
+        self.log_memory_usage(context)
+
     def force_cleanup(self):
         """Force garbage collection and memory cleanup."""
         print("[Memory Monitor] Forcing garbage collection...")
@@ -109,6 +113,10 @@ class MemoryMonitor:
         print(f"[Memory Monitor] Top {limit} memory allocations:")
         for stat in top_stats[:limit]:
             print(f"  {stat}")
+
+    def cleanup(self):
+        """Alias for force_cleanup for compatibility."""
+        self.force_cleanup()
 
 
 # Global instance

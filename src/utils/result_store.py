@@ -91,6 +91,38 @@ class ResultStore:
             logger.error(f"Error during cleanup: {e}")
             return 0
 
+    def get_task_metadata(self, task_id):
+        """Get metadata for a task.
+        
+        Args:
+            task_id: The task ID to get metadata for
+            
+        Returns:
+            Dictionary with task metadata or None if not found
+        """
+        try:
+            # Look for result files matching this task ID
+            for filename in os.listdir(self.results_dir):
+                if f"result_{task_id}_" in filename:
+                    filepath = os.path.join(self.results_dir, filename)
+                    
+                    # Get file stats
+                    stats = os.stat(filepath)
+                    mtime = datetime.fromtimestamp(stats.st_mtime)
+                    
+                    return {
+                        "task_id": task_id,
+                        "filename": filename,
+                        "filepath": filepath,
+                        "size_bytes": stats.st_size,
+                        "created_at": mtime.isoformat(),
+                        "age_seconds": (datetime.now() - mtime).total_seconds()
+                    }
+        except Exception as e:
+            logger.error(f"Error getting task metadata for {task_id}: {e}")
+        
+        return None
+
 
 # Global instance
 result_store = ResultStore()
