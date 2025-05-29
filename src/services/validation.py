@@ -15,8 +15,8 @@ import dateutil.parser
 import pandas as pd
 
 # Constants for date validation
-FUTURE_DATE_LIMIT_DAYS = 30  # Allow dates up to 30 days in the future
-DATE_WARNING_DAYS = 730  # Warn for dates older than 2 years
+FUTURE_DATE_LIMIT_DAYS = int(os.environ.get("FUTURE_DATE_LIMIT_DAYS", "30"))  # Allow dates up to N days in the future
+DATE_WARNING_DAYS = int(os.environ.get("DATE_WARNING_DAYS", "730"))  # Warn for dates older than N days
 
 
 def sanitize_for_logging(data: Union[Dict, str, List, Any]) -> Union[Dict, str, List, Any]:

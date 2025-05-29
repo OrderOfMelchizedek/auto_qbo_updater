@@ -13,12 +13,22 @@ import pytest
 class TestHealthRoutes:
     """Test health check routes."""
 
-    def test_health_check_healthy(self, client):
+    def test_health_check_healthy(self, client, app):
         """Test health check endpoint when system is healthy."""
+        # Mock Redis client on the app
+        mock_redis_client = Mock()
+        mock_redis_client.ping.return_value = True
+        mock_redis_client.info.return_value = {
+            "redis_version": "6.2.6",
+            "connected_clients": 5,
+            "used_memory": 50 * 1024 * 1024,
+            "uptime_in_seconds": 86400,
+        }
+        app.redis_client = mock_redis_client
+
         with (
             patch("psutil.Process") as mock_process,
             patch("psutil.virtual_memory") as mock_memory,
-            patch("src.utils.celery_app.get_redis_client") as mock_redis,
         ):
 
             # Mock process info
@@ -30,17 +40,6 @@ class TestHealthRoutes:
 
             # Mock system memory
             mock_memory.return_value = Mock(available=1024 * 1024 * 1024)  # 1GB
-
-            # Mock Redis
-            mock_redis_instance = Mock()
-            mock_redis_instance.ping.return_value = True
-            mock_redis_instance.info.return_value = {
-                "redis_version": "6.2.6",
-                "connected_clients": 5,
-                "used_memory": 50 * 1024 * 1024,
-                "uptime_in_seconds": 86400,
-            }
-            mock_redis.return_value = mock_redis_instance
 
             response = client.get("/health")
 
@@ -73,12 +72,16 @@ class TestHealthRoutes:
             assert data["memory"]["status"] == "warning"
             assert data["memory"]["percent"] == 80.08  # 410/512 * 100
 
-    def test_health_check_redis_error(self, client):
+    def test_health_check_redis_error(self, client, app):
         """Test health check when Redis is unavailable."""
+        # Mock Redis client that raises error
+        mock_redis_client = Mock()
+        mock_redis_client.ping.side_effect = Exception("Connection refused")
+        app.redis_client = mock_redis_client
+
         with (
             patch("psutil.Process") as mock_process,
             patch("psutil.virtual_memory") as mock_memory,
-            patch("src.utils.celery_app.get_redis_client") as mock_redis,
         ):
 
             # Mock process info
@@ -89,11 +92,6 @@ class TestHealthRoutes:
             mock_process.return_value = mock_proc_instance
 
             mock_memory.return_value = Mock(available=1024 * 1024 * 1024)
-
-            # Mock Redis error
-            mock_redis_instance = Mock()
-            mock_redis_instance.ping.side_effect = Exception("Connection refused")
-            mock_redis.return_value = mock_redis_instance
 
             response = client.get("/health")
 

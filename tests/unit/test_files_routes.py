@@ -66,8 +66,8 @@ class TestFilesRoutes:
             data = json.loads(response.data)
             assert "error" in data
 
-    @patch("src.routes.files.process_files_task")
-    @patch("src.routes.files.ResultStore")
+    @patch("src.utils.tasks.process_files_task")
+    @patch("src.utils.result_store.ResultStore")
     def test_upload_async_success(self, mock_store_class, mock_task, client, mock_file):
         """Test async file upload."""
         # Mock Celery task
@@ -79,7 +79,7 @@ class TestFilesRoutes:
         mock_store = Mock()
         mock_store_class.return_value = mock_store
 
-        with patch("src.routes.files.log_audit_event"):
+        with patch("src.services.validation.log_audit_event"):
             # Upload file
             data = {"files": (mock_file, "test_donation.csv")}
             response = client.post(
@@ -127,8 +127,8 @@ class TestFilesRoutes:
         assert "Too many files" in data["error"]
 
     @patch("src.routes.files.get_memory_monitor")
-    @patch("src.routes.files.log_progress")
-    @patch("src.routes.files.log_audit_event")
+    @patch("src.utils.progress_logger.log_progress")
+    @patch("src.services.validation.log_audit_event")
     def test_upload_sync_success(
         self, mock_audit, mock_progress, mock_memory_monitor, client, mock_file, mock_qbo_service, mock_file_processor
     ):
@@ -180,8 +180,8 @@ class TestFilesRoutes:
         """Test upload with deduplication of donations."""
         with (
             patch("src.routes.files.get_memory_monitor"),
-            patch("src.routes.files.log_progress"),
-            patch("src.routes.files.log_audit_event"),
+            patch("src.utils.progress_logger.log_progress"),
+            patch("src.services.validation.log_audit_event"),
             patch("flask.current_app.process_single_file") as mock_process,
             patch("flask.current_app.cleanup_uploaded_file"),
             patch("src.services.deduplication.DeduplicationService.deduplicate_donations") as mock_dedup,
@@ -232,7 +232,7 @@ class TestFilesRoutes:
         """Test sync upload error handling."""
         with (
             patch("src.routes.files.get_memory_monitor") as mock_memory_monitor,
-            patch("src.routes.files.log_audit_event"),
+            patch("src.services.validation.log_audit_event"),
         ):
 
             mock_monitor = Mock()
@@ -252,8 +252,8 @@ class TestFilesRoutes:
                 # Verify cleanup was called
                 mock_monitor.cleanup.assert_called()
 
-    @patch("src.routes.files.celery_app")
-    @patch("src.routes.files.ResultStore")
+    @patch("src.utils.celery_app.celery_app")
+    @patch("src.utils.result_store.ResultStore")
     def test_task_status_success(self, mock_store_class, mock_celery, client):
         """Test getting task status."""
         # Mock Celery result
@@ -286,8 +286,8 @@ class TestFilesRoutes:
     def test_task_status_pending(self, client):
         """Test task status for pending task."""
         with (
-            patch("src.routes.files.celery_app") as mock_celery,
-            patch("src.routes.files.ResultStore") as mock_store_class,
+            patch("src.utils.celery_app.celery_app") as mock_celery,
+            patch("src.utils.result_store.ResultStore") as mock_store_class,
         ):
 
             mock_result = Mock()
@@ -308,8 +308,8 @@ class TestFilesRoutes:
     def test_task_status_progress(self, client):
         """Test task status with progress updates."""
         with (
-            patch("src.routes.files.celery_app") as mock_celery,
-            patch("src.routes.files.ResultStore") as mock_store_class,
+            patch("src.utils.celery_app.celery_app") as mock_celery,
+            patch("src.utils.result_store.ResultStore") as mock_store_class,
         ):
 
             mock_result = Mock()
@@ -333,8 +333,8 @@ class TestFilesRoutes:
     def test_task_status_failure(self, client):
         """Test task status for failed task."""
         with (
-            patch("src.routes.files.celery_app") as mock_celery,
-            patch("src.routes.files.ResultStore") as mock_store_class,
+            patch("src.utils.celery_app.celery_app") as mock_celery,
+            patch("src.utils.result_store.ResultStore") as mock_store_class,
         ):
 
             mock_result = Mock()

@@ -25,6 +25,15 @@ class TestGeminiService(unittest.TestCase):
         self.mock_model = MagicMock()
         self.mock_genai.GenerativeModel.return_value = self.mock_model
 
+        # Mock generate_content to prevent it from processing arguments
+        def mock_generate_content(*args, **kwargs):
+            # Return a mock response without processing the content
+            mock_resp = MagicMock()
+            mock_resp.text = "[]"  # Default empty response
+            return mock_resp
+
+        self.mock_model.generate_content.side_effect = mock_generate_content
+
         # Mock PromptManager
         self.prompt_manager_patcher = patch("src.utils.gemini_service.PromptManager")
         self.mock_prompt_manager_class = self.prompt_manager_patcher.start()
@@ -81,6 +90,8 @@ class TestGeminiService(unittest.TestCase):
                 "Gift Date": "01/01/2025"
             }
             """
+            # Override the side_effect with return_value for this test
+            self.mock_model.generate_content.side_effect = None
             self.mock_model.generate_content.return_value = mock_response
 
             # Test the method
@@ -132,6 +143,8 @@ class TestGeminiService(unittest.TestCase):
                 }
             ]
             """
+            # Override the side_effect with return_value for this test
+            self.mock_model.generate_content.side_effect = None
             self.mock_model.generate_content.return_value = mock_response
 
             # Mock PyPDF2 reader

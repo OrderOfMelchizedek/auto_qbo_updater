@@ -33,11 +33,17 @@ class MockRedis:
     def get(self, key):
         return self.data.get(key)
 
-    def set(self, key, value):
+    def set(self, key, value, **kwargs):
+        # Handle both positional and keyword arguments
+        # Flask-Session may call with name=key, value=value
+        if "name" in kwargs:
+            key = kwargs["name"]
+        if "value" in kwargs:
+            value = kwargs["value"]
         self.data[key] = value
         return True
 
-    def setex(self, key, time, value):
+    def setex(self, key, time, value, **kwargs):
         self.data[key] = value
         return True
 

@@ -214,8 +214,8 @@ class TestNormalizationFunctions:
         assert normalize_check_number("0123") == "123"
         assert normalize_check_number("  456  ") == "456"
         assert normalize_check_number("000") == "0"
-        assert normalize_check_number("") == ""
-        assert normalize_check_number(None) == ""
+        assert normalize_check_number("") is None
+        assert normalize_check_number(None) is None
 
     def test_normalize_amount(self):
         """Test amount normalization."""
@@ -224,18 +224,19 @@ class TestNormalizationFunctions:
         assert normalize_amount("  $50  ") == "50.00"
         assert normalize_amount(100) == "100.00"
         assert normalize_amount(100.5) == "100.50"
-        assert normalize_amount("") == ""
-        assert normalize_amount(None) == ""
-        assert normalize_amount("invalid") == "invalid"
+        assert normalize_amount("") is None
+        assert normalize_amount(None) is None
+        assert normalize_amount("invalid") is None
 
     def test_normalize_donor_name(self):
         """Test donor name normalization."""
-        assert normalize_donor_name("John Doe") == "john doe"
-        assert normalize_donor_name("JANE  SMITH") == "jane smith"
-        assert normalize_donor_name("O'Brien, Pat") == "obrien pat"
-        assert normalize_donor_name("  Test   Name  ") == "test name"
-        assert normalize_donor_name("") == ""
-        assert normalize_donor_name(None) == ""
+        assert normalize_donor_name("John Doe") == "John Doe"
+        assert normalize_donor_name("JANE  SMITH") == "Jane Smith"
+        assert normalize_donor_name("O'Brien") == "O'Brien"
+        assert normalize_donor_name("mary-jane") == "Mary-Jane"
+        assert normalize_donor_name("  Test   Name  ") == "Test Name"
+        assert normalize_donor_name("") is None
+        assert normalize_donor_name(None) is None
 
     def test_normalize_date(self):
         """Test date normalization."""
@@ -245,9 +246,9 @@ class TestNormalizationFunctions:
         assert normalize_date("January 15, 2024") == "2024-01-15"
 
         # Invalid dates
-        assert normalize_date("invalid-date") == "invalid-date"
-        assert normalize_date("") == ""
-        assert normalize_date(None) == ""
+        assert normalize_date("invalid-date") is None
+        assert normalize_date("") is None
+        assert normalize_date(None) is None
 
 
 class TestLogAuditEvent:
