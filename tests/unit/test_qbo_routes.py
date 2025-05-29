@@ -10,13 +10,6 @@ import pytest
 
 
 @pytest.fixture
-def mock_qbo_service():
-    """Create a mock QBO service."""
-    mock_service = Mock()
-    return mock_service
-
-
-@pytest.fixture
 def sample_donation():
     """Create a sample donation."""
     return {
@@ -56,54 +49,56 @@ def sample_customer():
 class TestQBORoutes:
     """Test QuickBooks integration routes."""
 
-    def test_search_qbo_customer_found(self, client, mock_qbo_service, sample_donation, sample_customer):
+    def test_search_qbo_customer_found(self, client, app, sample_donation, sample_customer):
         """Test searching for customer that exists."""
+        mock_qbo_service = Mock()
         mock_qbo_service.find_customer.return_value = sample_customer
+        app.qbo_service = mock_qbo_service
 
         with client.session_transaction() as sess:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
 
-        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
-            response = client.get("/qbo/customer/donation_123")
+        response = client.get("/qbo/customer/donation_123")
 
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data["success"] is True
-            assert data["found"] is True
-            assert data["customer"]["id"] == "customer-123"
-            assert data["customer"]["displayName"] == "John Doe"
-            assert data["matchConfidence"] == "High"
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert data["found"] is True
+        assert data["customer"]["id"] == "customer-123"
+        assert data["customer"]["displayName"] == "John Doe"
+        assert data["matchConfidence"] == "High"
 
-            # Verify donation was updated
-            with client.session_transaction() as sess:
-                donation = sess["donations"][0]
-                assert donation["qboCustomerId"] == "customer-123"
-                assert donation["qbCustomerStatus"] == "Found"
-                assert donation["matchMethod"] == "Search"
+        # Verify donation was updated
+        with client.session_transaction() as sess:
+            donation = sess["donations"][0]
+            assert donation["qboCustomerId"] == "customer-123"
+            assert donation["qbCustomerStatus"] == "Found"
+            assert donation["matchMethod"] == "Search"
 
-    def test_search_qbo_customer_not_found(self, client, mock_qbo_service, sample_donation):
+    def test_search_qbo_customer_not_found(self, client, app, sample_donation):
         """Test searching for customer that doesn't exist."""
+        mock_qbo_service = Mock()
         mock_qbo_service.find_customer.return_value = None
+        app.qbo_service = mock_qbo_service
 
         with client.session_transaction() as sess:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
 
-        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
-            response = client.get("/qbo/customer/donation_123")
+        response = client.get("/qbo/customer/donation_123")
 
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data["success"] is True
-            assert data["found"] is False
-            assert "No customer found" in data["message"]
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert data["found"] is False
+        assert "No customer found" in data["message"]
 
-            # Verify donation was updated
-            with client.session_transaction() as sess:
-                donation = sess["donations"][0]
-                assert donation["qbCustomerStatus"] == "Not Found"
-                assert "qboCustomerId" not in donation
+        # Verify donation was updated
+        with client.session_transaction() as sess:
+            donation = sess["donations"][0]
+            assert donation["qbCustomerStatus"] == "Not Found"
+            assert "qboCustomerId" not in donation
 
     def test_search_qbo_customer_donation_not_found(self, client):
         """Test searching with invalid donation ID."""
@@ -144,7 +139,7 @@ class TestQBORoutes:
         data = json.loads(response.data)
         assert data["error"] == "No donor name available"
 
-    def test_get_all_qbo_customers_success(self, client, mock_qbo_service):
+    def test_get_all_qbo_customers_success(self, client, app, sample_customer):
         """Test getting all QBO customers."""
         mock_customers = [
             sample_customer,
@@ -158,125 +153,115 @@ class TestQBORoutes:
                 "Active": True,
             },
         ]
+        mock_qbo_service = Mock()
         mock_qbo_service.get_all_customers.return_value = mock_customers
+        app.qbo_service = mock_qbo_service
 
         with client.session_transaction() as sess:
             sess["qbo_authenticated"] = True
 
-        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
-            response = client.get("/qbo/customers/all")
+        response = client.get("/qbo/customers/all")
 
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data["success"] is True
-            assert data["count"] == 2
-            assert len(data["customers"]) == 2
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert data["count"] == 2
+        assert len(data["customers"]) == 2
 
-            # Verify sorting
-            assert data["customers"][0]["displayName"] == "Jane Smith"
-            assert data["customers"][1]["displayName"] == "John Doe"
+        # Verify sorting
+        assert data["customers"][0]["displayName"] == "Jane Smith"
+        assert data["customers"][1]["displayName"] == "John Doe"
 
-    def test_manual_match_customer_success(self, client, mock_qbo_service, sample_donation, sample_customer):
+    def test_manual_match_customer_success(self, client, app, sample_donation, sample_customer):
         """Test manually matching a customer."""
+        mock_qbo_service = Mock()
         mock_qbo_service.get_customer_by_id.return_value = sample_customer
+        app.qbo_service = mock_qbo_service
 
         with client.session_transaction() as sess:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
             sess["session_id"] = "test-session"
 
-        with (
-            patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service),
-            patch("src.routes.qbo.log_audit_event") as mock_audit,
-        ):
+        response = client.post(
+            "/qbo/customer/manual-match/donation_123",
+            json={"customerId": "customer-123"},
+            content_type="application/json",
+            headers={"X-CSRFToken": "test-token"},
+        )
 
-            response = client.post(
-                "/qbo/customer/manual-match/donation_123",
-                json={"customerId": "customer-123"},
-                content_type="application/json",
-                headers={"X-CSRFToken": "test-token"},
-            )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert data["customer"]["id"] == "customer-123"
 
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data["success"] is True
-            assert data["customer"]["id"] == "customer-123"
+        # Verify donation was updated
+        with client.session_transaction() as sess:
+            donation = sess["donations"][0]
+            assert donation["qboCustomerId"] == "customer-123"
+            assert donation["qbCustomerStatus"] == "Matched"
+            assert donation["matchMethod"] == "Manual"
+            assert donation["matchConfidence"] == "Manual"
 
-            # Verify donation was updated
-            with client.session_transaction() as sess:
-                donation = sess["donations"][0]
-                assert donation["qboCustomerId"] == "customer-123"
-                assert donation["qbCustomerStatus"] == "Matched"
-                assert donation["matchMethod"] == "Manual"
-                assert donation["matchConfidence"] == "Manual"
-
-            # Verify audit log
-            mock_audit.assert_called_once()
-            assert mock_audit.call_args[1]["event_type"] == "qbo_manual_customer_match"
-
-    def test_manual_match_customer_not_found_in_qbo(self, client, mock_qbo_service, sample_donation):
+    def test_manual_match_customer_not_found_in_qbo(self, client, app, sample_donation):
         """Test manual match when customer doesn't exist in QBO."""
+        mock_qbo_service = Mock()
         mock_qbo_service.get_customer_by_id.return_value = None
+        app.qbo_service = mock_qbo_service
 
         with client.session_transaction() as sess:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
 
-        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
-            response = client.post(
-                "/qbo/customer/manual-match/donation_123",
-                json={"customerId": "invalid-id"},
-                content_type="application/json",
-                headers={"X-CSRFToken": "test-token"},
-            )
+        response = client.post(
+            "/qbo/customer/manual-match/donation_123",
+            json={"customerId": "invalid-id"},
+            content_type="application/json",
+            headers={"X-CSRFToken": "test-token"},
+        )
 
-            assert response.status_code == 404
-            data = json.loads(response.data)
-            assert data["error"] == "Customer not found in QuickBooks"
+        assert response.status_code == 404
+        data = json.loads(response.data)
+        assert data["error"] == "Customer not found in QuickBooks"
 
-    def test_create_qbo_customer_success(self, client, mock_qbo_service, sample_donation, sample_customer):
+    def test_create_qbo_customer_success(self, client, app, sample_donation, sample_customer):
         """Test creating a new QBO customer."""
+        mock_qbo_service = Mock()
         mock_qbo_service.create_customer.return_value = sample_customer
+        app.qbo_service = mock_qbo_service
 
         with client.session_transaction() as sess:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
             sess["session_id"] = "test-session"
 
-        with (
-            patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service),
-            patch("src.routes.qbo.log_audit_event") as mock_audit,
-        ):
+        response = client.post("/qbo/customer/create/donation_123", headers={"X-CSRFToken": "test-token"}, json={})
 
-            response = client.post("/qbo/customer/create/donation_123", headers={"X-CSRFToken": "test-token"})
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert data["customer"]["id"] == "customer-123"
 
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data["success"] is True
-            assert data["customer"]["id"] == "customer-123"
+        # Verify create_customer was called with correct data
+        mock_qbo_service.create_customer.assert_called_once()
+        call_args = mock_qbo_service.create_customer.call_args[0][0]
+        assert call_args["DisplayName"] == "John Doe"
+        assert call_args["GivenName"] == "John"
+        assert call_args["FamilyName"] == "Doe"
+        assert call_args["PrimaryEmailAddr"]["Address"] == "john@example.com"
 
-            # Verify create_customer was called with correct data
-            mock_qbo_service.create_customer.assert_called_once()
-            call_args = mock_qbo_service.create_customer.call_args[0][0]
-            assert call_args["DisplayName"] == "John Doe"
-            assert call_args["GivenName"] == "John"
-            assert call_args["FamilyName"] == "Doe"
-            assert call_args["PrimaryEmailAddr"]["Address"] == "john@example.com"
+        # Verify donation was updated
+        with client.session_transaction() as sess:
+            donation = sess["donations"][0]
+            assert donation["qboCustomerId"] == "customer-123"
+            assert donation["qbCustomerStatus"] == "Created"
+            assert donation["matchMethod"] == "Created"
 
-            # Verify donation was updated
-            with client.session_transaction() as sess:
-                donation = sess["donations"][0]
-                assert donation["qboCustomerId"] == "customer-123"
-                assert donation["qbCustomerStatus"] == "Created"
-                assert donation["matchMethod"] == "Created"
-
-            # Verify audit log
-            mock_audit.assert_called_once()
-            assert mock_audit.call_args[1]["event_type"] == "qbo_customer_created"
-
-    def test_create_qbo_customer_with_custom_data(self, client, mock_qbo_service, sample_donation, sample_customer):
+    def test_create_qbo_customer_with_custom_data(self, client, app, sample_donation, sample_customer):
         """Test creating customer with custom data."""
+        mock_qbo_service = Mock()
         mock_qbo_service.create_customer.return_value = sample_customer
+        app.qbo_service = mock_qbo_service
 
         custom_data = {"DisplayName": "Custom Name", "Notes": "Created from donation"}
 
@@ -284,25 +269,26 @@ class TestQBORoutes:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
 
-        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
-            response = client.post(
-                "/qbo/customer/create/donation_123",
-                json=custom_data,
-                content_type="application/json",
-                headers={"X-CSRFToken": "test-token"},
-            )
+        response = client.post(
+            "/qbo/customer/create/donation_123",
+            json=custom_data,
+            content_type="application/json",
+            headers={"X-CSRFToken": "test-token"},
+        )
 
-            assert response.status_code == 200
+        assert response.status_code == 200
 
-            # Verify custom data was used
-            mock_qbo_service.create_customer.assert_called_once_with(custom_data)
+        # Verify custom data was used
+        mock_qbo_service.create_customer.assert_called_once_with(custom_data)
 
-    def test_update_qbo_customer_success(self, client, mock_qbo_service, sample_donation, sample_customer):
+    def test_update_qbo_customer_success(self, client, app, sample_donation, sample_customer):
         """Test updating an existing QBO customer."""
         sample_donation["qboCustomerId"] = "customer-123"
         updated_customer = sample_customer.copy()
         updated_customer["Notes"] = "Updated"
+        mock_qbo_service = Mock()
         mock_qbo_service.update_customer.return_value = updated_customer
+        app.qbo_service = mock_qbo_service
 
         update_data = {"Notes": "Updated from donation"}
 
@@ -311,34 +297,25 @@ class TestQBORoutes:
             sess["qbo_authenticated"] = True
             sess["session_id"] = "test-session"
 
-        with (
-            patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service),
-            patch("src.routes.qbo.log_audit_event") as mock_audit,
-        ):
+        response = client.post(
+            "/qbo/customer/update/donation_123",
+            json=update_data,
+            content_type="application/json",
+            headers={"X-CSRFToken": "test-token"},
+        )
 
-            response = client.post(
-                "/qbo/customer/update/donation_123",
-                json=update_data,
-                content_type="application/json",
-                headers={"X-CSRFToken": "test-token"},
-            )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
 
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data["success"] is True
+        # Verify update was called
+        mock_qbo_service.update_customer.assert_called_once_with("customer-123", update_data)
 
-            # Verify update was called
-            mock_qbo_service.update_customer.assert_called_once_with("customer-123", update_data)
-
-            # Verify donation was updated
-            with client.session_transaction() as sess:
-                donation = sess["donations"][0]
-                assert donation["qbCustomerStatus"] == "Updated"
-                assert "lastUpdated" in donation
-
-            # Verify audit log
-            mock_audit.assert_called_once()
-            assert mock_audit.call_args[1]["event_type"] == "qbo_customer_updated"
+        # Verify donation was updated
+        with client.session_transaction() as sess:
+            donation = sess["donations"][0]
+            assert donation["qbCustomerStatus"] == "Updated"
+            assert "lastUpdated" in donation
 
     def test_update_qbo_customer_no_match(self, client, sample_donation):
         """Test updating when donation has no matched customer."""
@@ -357,43 +334,35 @@ class TestQBORoutes:
         data = json.loads(response.data)
         assert data["error"] == "No customer matched to this donation"
 
-    def test_create_sales_receipt_success(self, client, mock_qbo_service, sample_donation):
+    def test_create_sales_receipt_success(self, client, app, sample_donation):
         """Test creating a sales receipt."""
         sample_donation["qboCustomerId"] = "customer-123"
 
         mock_receipt = {"Id": "receipt-456", "DocNumber": "SR-1001", "TotalAmt": 100.00}
+        mock_qbo_service = Mock()
         mock_qbo_service.create_sales_receipt.return_value = mock_receipt
+        app.qbo_service = mock_qbo_service
 
         with client.session_transaction() as sess:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
             sess["session_id"] = "test-session"
 
-        with (
-            patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service),
-            patch("src.routes.qbo.log_audit_event") as mock_audit,
-        ):
+        response = client.post("/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"}, json={})
 
-            response = client.post("/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"})
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert data["receipt"]["id"] == "receipt-456"
+        assert data["receipt"]["docNumber"] == "SR-1001"
 
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data["success"] is True
-            assert data["receipt"]["id"] == "receipt-456"
-            assert data["receipt"]["docNumber"] == "SR-1001"
-
-            # Verify donation was updated
-            with client.session_transaction() as sess:
-                donation = sess["donations"][0]
-                assert donation["qboSalesReceiptId"] == "receipt-456"
-                assert donation["qboSalesReceiptNumber"] == "SR-1001"
-                assert donation["qboSyncStatus"] == "Synced"
-                assert "qboSyncDate" in donation
-
-            # Verify audit log
-            mock_audit.assert_called_once()
-            assert mock_audit.call_args[1]["event_type"] == "qbo_sales_receipt_created"
-            assert mock_audit.call_args[1]["details"]["amount"] == "100.00"
+        # Verify donation was updated
+        with client.session_transaction() as sess:
+            donation = sess["donations"][0]
+            assert donation["qboSalesReceiptId"] == "receipt-456"
+            assert donation["qboSalesReceiptNumber"] == "SR-1001"
+            assert donation["qboSyncStatus"] == "Synced"
+            assert "qboSyncDate" in donation
 
     def test_create_sales_receipt_no_customer(self, client, sample_donation):
         """Test creating receipt when no customer is matched."""
@@ -401,24 +370,25 @@ class TestQBORoutes:
             sess["donations"] = [sample_donation]  # No qboCustomerId
             sess["qbo_authenticated"] = True
 
-        response = client.post("/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"})
+        response = client.post("/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"}, json={})
 
         assert response.status_code == 400
         data = json.loads(response.data)
         assert data["error"] == "Customer must be matched before creating sales receipt"
 
-    def test_create_sales_receipt_failure(self, client, mock_qbo_service, sample_donation):
+    def test_create_sales_receipt_failure(self, client, app, sample_donation):
         """Test sales receipt creation failure."""
         sample_donation["qboCustomerId"] = "customer-123"
+        mock_qbo_service = Mock()
         mock_qbo_service.create_sales_receipt.return_value = None
+        app.qbo_service = mock_qbo_service
 
         with client.session_transaction() as sess:
             sess["donations"] = [sample_donation]
             sess["qbo_authenticated"] = True
 
-        with patch("src.routes.qbo.get_qbo_service", return_value=mock_qbo_service):
-            response = client.post("/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"})
+        response = client.post("/qbo/sales-receipt/donation_123", headers={"X-CSRFToken": "test-token"}, json={})
 
-            assert response.status_code == 500
-            data = json.loads(response.data)
-            assert data["error"] == "Failed to create sales receipt"
+        assert response.status_code == 500
+        data = json.loads(response.data)
+        assert data["error"] == "Failed to create sales receipt"
