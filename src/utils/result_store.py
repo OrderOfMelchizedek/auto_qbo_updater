@@ -122,6 +122,33 @@ class ResultStore:
             logger.error(f"Error getting task metadata for {task_id}: {e}")
         
         return None
+    
+    def store_task_metadata(self, task_id, metadata):
+        """Store metadata for a task.
+        
+        Args:
+            task_id: The task ID
+            metadata: Dictionary of metadata to store
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Store metadata in a separate file
+            metadata_filename = f"metadata_{task_id}.json"
+            metadata_filepath = os.path.join(self.results_dir, metadata_filename)
+            
+            # Add timestamp
+            metadata["stored_at"] = datetime.now().isoformat()
+            
+            with open(metadata_filepath, "w") as f:
+                json.dump(metadata, f)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error storing task metadata for {task_id}: {e}")
+            return False
 
 
 # Global instance

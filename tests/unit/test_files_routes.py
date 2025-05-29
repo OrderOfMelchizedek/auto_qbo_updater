@@ -66,8 +66,8 @@ class TestFilesRoutes:
             data = json.loads(response.data)
             assert "error" in data
 
-    @patch("src.utils.tasks.process_files_task")
-    @patch("src.utils.result_store.ResultStore")
+    @patch("utils.tasks.process_files_task")
+    @patch("utils.result_store.ResultStore")
     def test_upload_async_success(self, mock_store_class, mock_task, client, mock_file):
         """Test async file upload."""
         # Mock Celery task
@@ -79,7 +79,7 @@ class TestFilesRoutes:
         mock_store = Mock()
         mock_store_class.return_value = mock_store
 
-        with patch("src.services.validation.log_audit_event"):
+        with patch("services.validation.log_audit_event"):
             # Upload file
             data = {"files": (mock_file, "test_donation.csv")}
             response = client.post(
@@ -114,7 +114,7 @@ class TestFilesRoutes:
         from werkzeug.datastructures import MultiDict
 
         data = MultiDict()
-        for i in range(11):
+        for i in range(21):  # More than MAX_FILES_PER_UPLOAD (20)
             file = FileStorage(stream=io.BytesIO(b"content"), filename=f"file{i}.csv")
             data.add("files", file)
 
@@ -126,88 +126,94 @@ class TestFilesRoutes:
         data = json.loads(response.data)
         assert "Too many files" in data["error"]
 
-    @patch("src.routes.files.get_memory_monitor")
     @patch("src.utils.progress_logger.log_progress")
     @patch("src.services.validation.log_audit_event")
     def test_upload_sync_success(
-        self, mock_audit, mock_progress, mock_memory_monitor, client, mock_file, mock_qbo_service, mock_file_processor
+        self, mock_audit, mock_progress, client, app, mock_file, mock_qbo_service, mock_file_processor
     ):
         """Test synchronous file upload."""
-        # Mock memory monitor
+        # Mock memory monitor directly on app
         mock_monitor = Mock()
-        mock_memory_monitor.return_value = mock_monitor
-
-        # Mock app context methods
-        with (
-            patch("flask.current_app.qbo_service", mock_qbo_service),
-            patch("flask.current_app.file_processor", mock_file_processor),
-            patch("flask.current_app.process_single_file") as mock_process,
-            patch("flask.current_app.cleanup_uploaded_file"),
-        ):
-
-            # Mock process_single_file
-            mock_process.return_value = {
+        app.memory_monitor = mock_monitor
+        
+        # Set services on app
+        app.qbo_service = mock_qbo_service
+        app.file_processor = mock_file_processor
+        
+        # Mock process_single_file function
+        def mock_process_single_file(file_data, qbo_authenticated):
+            return {
                 "success": True,
-                "filename": "test_donation.csv",
+                "filename": file_data["filename"],
                 "donations": [{"Donor Name": "John Doe", "Gift Amount": "100.00", "Check No.": "1234"}],
                 "file_path": "/tmp/test.csv",
                 "processing_time": 0.5,
             }
+        
+        # Mock cleanup function
+        def mock_cleanup_uploaded_file(file_path):
+            pass
+        
+        # Set functions on app
+        app.process_single_file = mock_process_single_file
+        app.cleanup_uploaded_file = mock_cleanup_uploaded_file
 
-            # Set QBO authenticated
-            with client.session_transaction() as sess:
-                sess["qbo_authenticated"] = True
+        # Set QBO authenticated
+        with client.session_transaction() as sess:
+            sess["qbo_authenticated"] = True
 
-            # Upload file
-            data = {"files": (mock_file, "test_donation.csv")}
-            response = client.post(
-                "/upload", data=data, content_type="multipart/form-data", headers={"X-CSRFToken": "test-token"}
-            )
+        # Upload file
+        data = {"files": (mock_file, "test_donation.csv")}
+        response = client.post(
+            "/upload", data=data, content_type="multipart/form-data", headers={"X-CSRFToken": "test-token"}
+        )
 
-            assert response.status_code == 200
-            result = json.loads(response.data)
-            assert result["success"] is True
-            assert result["total_donations"] == 1
-            assert len(result["processed_files"]) == 1
-            assert result["processed_files"][0]["filename"] == "test_donation.csv"
-            assert result["qbo_authenticated"] is True
+        assert response.status_code == 200
+        result = json.loads(response.data)
+        assert result["success"] is True
+        assert result["total_donations"] == 1
+        assert len(result["processed_files"]) == 1
+        assert result["processed_files"][0]["filename"] == "test_donation.csv"
+        assert result["qbo_authenticated"] is True
 
-            # Verify memory monitoring
-            mock_monitor.log_memory.assert_called()
-            mock_monitor.cleanup.assert_called()
+        # Verify memory monitoring
+        mock_monitor.log_memory.assert_called()
+        mock_monitor.cleanup.assert_called()
 
-    def test_upload_sync_with_deduplication(self, client):
+    def test_upload_sync_with_deduplication(self, client, app):
         """Test upload with deduplication of donations."""
         with (
-            patch("src.routes.files.get_memory_monitor"),
             patch("src.utils.progress_logger.log_progress"),
             patch("src.services.validation.log_audit_event"),
-            patch("flask.current_app.process_single_file") as mock_process,
-            patch("flask.current_app.cleanup_uploaded_file"),
-            patch("src.services.deduplication.DeduplicationService.deduplicate_donations") as mock_dedup,
         ):
+            # Mock memory monitor directly on app
+            mock_monitor = Mock()
+            app.memory_monitor = mock_monitor
 
-            # Set up existing donations in session
+            # Set up existing donations in session (already has check 1234)
             with client.session_transaction() as sess:
                 sess["donations"] = [{"Check No.": "1234", "Gift Amount": "100.00", "Donor Name": "John Doe"}]
 
-            # Mock process result with duplicate
-            mock_process.return_value = {
-                "success": True,
-                "filename": "test.csv",
-                "donations": [
-                    {"Check No.": "1234", "Gift Amount": "100.00", "Donor Name": "John Doe"},
-                    {"Check No.": "5678", "Gift Amount": "200.00", "Donor Name": "Jane Smith"},
-                ],
-                "file_path": "/tmp/test.csv",
-                "processing_time": 0.5,
-            }
-
-            # Mock deduplication result
-            mock_dedup.return_value = [
-                {"Check No.": "1234", "Gift Amount": "100.00", "Donor Name": "John Doe"},
-                {"Check No.": "5678", "Gift Amount": "200.00", "Donor Name": "Jane Smith"},
-            ]
+            # Mock process_single_file function that returns duplicate and new donation
+            def mock_process_single_file(file_data, qbo_authenticated):
+                return {
+                    "success": True,
+                    "filename": "test.csv",
+                    "donations": [
+                        {"Check No.": "1234", "Gift Amount": "100.00", "Donor Name": "John Doe"},  # Duplicate
+                        {"Check No.": "5678", "Gift Amount": "200.00", "Donor Name": "Jane Smith"},  # New
+                    ],
+                    "file_path": "/tmp/test.csv",
+                    "processing_time": 0.5,
+                }
+            
+            # Mock cleanup function
+            def mock_cleanup_uploaded_file(file_path):
+                pass
+            
+            # Set functions on app
+            app.process_single_file = mock_process_single_file
+            app.cleanup_uploaded_file = mock_cleanup_uploaded_file
 
             # Create mock file
             file = FileStorage(stream=io.BytesIO(b"content"), filename="test.csv")
@@ -223,43 +229,44 @@ class TestFilesRoutes:
             result = json.loads(response.data)
             assert result["success"] is True
             assert result["donations_found"] == 2
+            # Since deduplication service merges duplicates, should still be 2 unique
             assert result["unique_donations"] == 2
 
-            # Verify deduplication was called
-            mock_dedup.assert_called_once()
-
-    def test_upload_sync_error_handling(self, client, mock_file):
+    def test_upload_sync_error_handling(self, client, app, mock_file):
         """Test sync upload error handling."""
-        with (
-            patch("src.routes.files.get_memory_monitor") as mock_memory_monitor,
-            patch("src.services.validation.log_audit_event"),
-        ):
-
+        with patch("src.services.validation.log_audit_event"):
+            # Mock memory monitor directly on app
             mock_monitor = Mock()
-            mock_memory_monitor.return_value = mock_monitor
+            app.memory_monitor = mock_monitor
 
             # Simulate processing error
-            with patch("flask.current_app.process_single_file", side_effect=Exception("Processing error")):
+            def mock_process_single_file_error(file_data, qbo_authenticated):
+                raise Exception("Processing error")
+            
+            # Set error function on app
+            app.process_single_file = mock_process_single_file_error
 
-                response = client.post(
-                    "/upload", data={"files": (mock_file, "test.csv")}, content_type="multipart/form-data"
-                )
+            response = client.post(
+                "/upload", data={"files": (mock_file, "test.csv")}, content_type="multipart/form-data",
+                headers={"X-CSRFToken": "test-token"}
+            )
 
-                assert response.status_code == 500
-                data = json.loads(response.data)
-                assert "error" in data
+            assert response.status_code == 500
+            data = json.loads(response.data)
+            assert "error" in data
 
-                # Verify cleanup was called
-                mock_monitor.cleanup.assert_called()
+            # Verify cleanup was called
+            mock_monitor.cleanup.assert_called()
 
-    @patch("src.utils.celery_app.celery_app")
-    @patch("src.utils.result_store.ResultStore")
+    @patch("utils.celery_app.celery_app")
+    @patch("utils.result_store.ResultStore")
     def test_task_status_success(self, mock_store_class, mock_celery, client):
         """Test getting task status."""
         # Mock Celery result
         mock_result = Mock()
         mock_result.state = "SUCCESS"
         mock_result.result = {"donations": [{"id": 1}, {"id": 2}], "processed_files": 2}
+        mock_result.info = None  # Not used for SUCCESS state
         mock_celery.AsyncResult.return_value = mock_result
 
         # Mock result store
@@ -286,12 +293,14 @@ class TestFilesRoutes:
     def test_task_status_pending(self, client):
         """Test task status for pending task."""
         with (
-            patch("src.utils.celery_app.celery_app") as mock_celery,
-            patch("src.utils.result_store.ResultStore") as mock_store_class,
+            patch("utils.celery_app.celery_app") as mock_celery,
+            patch("utils.result_store.ResultStore") as mock_store_class,
         ):
 
             mock_result = Mock()
             mock_result.state = "PENDING"
+            mock_result.info = None  # Not used for PENDING state
+            mock_result.result = None  # Not used for PENDING state
             mock_celery.AsyncResult.return_value = mock_result
 
             mock_store = Mock()
@@ -308,13 +317,14 @@ class TestFilesRoutes:
     def test_task_status_progress(self, client):
         """Test task status with progress updates."""
         with (
-            patch("src.utils.celery_app.celery_app") as mock_celery,
-            patch("src.utils.result_store.ResultStore") as mock_store_class,
+            patch("utils.celery_app.celery_app") as mock_celery,
+            patch("utils.result_store.ResultStore") as mock_store_class,
         ):
 
             mock_result = Mock()
             mock_result.state = "PROGRESS"
             mock_result.info = {"current": 5, "total": 10, "status": "Processing file 5 of 10"}
+            mock_result.result = None  # Not used for PROGRESS state
             mock_celery.AsyncResult.return_value = mock_result
 
             mock_store = Mock()
@@ -333,13 +343,14 @@ class TestFilesRoutes:
     def test_task_status_failure(self, client):
         """Test task status for failed task."""
         with (
-            patch("src.utils.celery_app.celery_app") as mock_celery,
-            patch("src.utils.result_store.ResultStore") as mock_store_class,
+            patch("utils.celery_app.celery_app") as mock_celery,
+            patch("utils.result_store.ResultStore") as mock_store_class,
         ):
 
             mock_result = Mock()
             mock_result.state = "FAILURE"
             mock_result.info = Exception("Task failed")
+            mock_result.result = None  # Not used for FAILURE state
             mock_celery.AsyncResult.return_value = mock_result
 
             mock_store = Mock()
