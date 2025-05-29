@@ -272,3 +272,24 @@ def log_progress(message: str, force_summary: bool = False):
     """Convenience function for logging progress."""
     global progress_logger
     progress_logger.log(message, force_summary)
+
+
+def get_progress_messages(session_id: str, last_index: int = 0):
+    """Get progress messages for a session since the last index."""
+    global progress_logger
+    
+    if session_id not in progress_logger.recent_summaries:
+        return []
+    
+    messages = progress_logger.recent_summaries[session_id]
+    # Add index to messages if not present
+    result = []
+    for i, msg in enumerate(messages[last_index:], start=last_index):
+        msg_copy = msg.copy()
+        msg_copy['index'] = i
+        # Convert summary to message for compatibility
+        if 'summary' in msg_copy:
+            msg_copy['message'] = msg_copy['summary']
+        result.append(msg_copy)
+    
+    return result

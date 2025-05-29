@@ -92,7 +92,7 @@ def qbo_status():
     """Get QuickBooks connection status."""
     try:
         qbo_service = get_qbo_service()
-        is_authenticated = qbo_service.is_authenticated()
+        is_authenticated = qbo_service.is_token_valid()
 
         status = {"authenticated": is_authenticated, "environment": qbo_service.environment}
 

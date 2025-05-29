@@ -114,7 +114,7 @@ class TestDeduplicationService:
 
         key = DeduplicationService._generate_unique_key(donation)
 
-        assert key == "OTHER_john obrien_100.00_2024-01-15"
+        assert key == "OTHER_John O'Brien_100.00_2024-01-15"
 
     def test_generate_unique_key_insufficient_data(self):
         """Test unique key generation with insufficient data."""

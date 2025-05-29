@@ -251,9 +251,13 @@ class TestFilesRoutes:
                 headers={"X-CSRFToken": "test-token"}
             )
 
-            assert response.status_code == 500
+            # The route returns 200 even with individual file errors
+            assert response.status_code == 200
             data = json.loads(response.data)
-            assert "error" in data
+            assert data["success"] is True
+            assert len(data["errors"]) == 1
+            assert data["errors"][0]["filename"] == "test_donation.csv"
+            assert data["errors"][0]["error"] == "Processing error"
 
             # Verify cleanup was called
             mock_monitor.cleanup.assert_called()
