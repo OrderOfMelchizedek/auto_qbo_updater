@@ -10,7 +10,7 @@ from flask import session
 class TestCustomerMatchingFixes:
     """Test that customer matching works correctly after fixes."""
 
-    def test_qbo_auth_state_persistence(self, client, mock_qbo_service):
+    def test_qbo_auth_state_persistence(self, client, app, mock_qbo_service):
         """Test that QBO authentication state persists across requests."""
         # Simulate successful OAuth callback
         with client.session_transaction() as sess:
@@ -29,6 +29,9 @@ class TestCustomerMatchingFixes:
         mock_qbo_service.environment = "sandbox"
         mock_qbo_service.get_token_info.return_value = {"is_valid": True, "expires_in_seconds": 3600}
 
+        # Inject the mock into the app
+        app.qbo_service = mock_qbo_service
+
         # Test auth status endpoint
         response = client.get("/qbo/auth-status")
         assert response.status_code == 200
@@ -39,24 +42,32 @@ class TestCustomerMatchingFixes:
         # Verify Redis token loading was called
         mock_auth_service._load_tokens_from_redis.assert_called()
 
-    def test_async_upload_loads_tokens(self, client, mock_qbo_service):
+    def test_async_upload_loads_tokens(self, client, app, mock_qbo_service):
         """Test that async upload loads tokens from Redis."""
         with client.session_transaction() as sess:
             sess["qbo_authenticated"] = True
             sess["session_id"] = "test-session"
 
         # Mock Redis and S3
-        mock_qbo_service.auth_service.redis_client = MagicMock()
-        mock_qbo_service.auth_service._load_tokens_from_redis = MagicMock()
+        mock_auth_service = MagicMock()
+        mock_auth_service.redis_client = MagicMock()
+        mock_auth_service._load_tokens_from_redis = MagicMock()
+
+        mock_qbo_service.auth_service = mock_auth_service
         mock_qbo_service.access_token = "test-token"
         mock_qbo_service.realm_id = "123456789"
+        mock_qbo_service.environment = "sandbox"
+        mock_qbo_service.token_expires_at = 9999999999
+
+        # Inject the mock into the app
+        app.qbo_service = mock_qbo_service
 
         with patch("src.routes.files.S3Storage") as mock_s3:
             mock_s3_instance = mock_s3.return_value
             mock_s3_instance.generate_key.return_value = "test-key"
             mock_s3_instance.upload_file.return_value = {"bucket": "test-bucket", "size": 1000}
 
-            with patch("src.routes.files.process_files_task") as mock_task:
+            with patch("src.utils.tasks.process_files_task") as mock_task:
                 mock_task.delay.return_value = MagicMock(id="task-123")
 
                 # Create test file
@@ -124,7 +135,7 @@ class TestCustomerMatchingFixes:
         assert entry["check_no"] == "1234"
         assert "address" in entry
 
-    def test_manual_customer_match(self, client, mock_qbo_service):
+    def test_manual_customer_match(self, client, app, mock_qbo_service):
         """Test manual customer matching."""
         with client.session_transaction() as sess:
             sess["qbo_authenticated"] = True
@@ -133,6 +144,9 @@ class TestCustomerMatchingFixes:
         # Mock customer lookup
         mock_customer = {"Id": "cust-123", "DisplayName": "John Doe Company"}
         mock_qbo_service.get_customer_by_id.return_value = mock_customer
+
+        # Inject the mock into the app
+        app.qbo_service = mock_qbo_service
 
         response = client.post("/qbo/customer/manual-match/donation-1", json={"customerId": "cust-123"})
 
@@ -147,13 +161,16 @@ class TestCustomerMatchingFixes:
             assert donation["customerLookup"] == "John Doe Company"
             assert donation["matchMethod"] == "Manual"
 
-    def test_customer_lookup_format(self, client, mock_qbo_service):
+    def test_customer_lookup_format(self, client, app, mock_qbo_service):
         """Test that customerLookup is properly formatted as string."""
         with client.session_transaction() as sess:
             sess["qbo_authenticated"] = True
             sess["donations"] = [{"internalId": "d1", "Donor Name": "Test"}]
 
         mock_qbo_service.get_customer_by_id.return_value = {"Id": "123", "DisplayName": "Test Customer"}
+
+        # Inject the mock into the app
+        app.qbo_service = mock_qbo_service
 
         response = client.post("/qbo/customer/manual-match/d1", json={"customerId": "123"})
 
