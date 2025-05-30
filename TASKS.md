@@ -124,21 +124,22 @@ After extraction is updated, refactor the customer matching to only execute once
 ### Implementation Plan
 
 #### 2.1 Remove Matching from Individual File Processing
-- [ ] In `batch_processor.py`:
-  - [ ] Remove customer matching calls from `process_file_batch()`
-  - [ ] Return only extracted payment data
+- [:white_check_mark:] In `batch_processor.py`:
+  - [:white_check_mark:] No customer matching found - already clean
+  - [:white_check_mark:] Returns only extracted payment data
 
-- [ ] In `file_processor.py`:
-  - [ ] Remove matching from `extract_donation_data()` (now `extract_payment_data()`)
-  - [ ] Remove matching from `_process_csv()`
-  - [ ] Ensure only extraction and validation occur
+- [:white_check_mark:] In `file_processor.py`:
+  - [:white_check_mark:] Remove matching from `_process_with_validation()` (lines 186-189)
+  - [:white_check_mark:] Remove matching from `_process_csv()` (lines 300-302)
+  - [:white_check_mark:] Ensure only extraction and validation occur
 
 #### 2.2 Centralize Matching After Deduplication
-- [ ] In `file_processor.py` - `process_files_concurrently()`:
-  - [ ] Extract all payments without matching
-  - [ ] Deduplicate all payments
-  - [ ] Single matching pass on deduplicated set
-  - [ ] Update to use "payer" terminology
+- [:white_check_mark:] In `file_processor.py` - `process_files_concurrently()`:
+  - [:white_check_mark:] Extract all payments without matching
+  - [:white_check_mark:] Deduplicate all payments
+  - [:white_check_mark:] Single matching pass on deduplicated set
+  - [:white_check_mark:] Added logging for match results
+  - [ ] Update to use "payer" terminology (Phase 3)
 
 #### 2.3 Update Customer Service for Payers
 - [ ] Update `qbo_service/customers.py`:
@@ -147,9 +148,12 @@ After extraction is updated, refactor the customer matching to only execute once
   - [ ] Keep core matching strategies
 
 #### 2.4 Clean Up Redundant Code
-- [ ] Remove duplicate matching methods
-- [ ] Remove match preservation logic from deduplication
-- [ ] Simplify the overall flow
+- [:white_check_mark:] Remove duplicate "skip if already matched" logic
+- [:white_check_mark:] Remove match preservation logic from deduplication:
+  - [:white_check_mark:] Removed `_merge_customer_fields()` calls
+  - [:white_check_mark:] Removed customer status logging during merge
+  - [:white_check_mark:] Deprecated `_merge_customer_fields()` method
+- [:white_check_mark:] Simplified the overall flow
 
 #### 2.5 Testing the Matching Refactor
 - [ ] Test full pipeline with new single-pass matching

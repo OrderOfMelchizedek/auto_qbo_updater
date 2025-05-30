@@ -72,9 +72,8 @@ class TestDeduplicationService:
         assert donation["Check No."] == "1001"
         assert donation["Gift Amount"] == "$100.00"
         assert donation["Address - Line 1"] == "123 Main St"
-        # Should preserve the matched status from new donation
-        assert donation["qbCustomerStatus"] == "Matched"
-        assert donation["qboCustomerId"] == "QB123"
+        # Phase 2: Customer fields are no longer preserved during deduplication
+        # Customer matching happens after deduplication
 
     def test_deduplicate_non_check_donations(self):
         """Test deduplication of non-check donations using donor/amount/date."""
@@ -181,38 +180,20 @@ class TestDeduplicationService:
 
         assert result["Memo"] == "First memo; Second memo"
 
-    def test_merge_customer_fields_existing_matched(self):
-        """Test customer field merging when existing has match."""
-        existing = {"qbCustomerStatus": "Matched", "qboCustomerId": "QB123", "matchConfidence": 85}
-        new = {"qbCustomerStatus": "New"}
+    # Phase 2 Refactor: Customer field merging tests are no longer applicable
+    # Customer matching now happens after deduplication
 
-        merged = {}
-        DeduplicationService._merge_customer_fields(merged, existing, new)
+    # def test_merge_customer_fields_existing_matched(self):
+    #     """DEPRECATED: Customer field merging when existing has match."""
+    #     pass
 
-        assert merged["qbCustomerStatus"] == "Matched"
-        assert merged["qboCustomerId"] == "QB123"
+    # def test_merge_customer_fields_new_matched(self):
+    #     """DEPRECATED: Customer field merging when new has match."""
+    #     pass
 
-    def test_merge_customer_fields_new_matched(self):
-        """Test customer field merging when new has match."""
-        existing = {"qbCustomerStatus": "New"}
-        new = {"qbCustomerStatus": "Matched", "qboCustomerId": "QB456", "matchConfidence": 90}
-
-        merged = {}
-        DeduplicationService._merge_customer_fields(merged, existing, new)
-
-        assert merged["qbCustomerStatus"] == "Matched"
-        assert merged["qboCustomerId"] == "QB456"
-
-    def test_merge_customer_fields_both_matched_higher_confidence(self):
-        """Test customer field merging when both matched, new has higher confidence."""
-        existing = {"qbCustomerStatus": "Matched", "qboCustomerId": "QB123", "matchConfidence": 75}
-        new = {"qbCustomerStatus": "Matched", "qboCustomerId": "QB456", "matchConfidence": 95}
-
-        merged = {}
-        DeduplicationService._merge_customer_fields(merged, existing, new)
-
-        assert merged["qbCustomerStatus"] == "Matched"
-        assert merged["qboCustomerId"] == "QB456"  # Higher confidence wins
+    # def test_merge_customer_fields_both_matched_higher_confidence(self):
+    #     """DEPRECATED: Customer field merging when both matched."""
+    #     pass
 
     def test_internal_id_assignment(self):
         """Test that internal IDs are assigned to donations without them."""

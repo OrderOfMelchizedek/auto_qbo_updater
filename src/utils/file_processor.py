@@ -183,10 +183,8 @@ class FileProcessor:
                 # Add the donation to complete list (even if some fields still missing)
                 complete_donations.append(donation)
 
-        # Match donations with QuickBooks customers if QBO service is available
-        if self.qbo_service:
-            print("Performing QBO customer matching for all donations...")
-            complete_donations = self.match_donations_with_qbo_customers_batch(complete_donations)
+        # Phase 2 Refactor: Customer matching removed from individual file processing
+        # Matching now happens only after deduplication in process_files_concurrently()
 
         # Return in the same format as the original data
         if isinstance(donation_data, list):
@@ -297,9 +295,8 @@ class FileProcessor:
             # Send CSV text to Gemini for processing
             donation_data = self.gemini_service.extract_text_data(csv_prompt)
 
-            # Match each donation with QuickBooks customers
-            if donation_data and self.qbo_service:
-                donation_data = self.match_donations_with_qbo_customers_batch(donation_data)
+            # Phase 2 Refactor: Customer matching removed from CSV processing
+            # Matching now happens only after deduplication in process_files_concurrently()
 
             return donation_data
 
@@ -344,10 +341,8 @@ class FileProcessor:
                 donation_to_lookups[i] = []
                 continue
 
-            # Skip if already matched
-            if donation.get("qbCustomerStatus") in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]:
-                donation_to_lookups[i] = []
-                continue
+            # Phase 2 Refactor: No longer skip already matched donations
+            # All donations go through matching in single pass
 
             # Collect lookup strategies for this donation
             lookups = []
@@ -375,11 +370,7 @@ class FileProcessor:
                 matched_donations.append(donation)
                 continue
 
-            # Skip if already matched
-            if donation.get("qbCustomerStatus") in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]:
-                print(f"Donation already matched to customer ID {donation.get('qboCustomerId')} - skipping")
-                matched_donations.append(donation)
-                continue
+            # Phase 2 Refactor: Process all donations in single pass
 
             try:
                 # Find the first successful match from the batch results
@@ -525,11 +516,7 @@ class FileProcessor:
                 matched_donations.append(donation)
                 continue
 
-            # Skip if already matched
-            if donation.get("qbCustomerStatus") in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]:
-                print(f"Donation already matched to customer ID {donation.get('qboCustomerId')} - skipping")
-                matched_donations.append(donation)
-                continue
+            # Phase 2 Refactor: Process all donations in single pass
 
             try:
                 # Try multiple lookup strategies for better matching
@@ -721,22 +708,20 @@ class FileProcessor:
                 print(f"Deduplicating {len(validated_donations)} donations")
                 deduplicated = self._deduplicate_donations(validated_donations)
 
-                # Match with QBO customers - but only for donations that haven't been matched yet
+                # Phase 2 Refactor: Single-pass customer matching after deduplication
+                # Match ALL donations with QBO customers in one pass
                 if self.qbo_service and deduplicated:
-                    # Count how many are already matched
-                    already_matched = sum(
+                    print(f"Performing single-pass customer matching for {len(deduplicated)} deduplicated donations...")
+                    deduplicated = self.match_donations_with_qbo_customers_batch(deduplicated)
+
+                    # Log matching results
+                    matched_count = sum(
                         1
                         for d in deduplicated
                         if d.get("qbCustomerStatus")
                         in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]
                     )
-                    unmatched_count = len(deduplicated) - already_matched
-
-                    if unmatched_count > 0:
-                        print(
-                            f"Matching {unmatched_count} unmatched donations with QBO customers ({already_matched} already matched)"
-                        )
-                        deduplicated = self.match_donations_with_qbo_customers_batch(deduplicated)
+                    print(f"Customer matching complete: {matched_count} of {len(deduplicated)} donations matched")
 
                 return deduplicated, all_errors
 

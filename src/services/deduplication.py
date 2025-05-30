@@ -70,16 +70,8 @@ class DeduplicationService:
             if unique_key in unique_donations:
                 # Merge with existing donation
                 logger.info(f"Merging donation with key: {unique_key}")
-                logger.info(
-                    f"  Existing: {unique_donations[unique_key].get('Donor Name')} - "
-                    f"Status: {unique_donations[unique_key].get('qbCustomerStatus')} - "
-                    f"ID: {unique_donations[unique_key].get('qboCustomerId')}"
-                )
-                logger.info(
-                    f"  New: {new_donation.get('Donor Name')} - "
-                    f"Status: {new_donation.get('qbCustomerStatus')} - "
-                    f"ID: {new_donation.get('qboCustomerId')}"
-                )
+                logger.info(f"  Existing: {unique_donations[unique_key].get('Donor Name')}")
+                logger.info(f"  New: {new_donation.get('Donor Name')}")
                 unique_donations[unique_key] = DeduplicationService.merge_donation_data(
                     unique_donations[unique_key], new_donation
                 )
@@ -87,11 +79,7 @@ class DeduplicationService:
             else:
                 # Add as new donation
                 logger.info(f"Adding new donation with key: {unique_key}")
-                logger.info(
-                    f"  New: {new_donation.get('Donor Name')} - "
-                    f"Status: {new_donation.get('qbCustomerStatus')} - "
-                    f"ID: {new_donation.get('qboCustomerId')}"
-                )
+                logger.info(f"  New: {new_donation.get('Donor Name')}")
                 unique_donations[unique_key] = new_donation
                 new_count += 1
 
@@ -107,13 +95,8 @@ class DeduplicationService:
             f"Deduplication complete: {len(result)} unique donations " f"(merged {merge_count}, added {new_count})"
         )
 
-        # Log final customer match status
-        matched_count = sum(
-            1
-            for d in result
-            if d.get("qbCustomerStatus") in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]
-        )
-        logger.info(f"Customer matches in final result: {matched_count} out of {len(result)} donations")
+        # Phase 2 Refactor: Customer matching happens after deduplication
+        # No customer match status to log here
 
         return result
 
@@ -237,8 +220,8 @@ class DeduplicationService:
             else:
                 merged["Memo"] = new_memo
 
-        # Preserve QBO-related fields - intelligently merge to keep the best match
-        DeduplicationService._merge_customer_fields(merged, existing, new)
+        # Phase 2 Refactor: Customer matching happens after deduplication
+        # No need to merge customer fields during deduplication
 
         # Other QBO fields - simple merge
         other_qbo_fields = ["qbSyncStatus", "internalId"]
@@ -268,23 +251,20 @@ class DeduplicationService:
             )
             merged["isMerged"] = True
 
-        # Log the final merged result
-        logger.info(
-            f"Merge complete - Result status: {merged.get('qbCustomerStatus')} - " f"ID: {merged.get('qboCustomerId')}"
-        )
+        # Phase 2 Refactor: No customer status to log during merge
 
         return merged
 
+    # Phase 2 Refactor: Customer matching happens after deduplication
+    # This method is no longer needed but kept for reference
     @staticmethod
     def _merge_customer_fields(merged: Dict[str, Any], existing: Dict[str, Any], new: Dict[str, Any]) -> None:
-        """
-        Merge customer-related fields intelligently.
+        """DEPRECATED: Customer matching now happens after deduplication.
 
-        Args:
-            merged: The merged record to update
-            existing: Existing donation record
-            new: New donation record
+        This method is no longer called but kept for reference.
         """
+        return  # Early return - method is deprecated
+
         customer_fields = ["qboCustomerId", "customerLookup", "matchMethod", "matchConfidence"]
 
         # Check if either record has a successful match
