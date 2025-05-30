@@ -42,6 +42,8 @@ from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.utils import secure_filename
 
+from utils.enhanced_file_processor import EnhancedFileProcessor
+
 # Try importing from the src package first
 from utils.exceptions import (
     FileProcessingException,
@@ -50,7 +52,6 @@ from utils.exceptions import (
     QBOAPIException,
     ValidationException,
 )
-from utils.file_processor import FileProcessor
 from utils.gemini_adapter import create_gemini_service
 from utils.gemini_service import GeminiService
 from utils.memory_monitor import memory_monitor
@@ -252,28 +253,11 @@ def process_single_file(file_data, qbo_authenticated):
             else:
                 result["donations"] = [extracted_data]
 
-            # Apply customer matching if QBO is authenticated
-            if qbo_authenticated and result["donations"]:
-                # Get QBO service instance from app context
-                from flask import current_app
-
-                qbo_service = current_app.qbo_service
-
-                for donation in result["donations"]:
-                    if donation.get("Donor Name"):
-                        customer = qbo_service.find_customer(donation["Donor Name"])
-                        if customer:
-                            donation["qboCustomerId"] = customer.get("Id")
-                            donation["qbCustomerStatus"] = "Found"
-                            donation["matchMethod"] = "Automatic"
-                            donation["matchConfidence"] = "High"
-                        else:
-                            donation["qbCustomerStatus"] = "New"
-            else:
-                # If not authenticated, mark all donations as needing customer creation
-                for donation in result["donations"]:
-                    if "qbCustomerStatus" not in donation:
-                        donation["qbCustomerStatus"] = "New"
+            # Customer matching is now handled by EnhancedFileProcessor
+            # Just ensure status is set for any that might not have been matched
+            for donation in result["donations"]:
+                if "qbCustomerStatus" not in donation:
+                    donation["qbCustomerStatus"] = "New"
 
             result["success"] = True
             log_progress(f"Successfully processed {original_filename}: {len(result['donations'])} donations found")
@@ -568,8 +552,8 @@ qbo_service = QBOService(
     environment=qbo_environment,  # Use the command-line specified environment
     redis_client=redis_client,  # Pass Redis client for token persistence
 )
-# Pass both services to the file processor for integrated customer matching
-file_processor = FileProcessor(gemini_service, qbo_service, progress_logger)
+# Pass both services to the enhanced file processor for integrated customer matching and QBO enrichment
+file_processor = EnhancedFileProcessor(gemini_service, qbo_service, progress_logger)
 
 # Initialize progress logger with Gemini service
 init_progress_logger(gemini_service)
@@ -583,11 +567,13 @@ app.cleanup_uploaded_file = cleanup_uploaded_file
 
 # Import and register blueprints
 from routes import auth_bp, donations_bp, files_bp, health_bp, qbo_bp
+from routes.donations_v2 import donations_v2_bp
 
 app.register_blueprint(health_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(files_bp)
 app.register_blueprint(donations_bp)
+app.register_blueprint(donations_v2_bp)  # New v2 endpoints
 app.register_blueprint(qbo_bp)
 
 

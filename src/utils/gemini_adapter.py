@@ -6,7 +6,7 @@ Provides backward compatibility while using new structured extraction internally
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from src.models.payment import PaymentRecord
+from models.payment import PaymentRecord
 
 from .gemini_service import GeminiService
 from .gemini_structured import GeminiStructuredService
@@ -51,10 +51,6 @@ class GeminiAdapter(GeminiService):
         Returns:
             Dictionary or list of dictionaries with donation data in legacy format
         """
-        if not self.use_structured:
-            # Fall back to original implementation
-            return super().extract_donation_data(file_path, custom_prompt)
-
         try:
             # Determine document type from file extension
             file_ext = file_path.lower()
@@ -63,7 +59,8 @@ class GeminiAdapter(GeminiService):
             elif file_ext.endswith(".csv"):
                 doc_type = "csv"
             else:
-                doc_type = "check"
+                # For check images, use batch mode to detect multiple checks
+                doc_type = "batch"
 
             # Use structured extraction
             payment_records = self.structured_service.extract_payment_structured(
@@ -83,9 +80,9 @@ class GeminiAdapter(GeminiService):
             return legacy_data
 
         except Exception as e:
-            logger.error(f"Structured extraction failed, falling back to legacy: {e}")
-            # Fall back to original implementation
-            return super().extract_donation_data(file_path, custom_prompt)
+            logger.error(f"Structured extraction failed: {e}")
+            # Re-raise the exception instead of falling back
+            raise
 
     def extract_donation_data_from_content(
         self,
@@ -97,13 +94,8 @@ class GeminiAdapter(GeminiService):
 
         This method is used for PDF batch processing where content is pre-processed.
         """
-        if not self.use_structured:
-            # Fall back to original implementation
-            return super().extract_donation_data_from_content(content, file_type, batch_info)
-
-        # For now, fall back to original for batch processing
-        # TODO: Implement structured batch processing
-        return super().extract_donation_data_from_content(content, file_type, batch_info)
+        # TODO: Implement structured batch processing for content
+        raise NotImplementedError("Structured extraction from content not yet implemented")
 
     def verify_customer_match(self, extracted_donor: Dict[str, Any], qbo_customer: Dict[str, Any]) -> Dict[str, Any]:
         """Verify if the QuickBooks customer is a match for the extracted donor data.
@@ -115,16 +107,12 @@ class GeminiAdapter(GeminiService):
         Returns:
             Dictionary containing verification results
         """
-        if not self.use_structured:
-            # Fall back to original implementation
-            return super().verify_customer_match(extracted_donor, qbo_customer)
-
         try:
             # Use structured service for verification
             return self.structured_service.verify_customer_match(extracted_donor, qbo_customer)
         except Exception as e:
-            logger.error(f"Structured verification failed, falling back to legacy: {e}")
-            return super().verify_customer_match(extracted_donor, qbo_customer)
+            logger.error(f"Structured verification failed: {e}")
+            raise
 
     def set_use_structured(self, use_structured: bool):
         """Toggle between structured and legacy extraction.

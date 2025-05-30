@@ -36,7 +36,7 @@ class GeminiService:
         self.api_key = api_key
         self.model_name = model_name
         genai.configure(api_key=api_key)
-        self.prompt_manager = PromptManager(prompt_dir="docs/prompts_archive")
+        self.prompt_manager = PromptManager(prompt_dir="lib/legacy_prompts")
         print(f"Initialized Gemini service with model: {self.model_name}")
 
         # Initialize rate limiter

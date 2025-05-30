@@ -16,7 +16,7 @@ import google.generativeai as genai
 from PIL import Image
 from pydantic import BaseModel
 
-from src.models.payment import PaymentRecord
+from models.payment import PaymentRecord
 
 from .exceptions import GeminiAPIException, RetryableException
 from .prompt_manager import PromptManager
@@ -42,12 +42,12 @@ class GeminiStructuredService:
             model_name: Gemini model name (defaults to latest 2.0 flash)
         """
         self.api_key = api_key
-        self.model_name = model_name
+        self.model_name = model_name if model_name is not None else "gemini-2.0-flash-exp"
         genai.configure(api_key=api_key)
 
         # Initialize prompt managers for both old and new prompts
-        self.prompt_manager = PromptManager(prompt_dir="docs/prompts_archive")
-        self.structured_prompt_manager = PromptManager(prompt_dir="docs/prompts_structured")
+        self.prompt_manager = PromptManager(prompt_dir="lib/prompts_archive")
+        self.structured_prompt_manager = PromptManager(prompt_dir="lib/current_prompts")
 
         logger.info(f"Initialized Gemini structured service with model: {self.model_name}")
 
@@ -59,33 +59,36 @@ class GeminiStructuredService:
 
     def _check_rate_limit(self):
         """Check and enforce rate limits for Gemini API calls."""
-        if not self._rate_limiter.check_rate_limit():
-            wait_time = self._rate_limiter.get_wait_time()
-            logger.warning(f"Rate limit reached. Waiting {wait_time} seconds before continuing...")
-            raise RateLimitExceededException(f"Rate limit reached. Please wait {wait_time} seconds.")
+        try:
+            self._rate_limiter.check_and_record()
+        except RateLimitExceededException as e:
+            logger.warning(f"Rate limit reached: {e}")
+            raise
 
     def _prepare_image_part(self, image_path: str):
-        """Prepare an image for Gemini API by uploading it.
+        """Prepare an image for Gemini API.
 
         Args:
             image_path: Path to the image file
 
         Returns:
-            Uploaded file part for Gemini
+            PIL Image object(s) for Gemini
         """
-        # Determine MIME type based on file extension
-        ext = os.path.splitext(image_path)[1].lower()
-        mime_map = {
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".png": "image/png",
-            ".pdf": "application/pdf",
-        }
-        mime_type = mime_map.get(ext, "image/jpeg")
+        file_ext = os.path.splitext(image_path)[1].lower()
 
-        # Upload file to Gemini
-        uploaded_file = genai.upload_file(image_path, mime_type=mime_type)
-        return uploaded_file
+        if file_ext == ".pdf":
+            # For PDFs, we'll handle batch processing differently
+            # Just return the path and a flag indicating it's a PDF
+            return ("pdf", image_path)
+        else:
+            # Handle regular image files
+            try:
+                image = Image.open(image_path)
+                logger.info(f"Successfully opened image file: {image_path}")
+                return ("image", [image])  # Return as list for consistency
+            except Exception as e:
+                logger.error(f"Error loading image {image_path}: {e}")
+                raise
 
     @retry_on_failure(max_attempts=3)
     def extract_payment_structured(
@@ -115,13 +118,17 @@ class GeminiStructuredService:
         # Prepare content parts
         content_parts = [prompt]
 
-        # Upload and add images
-        uploaded_files = []
+        # Check if we have any PDFs that need batch processing
+        pdf_paths = []
+        regular_images = []
+
         try:
             for image_path in image_paths:
-                uploaded_file = self._prepare_image_part(image_path)
-                uploaded_files.append(uploaded_file)
-                content_parts.append(uploaded_file)
+                file_type, content = self._prepare_image_part(image_path)
+                if file_type == "pdf":
+                    pdf_paths.append(content)
+                else:
+                    regular_images.extend(content)
 
             # Configure model with structured output
             model = genai.GenerativeModel(self.model_name)
@@ -138,38 +145,161 @@ class GeminiStructuredService:
             else:
                 response_schema = response_model
 
-            # Generate content with structured output
-            response = model.generate_content(
-                contents=content_parts,
-                generation_config={
-                    "response_mime_type": "application/json",
-                    "response_schema": response_schema,
-                    "temperature": 0.1,  # Low temperature for accuracy
-                    "max_output_tokens": 2048,
-                },
-            )
+            # Add JSON format instructions
+            json_format_prompt = self._get_json_format_prompt(response_schema, expect_list)
 
-            # Parse the structured response
-            if hasattr(response, "parsed") and response.parsed:
-                result = response.parsed
-                if expect_list and hasattr(result, "payments"):
-                    return result.payments
-                return result
+            # If we have PDFs, process them with batch processing
+            if pdf_paths:
+                all_results = []
+
+                for pdf_path in pdf_paths:
+                    pdf_results = self._process_pdf_in_batches(
+                        pdf_path, prompt, json_format_prompt, model, response_model, expect_list
+                    )
+                    all_results.extend(pdf_results)
+
+                # Add any regular images
+                if regular_images:
+                    content_parts.extend(regular_images)
+                    content_parts.insert(1, json_format_prompt)
+
+                    response = model.generate_content(
+                        contents=content_parts,
+                        generation_config=genai.GenerationConfig(
+                            temperature=0.1,
+                            max_output_tokens=2048,
+                        ),
+                    )
+
+                    image_results = self._parse_text_response(response.text, response_model, expect_list)
+                    if isinstance(image_results, list):
+                        all_results.extend(image_results)
+                    else:
+                        all_results.append(image_results)
+
+                return all_results if expect_list else all_results[0] if all_results else None
+
             else:
-                # Fallback to text parsing if structured parsing fails
-                logger.warning("Structured parsing failed, falling back to text parsing")
+                # No PDFs, just process regular images
+                content_parts.extend(regular_images)
+                content_parts.insert(1, json_format_prompt)
+
+                response = model.generate_content(
+                    contents=content_parts,
+                    generation_config=genai.GenerationConfig(
+                        temperature=0.1,
+                        max_output_tokens=2048,
+                    ),
+                )
+
                 return self._parse_text_response(response.text, response_model, expect_list)
 
         except Exception as e:
             logger.error(f"Error in structured extraction: {str(e)}")
-            raise GeminiAPIException(f"Failed to extract payment data: {str(e)}")
+            raise GeminiAPIException(
+                message=f"Failed to extract payment data: {str(e)}", status_code=None, response_text=str(e)
+            )
         finally:
-            # Clean up uploaded files
-            for uploaded_file in uploaded_files:
-                try:
-                    uploaded_file.delete()
-                except Exception as e:
-                    logger.warning(f"Failed to delete uploaded file: {e}")
+            # No cleanup needed for PIL images
+            pass
+
+    def _get_json_format_prompt(self, response_schema: Type[BaseModel], expect_list: bool) -> str:
+        """Generate JSON format instructions based on the Pydantic model."""
+        if expect_list:
+            return """
+IMPORTANT: Return your response as a JSON object with a 'payments' array containing payment records.
+Each payment record must have these fields:
+- payment_info: Object with these REQUIRED fields:
+  - payment_method: "handwritten_check", "printed_check", or "online_payment"
+  - check_no: Check number (for checks) or null
+  - payment_ref: Payment reference (for online) or null
+  - amount: Numeric amount
+  - payment_date: Date in YYYY-MM-DD format or null
+  - check_date: Date on check in YYYY-MM-DD format or null
+  - deposit_date: Deposit date in YYYY-MM-DD format or null
+  - postmark_date: Postmark date in YYYY-MM-DD format or null
+  - deposit_method: "ATM Deposit", "Mobile Deposit", etc. or null
+  - memo: Memo text or null
+- payer_info: Object with EITHER aliases (array of name variations) OR organization_name
+  - For individuals: aliases must be a non-empty array like ["John Smith", "Smith, John"]
+  - For organizations: organization_name must be provided, aliases can be null
+- contact_info: Object with address_line_1, city, state, zip, email, phone (all can be null)
+
+Example format:
+{
+  "payments": [
+    {
+      "payment_info": {
+        "payment_method": "handwritten_check",
+        "check_no": "1234",
+        "amount": 100.00,
+        "payment_date": "2025-05-30",
+        "check_date": "2025-05-30",
+        "deposit_date": "2025-05-30",
+        "postmark_date": null,
+        "deposit_method": "ATM Deposit",
+        "memo": null
+      },
+      "payer_info": {
+        "aliases": ["John Smith", "Smith, John"],
+        "organization_name": null
+      },
+      "contact_info": {
+        "address_line_1": "123 Main St",
+        "city": "Springfield",
+        "state": "IL",
+        "zip": "62701"
+      }
+    }
+  ]
+}
+"""
+        else:
+            return """
+IMPORTANT: Return your response as a JSON object with payment information.
+The response must have these fields:
+- payment_info: Object with these REQUIRED fields:
+  - payment_method: "handwritten_check", "printed_check", or "online_payment"
+  - check_no: Check number (for checks) or null
+  - payment_ref: Payment reference (for online) or null
+  - amount: Numeric amount
+  - payment_date: Date in YYYY-MM-DD format or null
+  - check_date: Date on check in YYYY-MM-DD format or null
+  - deposit_date: Deposit date in YYYY-MM-DD format or null
+  - postmark_date: Postmark date in YYYY-MM-DD format or null
+  - deposit_method: "ATM Deposit", "Mobile Deposit", etc. or null
+  - memo: Memo text or null
+- payer_info: Object with EITHER aliases (array of name variations) OR organization_name
+  - For individuals: aliases must be a non-empty array like ["John Smith", "Smith, John"]
+  - For organizations: organization_name must be provided, aliases can be null
+- contact_info: Object with address_line_1, city, state, zip, email, phone (all can be null)
+
+Example format:
+{
+  "payment_info": {
+    "payment_method": "handwritten_check",
+    "check_no": "1234",
+    "payment_ref": null,
+    "amount": 100.00,
+    "payment_date": "2025-05-30",
+    "check_date": "2025-05-30",
+    "deposit_date": "2025-05-30",
+    "postmark_date": null,
+    "deposit_method": "ATM Deposit",
+    "memo": null
+  },
+  "payer_info": {
+    "aliases": ["John Smith", "Smith, John"],
+    "organization_name": null
+  },
+  "contact_info": {
+    "address_line_1": "123 Main St",
+    "city": "Springfield",
+    "state": "IL",
+    "zip": "62701"
+  }
+}
+"""
 
     def _parse_text_response(
         self, text: str, response_model: Type[BaseModel], expect_list: bool
@@ -188,8 +318,26 @@ class GeminiStructuredService:
             # Extract JSON from response
             json_text = self._extract_json_from_text(text)
 
+            # Log what we extracted for debugging
+            logger.info(f"Parsing JSON with {len(json_text) if isinstance(json_text, list) else 1} items")
+            if not isinstance(json_text, list):
+                logger.debug(
+                    f"First item: {json.dumps(json_text if not isinstance(json_text, dict) or 'payments' not in json_text else json_text.get('payments', [{}])[0], indent=2)[:500]}"
+                )
+
             if expect_list:
-                if isinstance(json_text, list):
+                if isinstance(json_text, dict) and "payments" in json_text:
+                    # Wrapped format with payments array
+                    results = []
+                    for item in json_text["payments"]:
+                        try:
+                            results.append(response_model(**item))
+                        except Exception as e:
+                            logger.error(f"Failed to parse payment item: {e}")
+                            logger.error(f"Item data: {json.dumps(item, indent=2)}")
+                            raise
+                    return results
+                elif isinstance(json_text, list):
                     return [response_model(**item) for item in json_text]
                 else:
                     # Single item, wrap in list
@@ -203,7 +351,165 @@ class GeminiStructuredService:
 
         except Exception as e:
             logger.error(f"Failed to parse text response: {e}")
-            raise GeminiAPIException(f"Failed to parse response: {str(e)}")
+            # Log the problematic JSON for debugging
+            if "json_text" in locals():
+                logger.error(f"Problematic JSON: {json.dumps(json_text, indent=2)[:1000]}")
+            raise GeminiAPIException(
+                message=f"Failed to parse response: {str(e)}",
+                status_code=None,
+                response_text=text if "text" in locals() else str(e),
+            )
+
+    def _process_pdf_in_batches(
+        self,
+        pdf_path: str,
+        base_prompt: str,
+        json_format_prompt: str,
+        model,
+        response_model: Type[BaseModel],
+        expect_list: bool,
+    ) -> List[BaseModel]:
+        """Process PDF in batches like the legacy code does.
+
+        Args:
+            pdf_path: Path to PDF file
+            base_prompt: Base extraction prompt
+            json_format_prompt: JSON format instructions
+            model: Gemini model instance
+            response_model: Pydantic model for parsing
+            expect_list: Whether to expect multiple records
+
+        Returns:
+            List of extracted payment records
+        """
+        import fitz  # PyMuPDF
+        import PyPDF2
+
+        all_results = []
+
+        try:
+            # Open PDF with PyMuPDF for images
+            pdf_doc = fitz.open(pdf_path)
+
+            # Try to open with PyPDF2 for text extraction
+            pdf_reader = None
+            try:
+                pdf_reader = PyPDF2.PdfReader(pdf_path)
+            except Exception as e:
+                logger.warning(f"Could not open PDF for text extraction: {e}")
+
+            # Process PDF in batches
+            logger.info(f"PDF has {len(pdf_doc)} pages - processing in batches")
+
+            # Maximum pages per batch (same as legacy)
+            BATCH_SIZE = 15
+
+            # Calculate number of batches
+            num_batches = (len(pdf_doc) + BATCH_SIZE - 1) // BATCH_SIZE
+
+            # Process each batch
+            for batch_num in range(num_batches):
+                batch_start = batch_num * BATCH_SIZE
+                batch_end = min(batch_start + BATCH_SIZE, len(pdf_doc))
+
+                logger.info(f"Processing batch {batch_num + 1} of {num_batches} (pages {batch_start + 1}-{batch_end})")
+
+                # Extract text from this batch
+                batch_text = ""
+                if pdf_reader:
+                    try:
+                        for page_num in range(batch_start, batch_end):
+                            if page_num < len(pdf_reader.pages):
+                                page_text = pdf_reader.pages[page_num].extract_text()
+                                if page_text:
+                                    batch_text += f"\n--- Page {page_num + 1} ---\n{page_text}\n"
+                    except Exception as e:
+                        logger.warning(f"Error extracting text from batch: {e}")
+
+                # Build prompt for this batch
+                batch_prompt = base_prompt
+
+                # Add text context if available
+                if batch_text.strip():
+                    logger.info(f"Batch {batch_num + 1} contains extractable text - adding as context")
+                    # Add PDF text context
+                    batch_prompt += f"\n\nPDF Text Content:\n{batch_text}"
+
+                # Add batch info
+                batch_info = f"\nProcessing pages {batch_start + 1} to {batch_end} of {len(pdf_doc)}."
+
+                # Create content parts
+                content_parts = [batch_prompt + batch_info, json_format_prompt]
+
+                # Convert pages to images and add to content
+                for page_num in range(batch_start, batch_end):
+                    page = pdf_doc[page_num]
+
+                    # Convert page to image with good resolution
+                    pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))  # 1.5x zoom
+                    img_data = pix.tobytes("png")
+
+                    # Load as PIL image
+                    image = Image.open(io.BytesIO(img_data))
+                    content_parts.append(image)
+
+                # Call Gemini API for this batch
+                try:
+                    self._check_rate_limit()
+
+                    logger.info(f"Sending batch of {batch_end - batch_start} pages to Gemini")
+
+                    batch_response = model.generate_content(
+                        contents=content_parts,
+                        generation_config=genai.GenerationConfig(
+                            temperature=0.1,
+                            max_output_tokens=2048,
+                        ),
+                    )
+
+                    # Parse response for this batch
+                    if batch_response.text:
+                        logger.info(f"Received response for batch {batch_num + 1}")
+
+                        try:
+                            batch_results = self._parse_text_response(
+                                batch_response.text, response_model, True  # Always expect list for batches
+                            )
+
+                            if isinstance(batch_results, list):
+                                logger.info(f"Batch {batch_num + 1} extracted {len(batch_results)} payments")
+                                all_results.extend(batch_results)
+                            else:
+                                all_results.append(batch_results)
+
+                        except Exception as e:
+                            logger.error(f"Error parsing batch {batch_num + 1} response: {e}")
+
+                except Exception as e:
+                    logger.error(f"Error processing batch {batch_num + 1}: {e}")
+
+            pdf_doc.close()
+            logger.info(f"Successfully extracted {len(all_results)} payments from PDF")
+
+        except Exception as e:
+            logger.error(f"Error processing PDF: {e}")
+            raise
+
+        return all_results
+
+    def verify_customer_match(self, extracted_donor: Dict[str, Any], qbo_customer: Dict[str, Any]) -> Dict[str, Any]:
+        """Verify if the QuickBooks customer is a match for the extracted donor data.
+
+        Args:
+            extracted_donor: Dictionary of extracted donor data
+            qbo_customer: Dictionary of QuickBooks customer data
+
+        Returns:
+            Dictionary containing verification results
+        """
+        # TODO: Implement structured customer verification
+        # For now, return a simple match
+        return {"is_match": True, "confidence": 0.95, "enhanced_data": extracted_donor}
 
     def _extract_json_from_text(self, text: str) -> Union[Dict, List]:
         """Extract JSON from text response."""

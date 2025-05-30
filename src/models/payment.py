@@ -36,7 +36,7 @@ class PaymentInfo(BaseModel):
     check_no: Optional[str] = Field(None, description="Check number (required for check payments)")
     payment_ref: Optional[str] = Field(None, description="Payment reference number (required for online payments)")
     amount: float = Field(gt=0, description="Payment amount in dollars")
-    payment_date: str = Field(description="Date payment was made (format: YYYY-MM-DD)")
+    payment_date: Optional[str] = Field(None, description="Date payment was made (format: YYYY-MM-DD)")
     check_date: Optional[str] = Field(None, description="Date written on check (format: YYYY-MM-DD)")
     postmark_date: Optional[str] = Field(None, description="Postmark date from envelope (format: YYYY-MM-DD)")
     deposit_date: Optional[str] = Field(None, description="Date deposited to bank (format: YYYY-MM-DD)")
@@ -87,10 +87,15 @@ class PayerInfo(BaseModel):
     salutation: Optional[str] = Field(None, description="Title/salutation (Mr., Ms., Dr., etc.)")
     organization_name: Optional[str] = Field(None, description="Organization name if applicable")
 
-    @validator("aliases")
+    @validator("organization_name", always=True)
     def validate_payer_type(cls, v, values):
         """Ensure either aliases or organization_name is provided."""
-        if not v and not values.get("organization_name"):
+        # Check if we have any payer info at all
+        aliases = values.get("aliases")
+        has_aliases = aliases is not None and len(aliases) > 0
+        has_org = v is not None and v.strip() if isinstance(v, str) else False
+
+        if not has_aliases and not has_org:
             raise ValueError("Either aliases (for individuals) or organization_name must be provided")
         return v
 

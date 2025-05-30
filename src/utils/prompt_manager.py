@@ -16,13 +16,14 @@ class PromptManager:
         self.prompt_dir = prompt_dir
         self.prompt_cache: Dict[str, str] = {}  # Cache for loaded prompts
 
-    def get_prompt(self, prompt_name: str, placeholders: Dict[str, str] = None) -> str:
+    def get_prompt(self, prompt_name: str, placeholders: Dict[str, str] = None, default_prompt: str = None) -> str:
         """Load a prompt from file with caching and replace placeholders.
 
         Args:
             prompt_name: Name of the prompt file (without directory or .md extension)
             placeholders: Optional dictionary of placeholders to replace in the prompt
                           Format: {'placeholder_name': 'replacement_value'}
+            default_prompt: Optional default prompt to use if file not found
 
         Returns:
             The prompt text with placeholders replaced
@@ -32,6 +33,10 @@ class PromptManager:
 
         # Get the prompt text
         prompt_text = self._load_prompt(prompt_path)
+
+        # Use default if prompt not found
+        if not prompt_text and default_prompt:
+            prompt_text = default_prompt
 
         # Replace placeholders if provided
         if placeholders and prompt_text:

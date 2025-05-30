@@ -87,7 +87,7 @@ class GeminiAPIException(ExternalAPIException):
         if not user_message:
             if status_code == 429:
                 user_message = "AI processing limit reached. Please wait a moment and try again."
-            elif status_code >= 500:
+            elif status_code and status_code >= 500:
                 user_message = "AI service is temporarily unavailable. Please try again later."
             else:
                 user_message = "Error processing with AI. Please try again."

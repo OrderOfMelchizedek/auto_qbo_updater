@@ -328,25 +328,15 @@ def upload_files():
 
             log_progress(f"Found {len(unique_donations)} unique donations", 85)
 
-            # Apply customer matching if QBO is authenticated
-            if qbo_authenticated and qbo_service:
-                log_progress("Matching customers in QuickBooks...", 90)
-                matched_count = 0
-
-                for donation in unique_donations:
-                    if donation.get("Donor Name"):
-                        try:
-                            customer = qbo_service.find_customer(donation["Donor Name"])
-                            if customer:
-                                donation["qboCustomerId"] = customer.get("Id")
-                                donation["qbCustomerStatus"] = "Found"
-                                donation["matchMethod"] = "Automatic"
-                                donation["matchConfidence"] = "High"
-                                matched_count += 1
-                        except Exception as e:
-                            logger.error(f"Error matching customer: {e}")
-
-                log_progress(f"Matched {matched_count} customers", 95)
+            # Customer matching is now handled by EnhancedFileProcessor during processing
+            # Count how many were matched
+            matched_count = sum(
+                1
+                for d in unique_donations
+                if d.get("qbCustomerStatus")
+                in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview", "Found"]
+            )
+            log_progress(f"Customer matching complete: {matched_count} matched", 95)
 
         # Log final memory usage
         memory_monitor.log_memory("upload_complete")
