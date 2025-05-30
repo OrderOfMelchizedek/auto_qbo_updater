@@ -86,6 +86,15 @@ class QBOService:
         """Set token expiration time."""
         self.auth_service.token_expires_at = value
 
+    @property
+    def environment(self):
+        """Get the QBO environment setting.
+
+        Returns:
+            str: Either 'sandbox' or 'production'
+        """
+        return self.auth_service.environment
+
     def clear_tokens(self):
         """Clear all stored tokens."""
         return self.auth_service.clear_tokens()

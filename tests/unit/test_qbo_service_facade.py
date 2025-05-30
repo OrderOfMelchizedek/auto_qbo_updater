@@ -75,6 +75,12 @@ class TestQBOServiceFacade:
         assert qbo_service.auth_service.token_expires_at == 1234567890
         assert qbo_service.token_expires_at == 1234567890
 
+    def test_environment_property(self, qbo_service):
+        """Test environment property delegation."""
+        # Environment is read-only and set during initialization
+        assert qbo_service.environment == "sandbox"
+        assert qbo_service.auth_service.environment == "sandbox"
+
     # Auth Method Tests
     def test_clear_tokens_delegation(self, qbo_service):
         """Test clear_tokens method delegation."""
