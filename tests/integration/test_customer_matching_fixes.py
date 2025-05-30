@@ -71,7 +71,9 @@ class TestCustomerMatchingFixes:
                 mock_task.delay.return_value = MagicMock(id="task-123")
 
                 # Create test file
-                data = {"files": [("files", ("test.jpg", b"test", "image/jpeg"))]}
+                import io
+
+                data = {"files": (io.BytesIO(b"test"), "test.jpg")}
                 response = client.post("/upload-async", data=data, content_type="multipart/form-data")
 
                 assert response.status_code == 200
@@ -109,7 +111,7 @@ class TestCustomerMatchingFixes:
                 {
                     "Donor Name": "John Doe",
                     "Gift Amount": "100.00",
-                    "Check #": "1234",
+                    "Check # (if applicable)": "1234",
                     "Gift Date": "01/01/2025",
                     "Address - Line 1": "123 Main St",
                     "City": "Anytown",
