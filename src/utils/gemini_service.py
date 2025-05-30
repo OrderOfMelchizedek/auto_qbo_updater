@@ -3,9 +3,7 @@ import io
 import json
 import logging
 import os
-import threading
 import time
-from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
 
 import google.generativeai as genai
@@ -14,6 +12,7 @@ from PIL import Image
 # Import custom exceptions and retry logic
 from .exceptions import GeminiAPIException, RetryableException
 from .prompt_manager import PromptManager
+from .rate_limiter import RateLimiter, RateLimitExceededException
 from .retry import retry_on_failure
 
 # Configure logger
@@ -40,10 +39,11 @@ class GeminiService:
         self.prompt_manager = PromptManager(prompt_dir="docs/prompts_archive")
         print(f"Initialized Gemini service with model: {self.model_name}")
 
-        # Rate limiting state
-        self._minute_calls: List[datetime] = []
-        self._hour_calls: List[datetime] = []
-        self._rate_limit_lock = threading.Lock()
+        # Initialize rate limiter
+        self._rate_limiter = RateLimiter(
+            per_minute_limit=self.RATE_LIMIT_PER_MINUTE,
+            per_hour_limit=self.RATE_LIMIT_PER_HOUR,
+        )
 
     def _check_rate_limit(self):
         """Check and enforce rate limits for Gemini API calls.
@@ -51,36 +51,11 @@ class GeminiService:
         Raises:
             GeminiAPIException: If rate limit would be exceeded
         """
-        with self._rate_limit_lock:
-            now = datetime.now()
-
-            # Clean up old entries
-            minute_ago = now - timedelta(minutes=1)
-            hour_ago = now - timedelta(hours=1)
-
-            self._minute_calls = [t for t in self._minute_calls if t > minute_ago]
-            self._hour_calls = [t for t in self._hour_calls if t > hour_ago]
-
-            # Check limits
-            if len(self._minute_calls) >= self.RATE_LIMIT_PER_MINUTE:
-                wait_time = (self._minute_calls[0] - minute_ago).total_seconds()
-                raise GeminiAPIException(
-                    f"Rate limit exceeded: {self.RATE_LIMIT_PER_MINUTE} calls per minute. "
-                    f"Please wait {wait_time:.1f} seconds.",
-                    is_user_error=True,
-                )
-
-            if len(self._hour_calls) >= self.RATE_LIMIT_PER_HOUR:
-                wait_time = (self._hour_calls[0] - hour_ago).total_seconds() / 60
-                raise GeminiAPIException(
-                    f"Rate limit exceeded: {self.RATE_LIMIT_PER_HOUR} calls per hour. "
-                    f"Please wait {wait_time:.1f} minutes.",
-                    is_user_error=True,
-                )
-
-            # Record this call
-            self._minute_calls.append(now)
-            self._hour_calls.append(now)
+        try:
+            self._rate_limiter.check_and_record()
+        except RateLimitExceededException as e:
+            # Convert to GeminiAPIException for backward compatibility
+            raise GeminiAPIException(str(e), is_user_error=True)
 
     def _extract_json_from_text(self, text: str) -> Any:
         """Extract JSON from text, handling various response formats.
