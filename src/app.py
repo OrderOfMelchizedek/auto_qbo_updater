@@ -51,6 +51,7 @@ from utils.exceptions import (
     ValidationException,
 )
 from utils.file_processor import FileProcessor
+from utils.gemini_adapter import create_gemini_service
 from utils.gemini_service import GeminiService
 from utils.memory_monitor import memory_monitor
 from utils.progress_logger import init_progress_logger, log_progress, progress_logger
@@ -555,7 +556,8 @@ if redis_url:
         redis_client = None
 
 # Initialize services
-gemini_service = GeminiService(
+# Use adapter for backward compatibility with structured extraction
+gemini_service = create_gemini_service(
     api_key=os.getenv("GEMINI_API_KEY"),
     model_name=gemini_model,  # Use the command-line specified model
 )

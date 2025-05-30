@@ -8,6 +8,7 @@ import PyPDF2
 from PIL import Image
 
 from .batch_processor import BatchProcessor
+from .gemini_adapter import GeminiAdapter
 from .gemini_service import GeminiService
 from .memory_monitor import memory_monitor
 from .progress_logger import ProgressLogger

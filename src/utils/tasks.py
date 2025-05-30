@@ -18,6 +18,7 @@ from werkzeug.utils import secure_filename
 from .celery_app import celery_app
 from .exceptions import FileProcessingException, FOMQBOException, ValidationException
 from .file_processor import FileProcessor
+from .gemini_adapter import create_gemini_service
 from .gemini_service import GeminiService
 from .memory_monitor import memory_monitor
 from .progress_logger import log_progress, progress_logger
@@ -90,7 +91,7 @@ def process_files_task(
         if not gemini_api_key:
             raise ValueError("GEMINI_API_KEY environment variable not set")
 
-        gemini_service = GeminiService(
+        gemini_service = create_gemini_service(
             api_key=gemini_api_key, model_name=gemini_model or "gemini-2.5-flash-preview-04-17"
         )
         # Get QBO credentials from environment

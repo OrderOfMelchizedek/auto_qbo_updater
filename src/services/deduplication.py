@@ -129,10 +129,14 @@ class DeduplicationService:
             Unique key string or None if insufficient data
         """
         check_no = normalize_check_number(donation.get("Check No.", ""))
+        payment_ref = donation.get("Payment Ref", "")  # For online payments
         amount = normalize_amount(donation.get("Gift Amount", ""))
 
-        # Create unique key
-        if check_no and amount:
+        # Create unique key based on payment type
+        if payment_ref and amount:
+            # Online donations use payment reference + amount as key
+            return f"ONLINE_{payment_ref}_{amount}"
+        elif check_no and amount:
             # Check donations use check number + amount as key
             return f"CHECK_{check_no}_{amount}"
         else:
