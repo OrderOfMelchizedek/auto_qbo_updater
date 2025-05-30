@@ -444,3 +444,30 @@ class QBOCustomerService(QBOBaseService):
         except Exception as e:
             logger.error(f"Error getting all customers: {str(e)}")
             return []
+
+    def get_customer_by_id(self, customer_id: str) -> Optional[Dict[str, Any]]:
+        """Get a customer by their QuickBooks ID.
+
+        Args:
+            customer_id: The QuickBooks customer ID
+
+        Returns:
+            Customer data if found, None otherwise
+        """
+        if not self.auth_service.is_token_valid():
+            logger.warning("Not authenticated with QBO")
+            return None
+
+        try:
+            response = self._make_qbo_request("GET", f"customer/{customer_id}")
+            customer = response.get("Customer")
+            if customer:
+                logger.info(f"Successfully retrieved customer: {customer.get('DisplayName')} (ID: {customer_id})")
+            return customer
+
+        except Exception as e:
+            logger.error(f"Exception in get_customer_by_id: {str(e)}")
+            import traceback
+
+            traceback.print_exc()
+            return None

@@ -144,6 +144,10 @@ def upload_files_async():
         qbo_config = None
         if qbo_authenticated:
             qbo_service = current_app.qbo_service
+            # Reload tokens from Redis if configured
+            if qbo_service.auth_service.redis_client:
+                qbo_service.auth_service._load_tokens_from_redis()
+
             if qbo_service.access_token and qbo_service.realm_id:
                 qbo_config = {
                     "access_token": qbo_service.access_token,

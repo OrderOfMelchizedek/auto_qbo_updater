@@ -159,6 +159,10 @@ class QBOService:
         """Get all customers."""
         return self.customer_service.get_all_customers(use_cache=use_cache)
 
+    def get_customer_by_id(self, customer_id):
+        """Get a customer by their QuickBooks ID."""
+        return self.customer_service.get_customer_by_id(customer_id)
+
     # Sales receipt delegation methods
     def find_sales_receipt(self, check_no, amount):
         """Find a sales receipt by check number and amount."""
@@ -192,3 +196,7 @@ class QBOService:
     def get_all_payment_methods(self):
         """Get all payment methods."""
         return self.entity_service.get_all_payment_methods()
+
+    def get_company_info(self):
+        """Get company information from QuickBooks."""
+        return self.entity_service.get_company_info()

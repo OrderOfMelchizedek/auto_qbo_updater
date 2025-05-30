@@ -584,6 +584,134 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/save", methods=["POST"])
+def save_changes():
+    """Save current donation data to session."""
+    try:
+        data = request.json
+
+        if data and "donations" in data:
+            session["donations"] = data["donations"]
+            session.modified = True
+
+            # Log the save event
+            log_audit_event(
+                "donations_saved",
+                user_id=session.get("session_id"),
+                details={"donation_count": len(data["donations"])},
+                request_ip=request.remote_addr,
+            )
+
+            return jsonify({"success": True})
+
+        return jsonify({"success": False, "message": "No donation data provided"}), 400
+
+    except Exception as e:
+        logger.error(f"Error saving donations: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/report/generate", methods=["GET"])
+def generate_report():
+    """Generate a donation report."""
+    try:
+        donations = session.get("donations", [])
+
+        if not donations:
+            return jsonify({"success": False, "message": "No donations to report"}), 400
+
+        # Format report similar to the provided examples
+        report_data = []
+        valid_entry_index = 1
+
+        # Current date for the report
+        import pandas as pd
+
+        current_date = pd.Timestamp.now().strftime("%m/%d/%Y")
+
+        for donation in donations:
+            # Skip entries with missing or invalid gift amounts
+            if "Gift Amount" not in donation or not donation["Gift Amount"]:
+                logger.info(f"Skipping donation with missing Gift Amount: {donation.get('Donor Name', 'Unknown')}")
+                continue
+
+            # Skip entries marked as invalid
+            if donation.get("isInvalid", False):
+                logger.info(f"Skipping invalid donation: {donation.get('Donor Name', 'Unknown')}")
+                continue
+
+            try:
+                # Format the amount
+                amount = float(str(donation["Gift Amount"]).replace("$", "").replace(",", ""))
+
+                # Format the entry
+                report_entry = {
+                    "Entry": str(valid_entry_index),
+                    "Check #": donation.get("Check # (if applicable)", ""),
+                    "Donor Name": donation.get("Donor Name", ""),
+                    "Gift Amount": f"${amount:.2f}",
+                    "Notes": donation.get("Notes", ""),
+                    "Fund": donation.get("Fund", ""),
+                    "Gift Date": donation.get("Gift Date", ""),
+                    "Gift Type": donation.get("Gift Type", ""),
+                    "On Behalf Of": donation.get("On Behalf Of", ""),
+                    "QB Customer ID": donation.get("qboCustomerId", ""),
+                    "QB Customer Status": donation.get("qbCustomerStatus", "Not Matched"),
+                }
+
+                report_data.append(report_entry)
+                valid_entry_index += 1
+
+            except (ValueError, TypeError) as e:
+                logger.error(f"Error processing donation amount: {e}")
+                continue
+
+        # Calculate total amount
+        total_amount = sum(float(d["Gift Amount"].replace("$", "").replace(",", "")) for d in report_data)
+
+        # Format entries for frontend expectations
+        formatted_entries = []
+        for idx, entry in enumerate(report_data, 1):
+            donation = next((d for d in donations if d.get("Donor Name") == entry["Donor Name"]), {})
+            formatted_entry = {
+                "index": idx,
+                "donor_name": entry["Donor Name"],
+                "address": f"{donation.get('Address - Line 1', '')} {donation.get('City', '')} {donation.get('State', '')} {donation.get('ZIP', '')}".strip(),
+                "amount": float(entry["Gift Amount"].replace("$", "").replace(",", "")),
+                "date": entry["Gift Date"],
+                "check_no": entry["Check #"],
+                "memo": donation.get("Memo", ""),
+                # Additional fields for CSV export
+                "first_name": donation.get("First Name", ""),
+                "last_name": donation.get("Last Name", ""),
+                "full_name": donation.get("Full Name", ""),
+                "organization_name": donation.get("Organization Name", ""),
+                "address_line_1": donation.get("Address - Line 1", ""),
+                "city": donation.get("City", ""),
+                "state": donation.get("State", ""),
+                "zip": donation.get("ZIP", ""),
+                "deposit_date": donation.get("Deposit Date", ""),
+                "deposit_method": donation.get("Deposit Method", ""),
+                "customer_lookup": donation.get("customerLookup", ""),
+            }
+            formatted_entries.append(formatted_entry)
+
+        # Create the report structure matching frontend expectations
+        report = {
+            "success": True,
+            "report": {
+                "total": total_amount,
+                "entries": formatted_entries,
+            },
+        }
+
+        return jsonify(report)
+
+    except Exception as e:
+        logger.error(f"Error generating report: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
 # All other routes have been moved to blueprints in the routes module
 
 if __name__ == "__main__":

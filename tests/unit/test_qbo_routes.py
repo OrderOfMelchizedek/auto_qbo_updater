@@ -292,6 +292,7 @@ class TestQBORoutes:
         updated_customer = sample_customer.copy()
         updated_customer["Notes"] = "Updated"
         mock_qbo_service = Mock()
+        mock_qbo_service.get_customer_by_id.return_value = {"Id": "customer-123", "SyncToken": "1"}
         mock_qbo_service.update_customer.return_value = updated_customer
         app.qbo_service = mock_qbo_service
 
@@ -313,8 +314,12 @@ class TestQBORoutes:
         data = json.loads(response.data)
         assert data["success"] is True
 
-        # Verify update was called
-        mock_qbo_service.update_customer.assert_called_once_with("customer-123", update_data)
+        # Verify get_customer_by_id was called first
+        mock_qbo_service.get_customer_by_id.assert_called_once_with("customer-123")
+
+        # Verify update was called with the merged data
+        expected_update_data = {"Id": "customer-123", "SyncToken": "1", "Notes": "Updated from donation"}
+        mock_qbo_service.update_customer.assert_called_once_with(expected_update_data)
 
         # Verify donation was updated
         with client.session_transaction() as sess:

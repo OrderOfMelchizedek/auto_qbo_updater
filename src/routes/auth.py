@@ -22,6 +22,10 @@ def auth_status():
         qbo_service = get_qbo_service()
         is_authenticated = session.get("qbo_authenticated", False)
 
+        # Reload tokens from Redis if we think we're authenticated
+        if is_authenticated and qbo_service.auth_service.redis_client:
+            qbo_service.auth_service._load_tokens_from_redis()
+
         # Additional validation - check if we actually have valid tokens
         if is_authenticated and not qbo_service.access_token:
             # Session says authenticated but no valid token

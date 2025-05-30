@@ -14,7 +14,13 @@ qbo_bp = Blueprint("qbo", __name__, url_prefix="/qbo")
 
 def get_qbo_service():
     """Get QBO service instance from app context."""
-    return current_app.qbo_service
+    qbo_service = current_app.qbo_service
+
+    # Reload tokens from Redis if available
+    if qbo_service.auth_service.redis_client:
+        qbo_service.auth_service._load_tokens_from_redis()
+
+    return qbo_service
 
 
 @qbo_bp.route("/customer/<donation_id>", methods=["GET"])
@@ -170,10 +176,7 @@ def manual_match_customer(donation_id):
         donation["qbCustomerStatus"] = "Matched"
         donation["matchMethod"] = "Manual"
         donation["matchConfidence"] = "Manual"
-        donation["customerLookup"] = {
-            "displayName": customer.get("DisplayName"),
-            "email": customer.get("PrimaryEmailAddr", {}).get("Address"),
-        }
+        donation["customerLookup"] = customer.get("DisplayName", "")
 
         # Update session
         session["donations"] = donations
@@ -321,8 +324,20 @@ def update_qbo_customer(donation_id):
 
         qbo_service = get_qbo_service()
 
+        # Get existing customer first to get SyncToken
+        existing_customer = qbo_service.get_customer_by_id(customer_id)
+        if not existing_customer:
+            return jsonify({"error": "Customer not found in QuickBooks"}), 404
+
+        # Merge the update data with existing customer data
+        customer_update_data = {
+            "Id": customer_id,
+            "SyncToken": existing_customer.get("SyncToken"),
+            **data,  # Merge in the update fields
+        }
+
         # Update customer in QuickBooks
-        updated_customer = qbo_service.update_customer(customer_id, data)
+        updated_customer = qbo_service.update_customer(customer_update_data)
 
         if updated_customer:
             # Update donation status

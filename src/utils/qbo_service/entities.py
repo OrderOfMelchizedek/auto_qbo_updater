@@ -319,3 +319,27 @@ class QBOEntityService(QBOBaseService):
 
             traceback.print_exc()
             return []
+
+    def get_company_info(self) -> Optional[Dict[str, Any]]:
+        """Get company information from QuickBooks.
+
+        Returns:
+            Company info dictionary if successful, None otherwise
+        """
+        if not self.auth_service.is_token_valid():
+            logger.warning("Not authenticated with QBO")
+            return None
+
+        try:
+            response = self._make_qbo_request("GET", "companyinfo/1")
+            company_info = response.get("CompanyInfo")
+            if company_info:
+                logger.info(f"Successfully retrieved company info: {company_info.get('CompanyName')}")
+            return company_info
+
+        except Exception as e:
+            logger.error(f"Exception in get_company_info: {str(e)}")
+            import traceback
+
+            traceback.print_exc()
+            return None

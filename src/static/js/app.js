@@ -241,6 +241,20 @@ function renderDonationTable() {
                             return;
                         }
 
+                        // Check if customers are loaded, if not, fetch them
+                        if (!qboCustomers || qboCustomers.length === 0) {
+                            // Show loading state
+                            suggestions.innerHTML = '<div style="padding: 8px 12px; color: #666;">Loading customers...</div>';
+                            suggestions.style.display = 'block';
+
+                            // Fetch customers
+                            fetchQBOCustomers().then(() => {
+                                // Re-run the search after customers are loaded
+                                showSuggestions(searchTerm);
+                            });
+                            return;
+                        }
+
                         const filtered = qboCustomers.filter(customer =>
                             customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             customer.address.toLowerCase().includes(searchTerm.toLowerCase())
@@ -2947,7 +2961,7 @@ function manualMatchCustomerFromModal(customerId) {
                 if (donation) {
                     donation.qbCustomerStatus = 'Matched';
                     donation.qboCustomerId = data.customer.id;
-                    donation.customerLookup = data.customer.name;
+                    donation.customerLookup = data.customer.displayName || data.customer.name;
                     donation.matchMethod = 'manual';
                 }
 
