@@ -94,9 +94,12 @@ class QBOService:
         """Generate OAuth authorization URL."""
         return self.auth_service.get_authorization_url()
 
-    def get_tokens(self, authorization_code):
+    def get_tokens(self, authorization_code, realm_id=None):
         """Exchange authorization code for tokens."""
-        return self.auth_service.get_tokens(authorization_code)
+        # For backward compatibility, if realm_id is not provided, try to get it from the auth_service
+        if realm_id is None:
+            realm_id = self.auth_service.realm_id
+        return self.auth_service.get_tokens(authorization_code, realm_id)
 
     def refresh_access_token(self):
         """Refresh the access token."""
@@ -145,7 +148,7 @@ class QBOService:
 
     def get_all_customers(self, use_cache=True):
         """Get all customers."""
-        return self.customer_service.get_all_customers(use_cache)
+        return self.customer_service.get_all_customers(use_cache=use_cache)
 
     # Sales receipt delegation methods
     def find_sales_receipt(self, check_no, amount):
