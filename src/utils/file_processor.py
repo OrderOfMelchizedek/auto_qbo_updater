@@ -343,6 +343,11 @@ class FileProcessor:
                 donation_to_lookups[i] = []
                 continue
 
+            # Skip if already matched
+            if donation.get("qbCustomerStatus") in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]:
+                donation_to_lookups[i] = []
+                continue
+
             # Collect lookup strategies for this donation
             lookups = []
             lookup_strategies = ["customerLookup", "Donor Name", "Email", "Phone"]
@@ -366,6 +371,12 @@ class FileProcessor:
         for i, donation in enumerate(donations_list):
             if not donation.get("Donor Name"):
                 print("Donation missing donor name - skipping customer matching")
+                matched_donations.append(donation)
+                continue
+
+            # Skip if already matched
+            if donation.get("qbCustomerStatus") in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]:
+                print(f"Donation already matched to customer ID {donation.get('qboCustomerId')} - skipping")
                 matched_donations.append(donation)
                 continue
 
@@ -510,6 +521,12 @@ class FileProcessor:
             # Skip if the donation doesn't have the minimum required fields for matching
             if not donation.get("Donor Name"):
                 print("Donation missing donor name - skipping customer matching")
+                matched_donations.append(donation)
+                continue
+
+            # Skip if already matched
+            if donation.get("qbCustomerStatus") in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]:
+                print(f"Donation already matched to customer ID {donation.get('qboCustomerId')} - skipping")
                 matched_donations.append(donation)
                 continue
 
@@ -703,10 +720,22 @@ class FileProcessor:
                 print(f"Deduplicating {len(validated_donations)} donations")
                 deduplicated = self._deduplicate_donations(validated_donations)
 
-                # Match with QBO customers
+                # Match with QBO customers - but only for donations that haven't been matched yet
                 if self.qbo_service and deduplicated:
-                    print(f"Matching {len(deduplicated)} donations with QBO customers")
-                    deduplicated = self.match_donations_with_qbo_customers_batch(deduplicated)
+                    # Count how many are already matched
+                    already_matched = sum(
+                        1
+                        for d in deduplicated
+                        if d.get("qbCustomerStatus")
+                        in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]
+                    )
+                    unmatched_count = len(deduplicated) - already_matched
+
+                    if unmatched_count > 0:
+                        print(
+                            f"Matching {unmatched_count} unmatched donations with QBO customers ({already_matched} already matched)"
+                        )
+                        deduplicated = self.match_donations_with_qbo_customers_batch(deduplicated)
 
                 return deduplicated, all_errors
 

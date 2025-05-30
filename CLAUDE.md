@@ -20,3 +20,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Structure
 This project implements an OAuth2 client for QuickBooks Online API integration, with a focus on processing FOM donation data and creating QBO Sales Receipts.
+
+## Task Management
+The TASKS.md file serves two main purposes:
+- **Planning & Progress:** Document all actions you intend to take and monitor their advancement.
+- **Comprehensive Logging:** Maintain a record of every task you attempt, regardless of whether it was successful or not.
+
+Keep your TASKS.md file up-to-date with clear indicators of task status. Each task entry requires a checkbox `[ ]`.
+- **Successfully Completed Tasks:** Mark with a white checkmark `[:white_check_mark:]`.
+- **Failed Tasks:** Mark with a red 'x' `[:x:]`.
+
+Maintain human readability by judicious use of headings and subheadings.
