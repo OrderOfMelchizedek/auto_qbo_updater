@@ -31,3 +31,6 @@ Keep your TASKS.md file up-to-date with clear indicators of task status. Each ta
 - **Failed Tasks:** Mark with a red 'x' `[:x:]`.
 
 Maintain human readability by judicious use of headings and subheadings.
+
+## Heroku Deployment
+- The app name is `auto-qbo-updater`
