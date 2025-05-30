@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from src.utils.file_processor import FileProcessor, process_files_concurrently
+from src.utils.file_processor import FileProcessor
 
 # Import app components
 from src.utils.gemini_adapter import create_gemini_service
@@ -25,7 +25,6 @@ from src.utils.gemini_adapter import create_gemini_service
 
 def test_both_files_together():
     """Test processing both JPG and PDF files together."""
-
     # Initialize services
     gemini_service = create_gemini_service(
         api_key=os.getenv("GEMINI_API_KEY"), model_name="gemini-2.5-flash-preview-04-17"
@@ -43,9 +42,14 @@ def test_both_files_together():
     print()
 
     try:
-        # Process files concurrently like the app does
-        print("Processing files concurrently...")
-        results = process_files_concurrently(files, gemini_service)
+        # Process files using FileProcessor
+        print("Processing files...")
+        file_processor = FileProcessor(gemini_service)
+        results = []
+        for file_path in files:
+            _, ext = os.path.splitext(file_path)
+            result = file_processor.process(file_path, ext)
+            results.append(result)
 
         print(f"\nProcessed {len(results)} files")
         print("-" * 60)
