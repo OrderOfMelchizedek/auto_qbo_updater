@@ -253,6 +253,11 @@ def process_single_file(file_data, qbo_authenticated):
 
             # Apply customer matching if QBO is authenticated
             if qbo_authenticated and result["donations"]:
+                # Get QBO service instance from app context
+                from flask import current_app
+
+                qbo_service = current_app.qbo_service
+
                 for donation in result["donations"]:
                     if donation.get("Donor Name"):
                         customer = qbo_service.find_customer(donation["Donor Name"])
@@ -261,6 +266,13 @@ def process_single_file(file_data, qbo_authenticated):
                             donation["qbCustomerStatus"] = "Found"
                             donation["matchMethod"] = "Automatic"
                             donation["matchConfidence"] = "High"
+                        else:
+                            donation["qbCustomerStatus"] = "New"
+            else:
+                # If not authenticated, mark all donations as needing customer creation
+                for donation in result["donations"]:
+                    if "qbCustomerStatus" not in donation:
+                        donation["qbCustomerStatus"] = "New"
 
             result["success"] = True
             log_progress(f"Successfully processed {original_filename}: {len(result['donations'])} donations found")

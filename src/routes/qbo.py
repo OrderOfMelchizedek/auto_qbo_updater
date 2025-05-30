@@ -103,6 +103,89 @@ def search_qbo_customer(donation_id):
         return jsonify({"error": str(e)}), 500
 
 
+@qbo_bp.route("/customers/search", methods=["GET"])
+def search_qbo_customers():
+    """Search for QuickBooks customers by name."""
+    try:
+        # Check QBO authentication
+        if not session.get("qbo_authenticated"):
+            return jsonify({"error": "QuickBooks not authenticated"}), 401
+
+        search_term = request.args.get("q", "").strip()
+        if not search_term:
+            return jsonify({"success": True, "customers": [], "count": 0})
+
+        qbo_service = get_qbo_service()
+
+        # Get all customers (with caching)
+        all_customers = qbo_service.get_all_customers()
+
+        # Filter customers by search term
+        matching_customers = []
+        search_lower = search_term.lower()
+
+        for customer in all_customers:
+            display_name = (customer.get("DisplayName") or "").lower()
+            given_name = (customer.get("GivenName") or "").lower()
+            family_name = (customer.get("FamilyName") or "").lower()
+            company_name = (customer.get("CompanyName") or "").lower()
+            email = (customer.get("PrimaryEmailAddr", {}).get("Address") or "").lower()
+
+            # Check if search term matches any field
+            if (
+                search_lower in display_name
+                or search_lower in given_name
+                or search_lower in family_name
+                or search_lower in company_name
+                or search_lower in email
+            ):
+
+                # Build address string
+                address_parts = []
+                bill_addr = customer.get("BillAddr", {})
+                if bill_addr:
+                    if bill_addr.get("Line1"):
+                        address_parts.append(bill_addr.get("Line1"))
+                    if bill_addr.get("City"):
+                        address_parts.append(bill_addr.get("City"))
+                    if bill_addr.get("CountrySubDivisionCode"):
+                        address_parts.append(bill_addr.get("CountrySubDivisionCode"))
+                    if bill_addr.get("PostalCode"):
+                        address_parts.append(bill_addr.get("PostalCode"))
+
+                address = ", ".join(address_parts) if address_parts else "No address on file"
+
+                matching_customers.append(
+                    {
+                        "id": customer.get("Id"),
+                        "name": customer.get("DisplayName"),
+                        "address": address,
+                        "displayName": customer.get("DisplayName"),
+                        "givenName": customer.get("GivenName"),
+                        "familyName": customer.get("FamilyName"),
+                        "companyName": customer.get("CompanyName"),
+                        "email": customer.get("PrimaryEmailAddr", {}).get("Address"),
+                        "active": customer.get("Active", True),
+                    }
+                )
+
+        # Sort by display name
+        matching_customers.sort(key=lambda x: x.get("displayName", "").lower())
+
+        return jsonify(
+            {
+                "success": True,
+                "customers": matching_customers[:20],  # Limit to 20 results
+                "count": len(matching_customers),
+                "total": len(all_customers),
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error searching QBO customers: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @qbo_bp.route("/customers/all", methods=["GET"])
 def get_all_qbo_customers():
     """Get all QuickBooks customers for manual matching."""
@@ -119,9 +202,26 @@ def get_all_qbo_customers():
         # Transform to simpler format for frontend
         customer_list = []
         for customer in customers:
+            # Build address string from billing address
+            address_parts = []
+            bill_addr = customer.get("BillAddr", {})
+            if bill_addr:
+                if bill_addr.get("Line1"):
+                    address_parts.append(bill_addr.get("Line1"))
+                if bill_addr.get("City"):
+                    address_parts.append(bill_addr.get("City"))
+                if bill_addr.get("CountrySubDivisionCode"):
+                    address_parts.append(bill_addr.get("CountrySubDivisionCode"))
+                if bill_addr.get("PostalCode"):
+                    address_parts.append(bill_addr.get("PostalCode"))
+
+            address = ", ".join(address_parts) if address_parts else "No address on file"
+
             customer_list.append(
                 {
                     "id": customer.get("Id"),
+                    "name": customer.get("DisplayName"),  # Frontend expects 'name' not 'displayName'
+                    "address": address,  # Frontend expects 'address' for filtering
                     "displayName": customer.get("DisplayName"),
                     "givenName": customer.get("GivenName"),
                     "familyName": customer.get("FamilyName"),
@@ -286,7 +386,9 @@ def create_qbo_customer(donation_id):
                     "message": "Customer created successfully",
                     "customer": {
                         "id": new_customer.get("Id"),
+                        "Id": new_customer.get("Id"),  # Frontend expects uppercase
                         "displayName": new_customer.get("DisplayName"),
+                        "DisplayName": new_customer.get("DisplayName"),  # Frontend expects uppercase
                         "syncToken": new_customer.get("SyncToken"),
                     },
                 }
