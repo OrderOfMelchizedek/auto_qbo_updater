@@ -130,10 +130,8 @@ class QBOCustomerService(QBOBaseService):
 
             response = self._make_qbo_request("GET", f"query?query={encoded_query}")
             if response.get("QueryResponse", {}).get("Customer"):
-                logger.info(
-                    f"Strategy 1 - Exact match found: {response['QueryResponse']['Customer'][0].get('DisplayName')}"
-                )
-                return response["QueryResponse"]["Customer"][0]
+                customer = response["QueryResponse"]["Customer"][0]
+                return self._cache_and_return_customer(customer, "Strategy 1 - Exact")
 
             # Strategy 2: Match on partial DisplayName (contains)
             query = f"SELECT * FROM Customer WHERE DisplayName LIKE '%{safe_lookup}%'"  # nosec B608
@@ -141,10 +139,8 @@ class QBOCustomerService(QBOBaseService):
 
             response = self._make_qbo_request("GET", f"query?query={encoded_query}")
             if response.get("QueryResponse", {}).get("Customer"):
-                logger.info(
-                    f"Strategy 2 - Partial match found: {response['QueryResponse']['Customer'][0].get('DisplayName')}"
-                )
-                return response["QueryResponse"]["Customer"][0]
+                customer = response["QueryResponse"]["Customer"][0]
+                return self._cache_and_return_customer(customer, "Strategy 2 - Partial")
 
             # Strategy 3: Try matching after reversing the name parts
             # This handles cases like "John Smith" vs "Smith, John"
@@ -159,10 +155,8 @@ class QBOCustomerService(QBOBaseService):
 
                     response = self._make_qbo_request("GET", f"query?query={encoded_query}")
                     if response.get("QueryResponse", {}).get("Customer"):
-                        logger.info(
-                            f"Strategy 3 - Reversed name match found: {response['QueryResponse']['Customer'][0].get('DisplayName')}"
-                        )
-                        return response["QueryResponse"]["Customer"][0]
+                        customer = response["QueryResponse"]["Customer"][0]
+                        return self._cache_and_return_customer(customer, "Strategy 3 - Reversed name")
 
                 # Try comma-separated to space-separated conversion
                 elif "," in safe_lookup:  # Handle "Smith, John" to "John Smith" format
@@ -178,10 +172,8 @@ class QBOCustomerService(QBOBaseService):
 
                         response = self._make_qbo_request("GET", f"query?query={encoded_query}")
                         if response.get("QueryResponse", {}).get("Customer"):
-                            logger.info(
-                                f"Strategy 3b - Comma to space conversion match found: {response['QueryResponse']['Customer'][0].get('DisplayName')}"
-                            )
-                            return response["QueryResponse"]["Customer"][0]
+                            customer = response["QueryResponse"]["Customer"][0]
+                            return self._cache_and_return_customer(customer, "Strategy 3b - Comma to space conversion")
 
             # Strategy 4: Try matching on significant parts
             # Remove common tokens like "and", "&", etc.
@@ -206,10 +198,10 @@ class QBOCustomerService(QBOBaseService):
 
                         response = self._make_qbo_request("GET", f"query?query={encoded_query}")
                         if response.get("QueryResponse", {}).get("Customer"):
-                            logger.info(
-                                f"Strategy 4 - Significant part match found: {response['QueryResponse']['Customer'][0].get('DisplayName')} (matched on '{significant_part}')"
+                            customer = response["QueryResponse"]["Customer"][0]
+                            return self._cache_and_return_customer(
+                                customer, f"Strategy 4 - Significant part ('{significant_part}')"
                             )
-                            return response["QueryResponse"]["Customer"][0]
 
             # Strategy 5: Try matching on email domain
             # This handles organization names vs email domains (e.g., "XYZ Foundation" vs "xyz.org")
@@ -227,10 +219,10 @@ class QBOCustomerService(QBOBaseService):
 
                         response = self._make_qbo_request("GET", f"query?query={encoded_query}")
                         if response.get("QueryResponse", {}).get("Customer"):
-                            logger.info(
-                                f"Strategy 5 - Email domain match found: {response['QueryResponse']['Customer'][0].get('DisplayName')} (matched on '{org_name}')"
+                            customer = response["QueryResponse"]["Customer"][0]
+                            return self._cache_and_return_customer(
+                                customer, f"Strategy 5 - Email domain ('{org_name}')"
                             )
-                            return response["QueryResponse"]["Customer"][0]
 
             # Strategy 6: Try searching by Primary Phone for numeric inputs
             # This is useful if the lookup string is a phone number
@@ -244,10 +236,10 @@ class QBOCustomerService(QBOBaseService):
 
                     response = self._make_qbo_request("GET", f"query?query={encoded_query}")
                     if response.get("QueryResponse", {}).get("Customer"):
-                        logger.info(
-                            f"Strategy 6 - Phone match found: {response['QueryResponse']['Customer'][0].get('DisplayName')} (matched on phone ending in '{cleaned_phone[-7:]}')"
+                        customer = response["QueryResponse"]["Customer"][0]
+                        return self._cache_and_return_customer(
+                            customer, f"Strategy 6 - Phone (ending '{cleaned_phone[-7:]}')"
                         )
-                        return response["QueryResponse"]["Customer"][0]
 
             # No match found after all strategies
             logger.info(f"No matching customer found for: '{customer_lookup}' after trying all strategies")
@@ -256,6 +248,20 @@ class QBOCustomerService(QBOBaseService):
         except Exception as e:
             logger.error(f"Exception in find_customer: {str(e)}")
             return None
+
+    def _cache_and_return_customer(self, customer: Dict[str, Any], strategy: str) -> Dict[str, Any]:
+        """Cache a found customer and return it.
+
+        Args:
+            customer: Customer data to cache
+            strategy: Strategy name for logging
+
+        Returns:
+            The customer data
+        """
+        logger.info(f"{strategy} match found: {customer.get('DisplayName')}")
+        self._update_customer_cache([customer])
+        return customer
 
     def get_customer_cache_stats(self) -> Dict[str, Any]:
         """Get statistics about the customer cache.

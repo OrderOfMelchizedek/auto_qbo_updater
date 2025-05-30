@@ -40,63 +40,92 @@ class TestQBOIntegration(unittest.TestCase):
         """Clean up patches."""
         self.env_patcher.stop()
 
-    @patch("requests.get")
-    def test_customer_search_with_caching(self, mock_get):
+    @patch("requests.request")
+    def test_customer_search_with_caching(self, mock_request):
         """Test customer search with caching behavior."""
-        # Mock API response
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "QueryResponse": {
-                "Customer": [
-                    {
-                        "Id": "123",
-                        "DisplayName": "John Smith",
-                        "PrimaryEmailAddr": {"Address": "john@example.com"},
-                    }
-                ]
-            }
-        }
-        mock_get.return_value = mock_response
 
-        # Set up authentication
-        self.qbo_service.access_token = "test-token"
-        self.qbo_service.realm_id = "test-realm"
+        def mock_response_func(method, url, **kwargs):
+            # Mock API response for exact match
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            # Check if this is an exact match query
+            if "DisplayName%20%3D%20" in url:  # Exact match query
+                mock_response.json.return_value = {
+                    "QueryResponse": {
+                        "Customer": [
+                            {
+                                "Id": "123",
+                                "DisplayName": "John Smith",
+                                "PrimaryEmailAddr": {"Address": "john@example.com"},
+                            }
+                        ]
+                    }
+                }
+            else:
+                mock_response.json.return_value = {"QueryResponse": {}}
+            return mock_response
+
+        mock_request.side_effect = mock_response_func
+
+        # Set up authentication via auth service
+        self.qbo_service.auth_service._access_token = "test-token"
+        self.qbo_service.auth_service._realm_id = "test-realm"
+        self.qbo_service.auth_service._token_expires_at = 9999999999  # Far future
 
         # First search should hit API
         customer1 = self.qbo_service.find_customer("John Smith")
         self.assertIsNotNone(customer1)
         self.assertEqual(customer1["DisplayName"], "John Smith")
-        self.assertEqual(mock_get.call_count, 1)
+        # Should make exactly 1 API call (exact match found)
+        self.assertEqual(mock_request.call_count, 1)
 
-        # Second search would also hit API (no caching implemented)
+        # Check cache state after first search
+        cache_stats = self.qbo_service.get_customer_cache_stats()
+        print(f"Cache stats after first search: {cache_stats}")
+        print(f"Cache content: {self.qbo_service.customer_service._customer_cache}")
+
+        # Second search should use cache (with new caching implementation)
         customer2 = self.qbo_service.find_customer("John Smith")
         self.assertEqual(customer2["DisplayName"], "John Smith")
-        self.assertEqual(mock_get.call_count, 2)  # Another API call made
+        # Cache is used, so no additional API call
+        print(f"API call count after second search: {mock_request.call_count}")
+        self.assertEqual(mock_request.call_count, 1)
 
-    @patch("requests.post")
-    @patch("requests.get")
-    def test_create_sales_receipt_with_customer_lookup(self, mock_get, mock_post):
+        # Clear the cache to test without cache
+        self.qbo_service.clear_customer_cache()
+
+        # Third search should hit API again
+        customer3 = self.qbo_service.find_customer("John Smith")
+        self.assertEqual(customer3["DisplayName"], "John Smith")
+        self.assertEqual(mock_request.call_count, 2)
+
+    @patch("requests.request")
+    def test_create_sales_receipt_with_customer_lookup(self, mock_request):
         """Test creating a sales receipt with customer lookup."""
-        # Mock customer search
-        mock_get_response = MagicMock()
-        mock_get_response.status_code = 200
-        mock_get_response.json.return_value = {
+        # Mock responses for both customer search and sales receipt creation
+        customer_response = MagicMock()
+        customer_response.status_code = 200
+        customer_response.json.return_value = {
             "QueryResponse": {"Customer": [{"Id": "456", "DisplayName": "Jane Doe"}]}
         }
-        mock_get.return_value = mock_get_response
 
-        # Mock sales receipt creation
-        mock_post_response = MagicMock()
-        mock_post_response.status_code = 200
-        mock_post_response.json.return_value = {
-            "SalesReceipt": {"Id": "789", "DocNumber": "SR-001", "TotalAmt": 100.00}
-        }
-        mock_post.return_value = mock_post_response
+        receipt_response = MagicMock()
+        receipt_response.status_code = 200
+        receipt_response.json.return_value = {"SalesReceipt": {"Id": "789", "DocNumber": "SR-001", "TotalAmt": 100.00}}
 
-        # Set up authentication
-        self.qbo_service.access_token = "test-token"
-        self.qbo_service.realm_id = "test-realm"
+        # Return customer response for GET, receipt response for POST
+        def side_effect(method, *args, **kwargs):
+            if method == "GET":
+                return customer_response
+            else:
+                return receipt_response
+
+        mock_request.side_effect = side_effect
+
+        # Set up authentication via auth service
+        self.qbo_service.auth_service._access_token = "test-token"
+        self.qbo_service.auth_service._realm_id = "test-realm"
+        self.qbo_service.auth_service._token_expires_at = 9999999999
 
         # Find customer first
         customer = self.qbo_service.find_customer("Jane Doe")
@@ -121,10 +150,11 @@ class TestQBOIntegration(unittest.TestCase):
     @patch("requests.post")
     def test_token_refresh_on_expiry(self, mock_post):
         """Test automatic token refresh when expired."""
-        # Set up expired token
-        self.qbo_service.access_token = "expired-token"
-        self.qbo_service.refresh_token = "refresh-token"
-        self.qbo_service.token_expires_at = 1  # Expired
+        # Set up expired token via auth service
+        self.qbo_service.auth_service._access_token = "expired-token"
+        self.qbo_service.auth_service._refresh_token = "refresh-token"
+        self.qbo_service.auth_service._realm_id = "test-realm"
+        self.qbo_service.auth_service._token_expires_at = 1  # Expired
 
         # Mock token refresh response
         mock_refresh_response = MagicMock()
@@ -137,14 +167,14 @@ class TestQBOIntegration(unittest.TestCase):
         mock_post.return_value = mock_refresh_response
 
         # Call a method that requires authentication
-        headers = self.qbo_service._get_auth_headers()
+        headers = self.qbo_service.auth_service.get_auth_headers()
 
         # Verify token was refreshed
-        self.assertEqual(self.qbo_service.access_token, "new-access-token")
+        self.assertEqual(self.qbo_service.auth_service.access_token, "new-access-token")
         self.assertEqual(headers["Authorization"], "Bearer new-access-token")
 
-    @patch("requests.get")
-    def test_batch_customer_lookup(self, mock_get):
+    @patch("requests.request")
+    def test_batch_customer_lookup(self, mock_request):
         """Test batch customer lookup functionality."""
         # Mock multiple customer responses
         customers = [
@@ -160,11 +190,12 @@ class TestQBOIntegration(unittest.TestCase):
             mock_response.json.return_value = {"QueryResponse": {"Customer": [customer]}}
             mock_responses.append(mock_response)
 
-        mock_get.side_effect = mock_responses
+        mock_request.side_effect = mock_responses
 
-        # Set up authentication
-        self.qbo_service.access_token = "test-token"
-        self.qbo_service.realm_id = "test-realm"
+        # Set up authentication via auth service
+        self.qbo_service.auth_service._access_token = "test-token"
+        self.qbo_service.auth_service._realm_id = "test-realm"
+        self.qbo_service.auth_service._token_expires_at = 9999999999
 
         # Batch lookup
         customer_names = ["Customer 1", "Customer 2", "Customer 3"]
