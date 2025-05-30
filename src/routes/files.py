@@ -423,7 +423,7 @@ def get_task_status(task_id):
 
             # Store results in session if available
             if result.result and "donations" in result.result:
-                session_id = metadata.get("session_id")
+                session_id = metadata.get("session_id") if metadata else None
                 if session_id and session.get("session_id") == session_id:
                     session["donations"] = result.result["donations"]
                     session.modified = True
