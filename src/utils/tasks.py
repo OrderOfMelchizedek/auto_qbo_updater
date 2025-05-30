@@ -280,12 +280,12 @@ def process_files_task(
                 log_progress("Removing duplicate donations...")
 
             try:
-                from src.app import deduplicate_and_synthesize_donations
+                from src.services.deduplication import DeduplicationService
             except ImportError:
-                from ..app import deduplicate_and_synthesize_donations
+                from ..services.deduplication import DeduplicationService
 
             try:
-                unique_donations = deduplicate_and_synthesize_donations([], all_donations)
+                unique_donations = DeduplicationService.deduplicate_donations([], all_donations)
             except Exception as e:
                 logger.error(f"Error deduplicating donations: {str(e)}")
                 logger.error(f"Traceback: {traceback.format_exc()}")
@@ -334,9 +334,9 @@ def process_files_task(
             # Filter out donations without dates AND amounts
             filtered_donations = []
             for donation in unique_donations:
-                check_date = donation.get("Check Date", "").strip()
-                deposit_date = donation.get("Deposit Date", "").strip()
-                amount = donation.get("Gift Amount", "").strip()
+                check_date = (donation.get("Check Date") or "").strip()
+                deposit_date = (donation.get("Deposit Date") or "").strip()
+                amount = (donation.get("Gift Amount") or "").strip()
 
                 # Only include donations that have amount AND either check date or deposit date
                 if amount and (check_date or deposit_date):
