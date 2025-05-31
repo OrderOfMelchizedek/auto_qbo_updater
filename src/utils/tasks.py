@@ -227,40 +227,50 @@ def process_files_task(
         else:
             raise ValueError("No files provided to process")
 
-        # Process each file
-        for file_info in saved_files:
+        # Process all files together using V3 processor
+        if saved_files:
             try:
                 if session_id:
-                    log_progress(f"Processing {file_info['filename']}...")
+                    log_progress(f"Processing {len(saved_files)} files...")
 
-                # Process file based on type
-                _, ext = os.path.splitext(file_info["filename"])
-                donations = file_processor.process(file_info["path"], ext)
+                # Prepare file list for V3 processor
+                files_to_process = []
+                for file_info in saved_files:
+                    _, ext = os.path.splitext(file_info["filename"])
+                    files_to_process.append((file_info["path"], ext))
 
-                if donations:
-                    all_donations.extend(donations)
+                # Process all files together - V3 returns enriched payments directly
+                enriched_payments, file_errors = file_processor.process_files(files_to_process)
+
+                if file_errors:
+                    processing_errors.extend(file_errors)
+
+                if enriched_payments:
                     if session_id:
-                        log_progress(f"Found {len(donations)} donations in {file_info['filename']}")
+                        log_progress(f"Found {len(enriched_payments)} donations total")
+
+                    # V3 processor returns enriched payments in the correct format
+                    all_donations.extend(enriched_payments)
                 else:
-                    warnings.append(f"No donations found in {file_info['filename']}")
+                    warnings.append("No donations found in uploaded files")
 
             except SoftTimeLimitExceeded:
-                error_msg = f"Processing timeout for {file_info['filename']}"
+                error_msg = "Processing timeout for file batch"
                 logger.error(error_msg)
                 processing_errors.append(error_msg)
                 if session_id:
                     log_progress(error_msg, force_summary=True)
 
             except Exception as e:
-                error_msg = f"Error processing {file_info['filename']}: {str(e)}"
+                error_msg = f"Error processing files: {str(e)}"
                 logger.error(error_msg)
                 processing_errors.append(error_msg)
                 if session_id:
                     log_progress(error_msg)
             finally:
-                # Force garbage collection after each file
+                # Force garbage collection after processing
                 gc.collect()
-                memory_monitor.log_memory_usage(f"After processing {file_info.get('filename', 'file')}")
+                memory_monitor.log_memory_usage("After processing all files")
 
         # Clean up S3 files after processing
         if s3_references and "s3_storage" in locals():
@@ -272,106 +282,51 @@ def process_files_task(
                     except Exception as e:
                         logger.error(f"Failed to clean up S3 file {file_info['s3_key']}: {str(e)}")
 
-        # Process donations
+        # V3 processor returns enriched donations (already deduplicated and matched)
         if all_donations:
             if session_id:
-                log_progress(f"Processing {len(all_donations)} donations...")
+                log_progress(f"Processing complete with {len(all_donations)} donations")
 
-            # Deduplicate donations
-            if session_id:
-                log_progress("Removing duplicate donations...")
-
-            try:
-                from src.services.deduplication import DeduplicationService
-            except ImportError:
-                from services.deduplication import DeduplicationService
-
-            try:
-                unique_donations = DeduplicationService.deduplicate_donations([], all_donations)
-            except Exception as e:
-                logger.error(f"Error deduplicating donations: {str(e)}")
-                logger.error(f"Traceback: {traceback.format_exc()}")
-                raise
-
-            # Match with QBO customers if authenticated
-            if qbo_service.is_token_valid() and unique_donations:
-                if session_id:
-                    log_progress("Matching donations with QuickBooks customers...")
-
-                try:
-                    # Use the file_processor instance to match customers
-                    unique_donations = file_processor.match_donations_with_qbo_customers(unique_donations)
-
-                    # Log matching results
-                    matched_count = sum(
-                        1
-                        for d in unique_donations
-                        if d.get("qbCustomerStatus")
-                        in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]
-                    )
-                    logger.warning(
-                        f"After QBO matching: {matched_count} matched out of {len(unique_donations)} donations"
-                    )
-                    for idx, donation in enumerate(unique_donations[:4]):
-                        logger.warning(
-                            f"  Donation {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}"
-                        )
-                except Exception as e:
-                    logger.error(f"Error matching QBO customers: {str(e)}")
-                    warnings.append(f"Could not match QuickBooks customers: {str(e)}")
-            else:
-                # Set default status when QBO is not connected
-                if not qbo_service.is_token_valid():
-                    logger.info("QBO not authenticated - skipping customer matching")
-                    if session_id:
-                        log_progress("QuickBooks not connected - customer matching skipped")
-
-                    # Set default status for all donations
-                    for donation in unique_donations:
-                        if "qbCustomerStatus" not in donation:
-                            donation["qbCustomerStatus"] = "New"
-                        if "qbSyncStatus" not in donation:
-                            donation["qbSyncStatus"] = "Pending"
-
-            # Filter out donations without dates AND amounts
+            # V3 processor already handles deduplication, matching, and enrichment
+            # Just validate final donations have required data
             filtered_donations = []
-            for donation in unique_donations:
-                check_date = (donation.get("Check Date") or "").strip()
-                deposit_date = (donation.get("Deposit Date") or "").strip()
-                amount = (donation.get("Gift Amount") or "").strip()
+            for donation in all_donations:
+                payment_info = donation.get("payment_info", {})
+                payer_info = donation.get("payer_info", {})
 
-                # Only include donations that have amount AND either check date or deposit date
-                if amount and (check_date or deposit_date):
+                # Check for required data in enriched format
+                payment_date = (payment_info.get("payment_date") or "").strip()
+                deposit_date = (payment_info.get("deposit_date") or "").strip()
+                amount = payment_info.get("amount", 0)
+                customer_lookup = (payer_info.get("customer_lookup") or "").strip()
+
+                # Only include donations that have amount, customer, AND either payment date or deposit date
+                if amount and customer_lookup and (payment_date or deposit_date):
                     filtered_donations.append(donation)
                 else:
                     logger.warning(
-                        f"Filtering out donation without date or amount: {donation.get('Donor Name', 'Unknown')}"
+                        f"Filtering out donation without required data: Customer: {customer_lookup}, Amount: {amount}"
                     )
 
-            if session_id:
+            if session_id and len(all_donations) != len(filtered_donations):
                 log_progress(
-                    f"Filtered to {len(filtered_donations)} valid donations (removed {len(unique_donations) - len(filtered_donations)} without dates)"
+                    f"Filtered to {len(filtered_donations)} valid donations (removed {len(all_donations) - len(filtered_donations)} without dates)"
                 )
 
-            # Log what we're about to return
-            filtered_matched = sum(
-                1
-                for d in filtered_donations
-                if d.get("qbCustomerStatus") in ["Matched", "Matched-AddressMismatch", "Matched-AddressNeedsReview"]
-            )
+            # Log what we're about to return (enriched format)
+            filtered_matched = sum(1 for d in filtered_donations if d.get("match_status") == "Matched")
             logger.warning(f"Returning {len(filtered_donations)} donations with {filtered_matched} matched")
             for idx, donation in enumerate(filtered_donations[:4]):
-                logger.warning(
-                    f"  Return {idx}: {donation.get('Donor Name')} - Status: {donation.get('qbCustomerStatus')} - ID: {donation.get('qboCustomerId')}"
-                )
+                payer_info = donation.get("payer_info", {})
+                customer_lookup = payer_info.get("customer_lookup", "Unknown")
+                match_status = donation.get("match_status", "New")
+                qbo_customer_id = donation.get("qbo_customer_id")
+
+                logger.warning(f"  Return {idx}: {customer_lookup} - Status: {match_status} - ID: {qbo_customer_id}")
                 # Log full customer data if matched
-                if donation.get("qbCustomerStatus") in [
-                    "Matched",
-                    "Matched-AddressMismatch",
-                    "Matched-AddressNeedsReview",
-                ]:
+                if match_status == "Matched":
                     logger.warning(
-                        f"    Customer data: {json.dumps({'id': donation.get('qboCustomerId'), 'name': donation.get('customerLookup'), 'method': donation.get('matchMethod'), 'confidence': donation.get('matchConfidence')})}"
+                        f"    Customer data: {json.dumps({'id': qbo_customer_id, 'name': customer_lookup, 'method': donation.get('match_method'), 'confidence': donation.get('match_confidence')})}"
                     )
 
             # Store full results in file system, return reference
@@ -393,7 +348,7 @@ def process_files_task(
                     "success": True,
                     "result_reference": result_ref,
                     "donations_count": len(filtered_donations),
-                    "total_processed": len(unique_donations),
+                    "total_processed": len(all_donations),
                     "warnings_count": len(warnings),
                     "errors_count": len(processing_errors),
                     "qboAuthenticated": qbo_service.is_token_valid(),
@@ -405,7 +360,7 @@ def process_files_task(
 
             if session_id:
                 log_progress(
-                    f"Processing complete! Found {len(unique_donations)} unique donations.",
+                    f"Processing complete! Found {len(filtered_donations)} valid donations.",
                     force_summary=True,
                 )
 
