@@ -1,4 +1,2 @@
-# Production requirements
-# For development, use: pip install -r requirements/dev.txt
-# For testing, use: pip install -r requirements/test.txt
--r requirements/prod.txt
+Flask==2.3.3
+gunicorn==22.0.0
