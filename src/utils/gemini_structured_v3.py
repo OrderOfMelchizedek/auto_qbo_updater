@@ -23,43 +23,43 @@ from .retry import retry_on_failure
 logger = logging.getLogger(__name__)
 
 
-# Simplified models for Gemini structured output (no complex validators)
+# Ultra-simplified models for Gemini structured output (no Field objects at all)
 class SimplePaymentInfo(BaseModel):
-    """Simplified payment info for Gemini structured output."""
+    """Ultra-simplified payment info for Gemini structured output."""
 
     payment_method: str
-    check_no: Optional[str] = None
-    payment_ref: Optional[str] = None
+    check_no: Optional[str]
+    payment_ref: Optional[str]
     amount: float
-    payment_date: Optional[str] = None
-    check_date: Optional[str] = None
-    postmark_date: Optional[str] = None
-    deposit_date: Optional[str] = None
-    deposit_method: Optional[str] = None
-    memo: Optional[str] = None
+    payment_date: Optional[str]
+    check_date: Optional[str]
+    postmark_date: Optional[str]
+    deposit_date: Optional[str]
+    deposit_method: Optional[str]
+    memo: Optional[str]
 
 
 class SimplePayerInfo(BaseModel):
-    """Simplified payer info for Gemini structured output."""
+    """Ultra-simplified payer info for Gemini structured output."""
 
-    aliases: Optional[List[str]] = None
-    salutation: Optional[str] = None
-    organization_name: Optional[str] = None
+    aliases: Optional[List[str]]
+    salutation: Optional[str]
+    organization_name: Optional[str]
 
 
 class SimpleContactInfo(BaseModel):
-    """Simplified contact info for Gemini structured output."""
+    """Ultra-simplified contact info for Gemini structured output."""
 
-    address_line_1: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
+    address_line_1: Optional[str]
+    city: Optional[str]
+    state: Optional[str]
+    zip: Optional[str]
+    email: Optional[str]
+    phone: Optional[str]
 
 
 class SimplePaymentRecord(BaseModel):
-    """Simplified payment record for Gemini structured output."""
+    """Ultra-simplified payment record for Gemini structured output."""
 
     payment_info: SimplePaymentInfo
     payer_info: SimplePayerInfo
@@ -365,6 +365,12 @@ class GeminiStructuredServiceV3:
             # Ensure we have either aliases or organization_name
             if not payer_info.get("aliases") and not payer_info.get("organization_name"):
                 payer_info["aliases"] = ["Unknown"]
+
+            # Ensure required fields have values (convert None to appropriate defaults)
+            if payment_info.get("amount") is None:
+                payment_info["amount"] = 0.0
+            if payment_info.get("payment_method") is None:
+                payment_info["payment_method"] = "handwritten_check"
 
             # Create models with __bypass_validation
             return PaymentRecord.parse_obj(payment_dict)
