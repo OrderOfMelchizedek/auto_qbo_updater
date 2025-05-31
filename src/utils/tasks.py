@@ -284,7 +284,7 @@ def process_files_task(
             try:
                 from src.services.deduplication import DeduplicationService
             except ImportError:
-                from ..services.deduplication import DeduplicationService
+                from services.deduplication import DeduplicationService
 
             try:
                 unique_donations = DeduplicationService.deduplicate_donations([], all_donations)

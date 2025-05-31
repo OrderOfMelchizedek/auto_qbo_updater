@@ -5,7 +5,7 @@ Enhanced Gemini adapter V3 that uses unified batching with smaller batch sizes.
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from ..models.payment import PaymentRecord
+from models.payment import PaymentRecord
 from .gemini_structured_v2 import GeminiStructuredServiceV2
 
 logger = logging.getLogger(__name__)

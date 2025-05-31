@@ -6,7 +6,7 @@ Creates the final JSON structure without using legacy format.
 import logging
 from typing import Any, Dict, Optional
 
-from ..models.payment import PaymentRecord
+from models.payment import PaymentRecord
 from .qbo_data_enrichment import QBODataEnrichment, normalize_zip
 
 logger = logging.getLogger(__name__)

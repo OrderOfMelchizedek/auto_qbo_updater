@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from models.payment import ContactInfo, PayerInfo, PaymentInfo, PaymentRecord
+
 from .alias_matcher import AliasMatcher
 from .check_normalizer import normalize_check_number
 from .gemini_adapter_v3 import GeminiAdapterV3

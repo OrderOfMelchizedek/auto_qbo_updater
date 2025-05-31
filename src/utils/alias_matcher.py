@@ -6,7 +6,7 @@ Matches payments to QBO customers using the aliases list.
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..models.payment import PaymentRecord
+from models.payment import PaymentRecord
 
 logger = logging.getLogger(__name__)
 
