@@ -215,17 +215,17 @@ USER: I'm building an app that extracts key information from user-uploaded scann
 
 <background> The user will scan and upload images of the following:
 
-_Checks_ Some checks will either be personal checks (you can tell if key details like the amount and the date are handwritten) or printed checks (usually issued by an organization and printed; these usually will not have the amounts handwritten). Pay close attention to the amount on the check (it will be listed numerically and spelled out, as checks usually are), the check no (usually a number found in the upper right corner) and any memos. Note the check date as well. Checks will also typically have the donor (and possibly their spouse's) name and address that you can use as a backup if you fail to find address information from the envelope.
+_Checks_ Some checks will either be personal checks (you can tell if key details like the amount and the date are handwritten) or printed checks (usually issued by an organization and printed; these usually will not have the amounts handwritten). Pay close attention to the amount on the check (it will be listed numerically and spelled out, as checks usually are), the check no (usually a number found in the upper right corner) and any memos. Note the check date as well. Checks will also typically have the customer (and possibly their spouse's) name and address that you can use as a backup if you fail to find address information from the envelope.
 
-_Envelopes_ The user will upload the envelopes that the donations came in. This is critical for verifying donor contact information. First ensure that the return address on the envelope matches the donor's entry in the customer contact list; if it doesn't, it may mean that the donor has moved and the user needs to update the address in the contact list. The return address supersedes all other addresses (including any addresses written on the check). Also note if there is any additional contact information (e.g. phone number, email) that is not in the customer contact list. Finally, note any memo that the donor writes (it may not be written on the check).
+_Envelopes_ The user will upload the envelopes that the payments came in. This is critical for verifying customer contact information. First ensure that the return address on the envelope matches the customer's entry in the customer contact list; if it doesn't, it may mean that the customer has moved and the user needs to update the address in the contact list. The return address supersedes all other addresses (including any addresses written on the check). Also note if there is any additional contact information (e.g. phone number, email) that is not in the customer contact list. Finally, note any memo that the customer writes (it may not be written on the check).
 
-_User Record_ The user may handwrite a list of donations in the current deposit, typically in columns. At a minimum there will be a check no. and gift amount, but sometimes the user will record an item no. and and the donor name. The check no. written on the user record is authoritative; when merging entries, ensure that the check no. for each entry is in the user record.
+_User Record_ The user may handwrite a list of payments in the current deposit, typically in columns. At a minimum there will be a check no. and gift amount, but sometimes the user will record an item no. and and the customer name. The check no. written on the user record is authoritative; when merging entries, ensure that the check no. for each entry is in the user record.
 
-_Online Donations_ The user may upload a .csv file containing a list of online donations. In these cases, use the Payment_Ref in lieu of the Check No. </background>
+_Online Payments_ The user may upload a .csv file containing a list of online payments. In these cases, use the Payment_Ref in lieu of the Check No. </background>
 
-<json_schema> All output must be a json object with the following structure: _Payment Info_ - Payment Method (REQUIRED) - Check No. (REQUIRED for checks) - Payment_Ref (REQUIRED for online donations) - Amount (REQUIRED) - Payment Date (REQUIRED) - Check Date - Postmark Date - Deposit Date - Deposit Method - Memo
+<json_schema> All output must be a json object with the following structure: _Payment Info_ - Payment Method (REQUIRED) - Check No. (REQUIRED for checks) - Payment_Ref (REQUIRED for online payments) - Amount (REQUIRED) - Payment Date (REQUIRED) - Check Date - Postmark Date - Deposit Date - Deposit Method - Memo
 
-_Payer Info_ - Aliases (REQUIRED for non-organizations) - Salutation - Organization Name (REQUIRED for organizations)
+_Customer Info_ - Aliases (REQUIRED for non-organizations) - Salutation - Organization Name (REQUIRED for organizations)
 
 _Contact Info_ - Address - Line 1 - City - State - ZIP - Email - Phone </json_schema>
 
@@ -235,7 +235,7 @@ _Payment Method_ This can be a handwritten check, a printed check, or an online 
 
 _Check No._ The check number for the payment. Usually four digits (for personal checks) but sometimes can be more (especially for pre-printed checks). If the Payment method is a check, Check No. is REQUIRED.
 
-_Payment Ref_ Online donations have a Payment Reference No. instead of a Check no. Payment Ref is REQUIRED for all online donations.
+_Payment Ref_ Online payments have a Payment Reference No. instead of a Check no. Payment Ref is REQUIRED for all online payments.
 
 _Amount_ The amount of the payment. If found on the check, it will be written as a number and spelled out. Make absolutely certain that this is recorded accurately. This is REQUIRED.
 
@@ -247,17 +247,17 @@ _Postmark Date_ The date of the postmark. You will find this on the envelope.
 
 _Deposit Date_ The date that the payment was deposited into the bank. Usually will be written on the user's record or perhaps on a deposit slip.
 
-_Deposit Method_ - For checks: ATM Deposit (or Mobile deposit if specified by the user) - For online donations: Online (specify Stripe or Paypal if that information is available).
+_Deposit Method_ - For checks: ATM Deposit (or Mobile deposit if specified by the user) - For online payments: Online (specify Stripe or Paypal if that information is available).
 
 _Memo_ Any memo written on the check, or a summary of any information included with the payment.
 
-_Aliases_ This is the name of the payer. Let this be a list where multiple versions of a payer's full name can be stored. Aliases for "John A. Smith" would include ["John Smith","J. Smith","Smith, John", "John A. Smith", "Smith, John A."]. At least one alias is REQUIRED if the payer is not an organization.
+_Aliases_ This is the name of the customer. Let this be a list where multiple versions of a customer's full name can be stored. Aliases for "John A. Smith" would include ["John Smith","J. Smith","Smith, John", "John A. Smith", "Smith, John A."]. At least one alias is REQUIRED if the customer is not an organization.
 
-_Salutation_ This is how the payer is to be addressed. Infer this from their details (e.g. John and Jane Smith would be Mr. & Mrs.). Can be one or any combination of the following: - Mr. - Ms. - Mr. & Mrs. - Dr. - Rev. - Any other title which can be inferred from the given materials
+_Salutation_ This is how the customer is to be addressed. Infer this from their details (e.g. John and Jane Smith would be Mr. & Mrs.). Can be one or any combination of the following: - Mr. - Ms. - Mr. & Mrs. - Dr. - Rev. - Any other title which can be inferred from the given materials
 
-_Organization Name_ The name of the organization making the donation. Get this from the customer contact list. This is REQUIRED for organizations.
+_Organization Name_ The name of the organization making the payment. Get this from the customer contact list. This is REQUIRED for organizations.
 
-_Address - Line 1_ The street address of the payer.
+_Address - Line 1_ The street address of the customer.
 
 _City_ Address city.
 
@@ -300,7 +300,7 @@ class DepositMethod(str, Enum):
 class PaymentInfo(BaseModel):
     payment_method: PaymentMethod = Field(description="Type of payment: handwritten_check, printed_check, or online_payment")
     check_no: Optional[str] = Field(None, description="Check number (required for checks)")
-    payment_ref: Optional[str] = Field(None, description="Payment reference number (required for online donations)")
+    payment_ref: Optional[str] = Field(None, description="Payment reference number (required for online payments)")
     amount: float = Field(description="Payment amount in dollars")
     payment_date: str = Field(description="Date payment was made (format: YYYY-MM-DD)")
     check_date: Optional[str] = Field(None, description="Date written on check (format: YYYY-MM-DD)")
@@ -323,13 +323,13 @@ class PaymentInfo(BaseModel):
                 raise ValueError("Payment reference is required for online payments")
         return v
 
-class PayerInfo(BaseModel):
-    aliases: Optional[List[str]] = Field(None, description="List of name variations for individual donors")
+class CustomerInfo(BaseModel):
+    aliases: Optional[List[str]] = Field(None, description="List of name variations for individual customers")
     salutation: Optional[str] = Field(None, description="Title/salutation (Mr., Ms., Dr., etc.)")
     organization_name: Optional[str] = Field(None, description="Organization name if applicable")
 
     @validator('aliases', 'organization_name')
-    def validate_payer_type(cls, v, values):
+    def validate_customer_type(cls, v, values):
         # Either aliases or organization_name must be present
         if not v and not values.get('organization_name') and not values.get('aliases'):
             raise ValueError("Either aliases (for individuals) or organization_name must be provided")
@@ -350,14 +350,14 @@ class ContactInfo(BaseModel):
             v = v.zfill(5)
         return v
 
-class DonationRecord(BaseModel):
+class PaymentRecord(BaseModel):
     payment_info: PaymentInfo
-    payer_info: PayerInfo
+    customer_info: CustomerInfo
     contact_info: ContactInfo
 
-class DonationExtractor:
+class PaymentExtractor:
     def __init__(self, model_name: str = "gemini-2.0-flash-preview"):
-        """Initialize the donation extractor with Gemini model."""
+        """Initialize the payment extractor with Gemini model."""
         self.model = genai.GenerativeModel(model_name)
 
     def encode_image(self, image_path: str) -> str:
@@ -365,12 +365,12 @@ class DonationExtractor:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
-    def extract_from_check(self, check_image_path: str, envelope_image_path: Optional[str] = None) -> DonationRecord:
+    def extract_from_check(self, check_image_path: str, envelope_image_path: Optional[str] = None) -> PaymentRecord:
         """Extract information from check and optional envelope images."""
 
         # Prepare the prompt
         prompt = """
-        Analyze the provided check image (and envelope if provided) to extract donation information.
+        Analyze the provided check image (and envelope if provided) to extract payment information.
 
         For the check:
         - Identify if it's handwritten (amount and date are handwritten) or printed
@@ -378,7 +378,7 @@ class DonationExtractor:
         - Extract the amount (both numeric and written versions should match)
         - Extract the date on the check
         - Extract any memo information
-        - Extract payer name and address if visible
+        - Extract customer name and address if visible
 
         For the envelope (if provided):
         - Extract the return address (this supersedes any address on the check)
@@ -410,7 +410,7 @@ class DonationExtractor:
             contents=parts,
             generation_config={
                 "response_mime_type": "application/json",
-                "response_schema": DonationRecord,
+                "response_schema": PaymentRecord,
                 "temperature": 0.1,  # Low temperature for accuracy
             }
         )
@@ -426,7 +426,7 @@ class DonationExtractor:
         """Extract information from handwritten user records."""
 
         prompt = """
-        Analyze this handwritten user record of donations.
+        Analyze this handwritten user record of payments.
         Extract the following information for each entry:
         - Check number (this is authoritative - use this over any other check numbers)
         - Gift amount
@@ -441,7 +441,7 @@ class DonationExtractor:
             check_no: str
             amount: float
             item_no: Optional[str] = None
-            donor_name: Optional[str] = None
+            customer_name: Optional[str] = None
 
         class UserRecordList(BaseModel):
             entries: List[UserRecordEntry]
@@ -462,8 +462,8 @@ class DonationExtractor:
 
         return [entry.dict() for entry in response.parsed.entries]
 
-    def extract_from_csv(self, csv_path: str) -> List[DonationRecord]:
-        """Extract information from online donation CSV files."""
+    def extract_from_csv(self, csv_path: str) -> List[PaymentRecord]:
+        """Extract information from online payment CSV files."""
 
         # Read CSV file
         df = pd.read_csv(csv_path)
@@ -472,7 +472,7 @@ class DonationExtractor:
         csv_content = df.to_string()
 
         prompt = f"""
-        Analyze this CSV file containing online donations.
+        Analyze this CSV file containing online payments.
 
         CSV Content:
         {csv_content}
@@ -485,26 +485,26 @@ class DonationExtractor:
         - Set payment_method as "online_payment"
         - Set deposit_method as "Online" (specify Stripe or PayPal if evident)
 
-        Return a list of DonationRecord objects.
+        Return a list of PaymentRecord objects.
         """
 
-        class DonationRecordList(BaseModel):
-            donations: List[DonationRecord]
+        class PaymentRecordList(BaseModel):
+            payments: List[PaymentRecord]
 
         response = self.model.generate_content(
             contents=prompt,
             generation_config={
                 "response_mime_type": "application/json",
-                "response_schema": DonationRecordList,
+                "response_schema": PaymentRecordList,
                 "temperature": 0.1,
             }
         )
 
-        return response.parsed.donations
+        return response.parsed.payments
 
     def merge_records(self,
-                     check_records: List[DonationRecord],
-                     user_record_entries: List[dict]) -> List[DonationRecord]:
+                     check_records: List[PaymentRecord],
+                     user_record_entries: List[dict]) -> List[PaymentRecord]:
         """Merge check records with user record entries, using check numbers from user records as authoritative."""
 
         # Create a mapping of check numbers from user records
@@ -529,8 +529,8 @@ class DonationExtractor:
                      check_images: List[str],
                      envelope_images: List[str] = None,
                      user_record_image: str = None,
-                     csv_file: str = None) -> List[DonationRecord]:
-        """Process a batch of donation documents."""
+                     csv_file: str = None) -> List[PaymentRecord]:
+        """Process a batch of payment documents."""
 
         all_records = []
 
@@ -557,7 +557,7 @@ class DonationExtractor:
         if user_entries and all_records:
             all_records = self.merge_records(all_records, user_entries)
 
-        # Process CSV file for online donations
+        # Process CSV file for online payments
         if csv_file:
             try:
                 csv_records = self.extract_from_csv(csv_file)
@@ -570,7 +570,7 @@ class DonationExtractor:
 # Example usage
 def main():
     # Initialize extractor
-    extractor = DonationExtractor()
+    extractor = PaymentExtractor()
 
     # Example: Process a single check with envelope
     check_record = extractor.extract_from_check(
@@ -578,7 +578,7 @@ def main():
         envelope_image_path="path/to/envelope.jpg"
     )
 
-    print("Extracted donation record:")
+    print("Extracted payment record:")
     print(json.dumps(check_record.dict(), indent=2))
 
     # Example: Process batch of documents
@@ -586,36 +586,36 @@ def main():
         check_images=["check1.jpg", "check2.jpg"],
         envelope_images=["envelope1.jpg", "envelope2.jpg"],
         user_record_image="user_record.jpg",
-        csv_file="online_donations.csv"
+        csv_file="online_payments.csv"
     )
 
     # Save results to JSON
-    with open("donation_records.json", "w") as f:
+    with open("payment_records.json", "w") as f:
         json.dump([record.dict() for record in all_records], f, indent=2)
 
-    print(f"Processed {len(all_records)} donation records")
+    print(f"Processed {len(all_records)} payment records")
 
 if __name__ == "__main__":
     main()
 ```
 
-I've created a comprehensive implementation for extracting donation information from scanned documents using Gemini's structured outputs. Here are the key features:
+I've created a comprehensive implementation for extracting payment information from scanned documents using Gemini's structured outputs. Here are the key features:
 
 ## Key Components:
 
 ### 1. **Structured Data Models**
 
 - Uses Pydantic models to define the exact JSON schema you specified
-- Includes validation to ensure required fields are present (e.g., check numbers for checks, payment references for online donations)
+- Includes validation to ensure required fields are present (e.g., check numbers for checks, payment references for online payments)
 - Handles the specific business logic for different payment types
 
 ### 2. **Document Processing**
 
-The `DonationExtractor` class handles different document types:
+The `PaymentExtractor` class handles different document types:
 
 - **Checks & Envelopes**: Uses Gemini's multimodal capabilities to analyze images
 - **User Records**: Extracts handwritten lists with authoritative check numbers
-- **CSV Files**: Processes online donation data
+- **CSV Files**: Processes online payment data
 
 ### 3. **Smart Field Extraction**
 
@@ -633,7 +633,7 @@ The `DonationExtractor` class handles different document types:
 
 ```python
 # Initialize the extractor
-extractor = DonationExtractor(model_name="gemini-2.5-flash-latest")
+extractor = PaymentExtractor(model_name="gemini-2.5-flash-latest")
 
 # Process a single check
 record = extractor.extract_from_check(
@@ -646,25 +646,25 @@ records = extractor.process_batch(
     check_images=["check1.jpg", "check2.jpg"],
     envelope_images=["env1.jpg", "env2.jpg"],
     user_record_image="handwritten_list.jpg",
-    csv_file="stripe_donations.csv"
+    csv_file="stripe_payments.csv"
 )
 ```
 
 ## Additional Utilities You Might Want:
 ```python
-# Additional utility functions for donation processing
+# Additional utility functions for payment processing
 
 from typing import List, Dict, Optional
 import re
 from datetime import datetime
 from difflib import SequenceMatcher
 
-class DonationUtilities:
-    """Helper utilities for donation processing."""
+class PaymentUtilities:
+    """Helper utilities for payment processing."""
 
     @staticmethod
     def generate_aliases(full_name: str) -> List[str]:
-        """Generate common name variations for a donor."""
+        """Generate common name variations for a customer."""
         aliases = [full_name]
 
         # Split name into parts
@@ -703,7 +703,7 @@ class DonationUtilities:
 
     @staticmethod
     def infer_salutation(names: List[str]) -> str:
-        """Infer appropriate salutation from donor names."""
+        """Infer appropriate salutation from customer names."""
         # Check for titles in names
         titles = {
             'dr': 'Dr.',
@@ -763,10 +763,10 @@ class DonationUtilities:
         return cleaned
 
     @staticmethod
-    def match_donor_to_database(extracted_name: str,
+    def match_customer_to_database(extracted_name: str,
                               database_names: List[str],
                               threshold: float = 0.8) -> Optional[str]:
-        """Match extracted donor name to existing database entry."""
+        """Match extracted customer name to existing database entry."""
         best_match = None
         best_score = 0
 
@@ -782,7 +782,7 @@ class DonationUtilities:
             # Use sequence matching for fuzzy matching
             score = SequenceMatcher(None, extracted_lower, db_lower).ratio()
 
-            # Check if last names match (common for family donations)
+            # Check if last names match (common for family payments)
             extracted_parts = extracted_lower.split()
             db_parts = db_lower.split()
             if extracted_parts and db_parts:
@@ -831,18 +831,18 @@ class DonationUtilities:
         return merged
 
 # Example usage with validation workflow
-class DonationValidator:
-    """Validate extracted donations against business rules."""
+class PaymentValidator:
+    """Validate extracted payments against business rules."""
 
     def __init__(self):
-        self.utils = DonationUtilities()
+        self.utils = PaymentUtilities()
 
-    def validate_donation(self, donation: Dict) -> List[str]:
-        """Validate a donation record and return any issues."""
+    def validate_payment(self, payment: Dict) -> List[str]:
+        """Validate a payment record and return any issues."""
         issues = []
 
         # Check required fields
-        payment_info = donation.get('payment_info', {})
+        payment_info = payment.get('payment_info', {})
 
         if not payment_info.get('amount'):
             issues.append("Missing required amount")
@@ -857,10 +857,10 @@ class DonationValidator:
             if not payment_info.get('payment_ref'):
                 issues.append("Payment reference required for online payments")
 
-        # Validate payer info
-        payer_info = donation.get('payer_info', {})
-        if not payer_info.get('aliases') and not payer_info.get('organization_name'):
-            issues.append("Either donor name or organization required")
+        # Validate customer info
+        customer_info = payment.get('customer_info', {})
+        if not customer_info.get('aliases') and not customer_info.get('organization_name'):
+            issues.append("Either customer name or organization required")
 
         # Validate dates
         date_fields = ['payment_date', 'check_date', 'postmark_date', 'deposit_date']
@@ -874,11 +874,11 @@ class DonationValidator:
         return issues
 
 # Streamlit UI example (if you want a web interface)
-def create_donation_ui():
-    """Example Streamlit UI for donation processing."""
+def create_payment_ui():
+    """Example Streamlit UI for payment processing."""
     import streamlit as st
 
-    st.title("Donation Document Processor")
+    st.title("Payment Document Processor")
 
     # File uploaders
     st.header("Upload Documents")
@@ -901,14 +901,14 @@ def create_donation_ui():
     )
 
     csv_file = st.file_uploader(
-        "Upload Online Donations CSV (optional)",
+        "Upload Online Payments CSV (optional)",
         type=['csv']
     )
 
     if st.button("Process Documents"):
         with st.spinner("Processing documents..."):
             # Initialize extractor
-            extractor = DonationExtractor()
+            extractor = PaymentExtractor()
 
             # Process files
             # (Implementation would save uploaded files temporarily and process)
@@ -964,7 +964,7 @@ For better performance with multiple documents:
 # Use Gemini's batch API for multiple images
 batch_config = {
     "response_mime_type": "application/json",
-    "response_schema": DonationRecordList,
+    "response_schema": PaymentRecordList,
     "temperature": 0.1,
     "max_output_tokens": 2000,
 }

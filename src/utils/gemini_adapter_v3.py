@@ -5,8 +5,9 @@ Enhanced Gemini adapter V3 that uses unified batching with smaller batch sizes.
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from models.payment import PaymentRecord
-from .gemini_structured_v2 import GeminiStructuredServiceV2
+from src.models.payment import PaymentRecord
+
+from .gemini_structured_v3 import GeminiStructuredServiceV3
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,8 @@ class GeminiAdapterV3:
             model_name: Optional model name (defaults to latest)
         """
         self.api_key = api_key
-        self.structured_service = GeminiStructuredServiceV2(api_key, model_name)
-        logger.info("Initialized Gemini adapter V3 (unified batching with size 5)")
+        self.structured_service = GeminiStructuredServiceV3(api_key, model_name)
+        logger.info("Initialized Gemini adapter V3 (structured outputs with size 3)")
 
     def extract_payments_batch(self, file_paths: List[str]) -> List[PaymentRecord]:
         """Extract payment records from multiple files in unified batches.
