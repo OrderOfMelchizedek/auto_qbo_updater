@@ -481,10 +481,12 @@ function renderDonationTable() {
         // Customer status indicator using V3 format
         const matchStatus = donation.match_status || 'New';
         const hasCustomerId = donation.qbo_customer_id;
+        // Access payer_info for address checks
+        const addressNeedsUpdate = payerInfo.address_needs_update;
 
         if (matchStatus === 'New') {
             statusHtml += '<span class="badge bg-info me-1">New Customer</span>';
-        } else if (matchStatus === 'Matched' && payerInfo.address_needs_update) {
+        } else if (matchStatus === 'Matched' && addressNeedsUpdate) {
             statusHtml += '<span class="badge bg-warning me-1">Address Mismatch</span>';
         } else if (matchStatus === 'Matched') {
             statusHtml += '<span class="badge bg-success me-1">Customer Matched</span>';
