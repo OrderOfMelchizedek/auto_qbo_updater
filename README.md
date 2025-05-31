@@ -139,6 +139,8 @@ To use the Gemini API for donation document processing:
 
 ## Development
 
+### Backend Development
+
 - Run tests:
   ```
   pytest
@@ -147,6 +149,74 @@ To use the Gemini API for donation document processing:
   ```
   black src tests
   ```
+
+### Frontend Development & Testing
+
+This project includes a comprehensive JavaScript test suite for frontend functionality.
+
+#### Setup Frontend Testing
+
+1. Install Node.js 16+ and npm 8+
+2. Run the setup script:
+   ```bash
+   ./scripts/setup-frontend-tests.sh
+   ```
+
+#### Available Commands
+
+```bash
+# Lint JavaScript files
+npm run lint:js
+npm run lint:js:fix          # Auto-fix issues
+
+# Run frontend tests
+npm run test:frontend        # Run all frontend tests
+npm run test:frontend:coverage # Run with coverage report
+npm run test:frontend:watch  # Watch mode for development
+
+# Run tests directly in the frontend directory
+cd tests/frontend
+npm test                     # Run all tests
+npm test -- --watch         # Watch mode
+npm test -- --coverage      # Coverage report
+```
+
+#### Frontend Test Coverage
+
+The frontend test suite includes:
+
+- **Utility Functions**: CSRF handling, fetch wrappers, formatting
+- **V3 Data Compatibility**: Enriched format validation, field mapping
+- **QBO Integration**: Customer management, sales receipt processing
+- **File Upload**: Complete upload workflow with progress tracking
+- **UI Components**: Modals, forms, progress displays
+- **Error Handling**: Network failures, edge cases, security
+- **End-to-End**: Complete user workflows and integration scenarios
+
+#### Pre-commit Integration
+
+Frontend tests are automatically run by pre-commit hooks:
+
+- **On commit**: Quick tests for changed JavaScript files
+- **On push**: Full test suite with coverage validation
+
+### Code Quality
+
+The project uses pre-commit hooks to ensure code quality:
+
+```bash
+# Install pre-commit hooks
+pre-commit install
+
+# Run all checks manually
+pre-commit run --all-files
+```
+
+Quality checks include:
+- **Python**: Black formatting, isort, flake8 linting, bandit security
+- **JavaScript**: ESLint linting with auto-fix
+- **Tests**: Backend pytest + Frontend Jest
+- **General**: Trailing whitespace, file endings, YAML/JSON validation
 
 ## Deployment to Heroku
 

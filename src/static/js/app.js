@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Global state
 let donations = [];
 let reportModal, customerModal;
@@ -32,37 +33,6 @@ function fetchWithCSRF(url, options = {}) {
         });
 }
 
-// Show merge history for a donation
-function showMergeHistory(donationId) {
-    const donation = donations.find(d => d.internalId === donationId);
-    if (!donation || !donation.mergeHistory) return;
-
-    let historyHtml = '<h6>Merge History</h6><ul class="list-unstyled">';
-
-    donation.mergeHistory.forEach((merge, index) => {
-        historyHtml += `
-            <li class="mb-3">
-                <strong>Merge ${index + 1}:</strong><br>
-                <small class="text-muted">Time: ${new Date(merge.timestamp).toLocaleString()}</small><br>
-                <small>Source: Check #${merge.sourceData.checkNo || 'N/A'} - ${merge.sourceData.donor || 'Unknown'} - $${merge.sourceData.amount || '0'}</small><br>
-                <small>Fields merged: <span class="badge bg-secondary">${merge.mergedFields.join('</span> <span class="badge bg-secondary">')}</span></small>
-            </li>
-        `;
-    });
-
-    historyHtml += '</ul>';
-
-    // Show in a simple alert for now (could be improved with a modal)
-    const alertDiv = document.createElement('div');
-    alertDiv.className = 'alert alert-info alert-dismissible fade show position-fixed top-50 start-50 translate-middle';
-    alertDiv.style.zIndex = '9999';
-    alertDiv.style.maxWidth = '500px';
-    alertDiv.innerHTML = `
-        ${historyHtml}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    document.body.appendChild(alertDiv);
-}
 
 // Helper functions
 function formatCurrency(amount) {
@@ -83,7 +53,7 @@ function formatCurrency(amount) {
 
 // Convert all caps text to proper case
 function toProperCase(str) {
-    if (!str) return str;
+    if (!str) {return str;}
 
     // List of words that should remain uppercase
     const keepUppercase = ['LLC', 'INC', 'II', 'III', 'IV', 'PO', 'USA'];
@@ -247,7 +217,7 @@ function renderDonationTable() {
                     let selectedIndex = -1;
 
                     // Filter and show suggestions
-                    function showSuggestions(searchTerm) {
+                    const showSuggestions = function(searchTerm) {
                         suggestions.innerHTML = '';
                         selectedIndex = -1;
 
@@ -328,9 +298,9 @@ function renderDonationTable() {
                         });
 
                         suggestions.style.display = 'block';
-                    }
+                    };
 
-                    function updateSelection() {
+                    const updateSelection = function() {
                         const items = suggestions.querySelectorAll('div');
                         items.forEach((item, index) => {
                             if (index === 0 && selectedIndex === -1) {
@@ -343,18 +313,18 @@ function renderDonationTable() {
                                 item.style.backgroundColor = index === 0 ? '#f8f9fa' : 'white';
                             }
                         });
-                    }
+                    };
 
-                    function selectCustomer(customer) {
+                    const selectCustomer = function(customer) {
                         input.value = customer.name;
                         // Update V3 format
-                        if (!donation.payer_info) donation.payer_info = {};
+                        if (!donation.payer_info) {donation.payer_info = {};}
                         donation.payer_info.customer_lookup = customer.name;
                         suggestions.style.display = 'none';
 
                         // Call manual match endpoint
                         manualMatchCustomer(donation.internal_id || tr.dataset.id, customer.id);
-                    }
+                    };
 
                     // Handle input events
                     input.addEventListener('input', function() {
@@ -394,10 +364,10 @@ function renderDonationTable() {
                     input.addEventListener('blur', function() {
                         // Delay to allow click on suggestion
                         setTimeout(() => {
-                            donation[field] = this.value;
+                            donation[mapping.field] = this.value;
                             // Apply formatting to fix all caps
                             donation = formatDonationData(donation);
-                            td.textContent = donation[field];
+                            td.textContent = donation[mapping.field];
                             suggestions.style.display = 'none';
                             // Save changes to backend
                             saveChanges();
@@ -422,11 +392,11 @@ function renderDonationTable() {
                         const newValue = this.value;
 
                         // Initialize nested objects if they don't exist
-                        if (!donation.payer_info) donation.payer_info = {};
-                        if (!donation.payment_info) donation.payment_info = {};
+                        if (!donation.payer_info) {donation.payer_info = {};}
+                        if (!donation.payment_info) {donation.payment_info = {};}
 
                         // Update the appropriate part of the V3 structure
-                        switch(mapping.field) {
+                        switch (mapping.field) {
                             case 'donorName':
                                 donation.payer_info.customer_lookup = newValue;
                                 break;
@@ -460,7 +430,7 @@ function renderDonationTable() {
                         if (mapping.field !== 'memo' && mapping.field !== 'state') {
                             const formattedValue = toProperCase(newValue);
                             // Update the formatted value back to the structure
-                            switch(mapping.field) {
+                            switch (mapping.field) {
                                 case 'donorName':
                                     donation.payer_info.customer_lookup = formattedValue;
                                     break;
@@ -511,7 +481,6 @@ function renderDonationTable() {
         // Customer status indicator using V3 format
         const matchStatus = donation.match_status || 'New';
         const hasCustomerId = donation.qbo_customer_id;
-        const payerInfo = donation.payer_info || {};
 
         if (matchStatus === 'New') {
             statusHtml += '<span class="badge bg-info me-1">New Customer</span>';
@@ -625,6 +594,7 @@ function attachActionButtonListeners() {
     document.querySelectorAll('.delete-donation-btn').forEach(button => {
         button.addEventListener('click', function() {
             const donationId = this.dataset.id;
+            // eslint-disable-next-line no-alert
             if (confirm('Are you sure you want to delete this donation?')) {
                 deleteDonation(donationId);
             }
@@ -634,8 +604,8 @@ function attachActionButtonListeners() {
 
 function showCustomerModal(donationId, mode) {
     // Find the donation
-    const donation = donations.find(d => d.internalId === donationId);
-    if (!donation) return;
+    const donation = donations.find(d => d.internal_id === donationId);
+    if (!donation) {return;}
 
     // Set modal title based on mode
     const modalTitle = mode === 'create' ? 'Create New Customer' : 'Update Customer Address';
@@ -643,12 +613,18 @@ function showCustomerModal(donationId, mode) {
 
     // Set form fields using V3 format
     const payerInfo = donation.payer_info || {};
+    const customerName = payerInfo.customer_lookup || '';
+    const addressLine1 = payerInfo.qb_address_line_1 || payerInfo.extracted_address?.line_1 || '';
+    const city = payerInfo.qb_city || payerInfo.extracted_address?.city || '';
+    const state = payerInfo.qb_state || payerInfo.extracted_address?.state || '';
+    const zip = payerInfo.qb_zip || payerInfo.extracted_address?.zip || '';
+
     document.getElementById('customerDonationId').value = donationId;
-    document.getElementById('customerName').value = payerInfo.customer_lookup || '';
-    document.getElementById('customerAddress').value = payerInfo.qb_address_line_1 || payerInfo.extracted_address?.line_1 || '';
-    document.getElementById('customerCity').value = payerInfo.qb_city || payerInfo.extracted_address?.city || '';
-    document.getElementById('customerState').value = payerInfo.qb_state || payerInfo.extracted_address?.state || '';
-    document.getElementById('customerZip').value = payerInfo.qb_zip || payerInfo.extracted_address?.zip || '';
+    document.getElementById('customerName').value = customerName;
+    document.getElementById('customerAddress').value = addressLine1;
+    document.getElementById('customerCity').value = city;
+    document.getElementById('customerState').value = state;
+    document.getElementById('customerZip').value = zip;
 
     // Set button text based on mode
     const saveBtn = document.getElementById('saveCustomerBtn');
@@ -667,38 +643,6 @@ function showCustomerModal(donationId, mode) {
     customerModal.show();
 }
 
-// API interaction functions
-function checkCustomer(donationId) {
-    fetchWithCSRF(`/qbo/customer/${donationId}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update the donation's customer status in the UI
-                const donation = donations.find(d => d.internalId === donationId);
-                if (donation) {
-                    if (data.customerFound) {
-                        donation.qbCustomerStatus = data.addressMatch ? 'Matched' : 'Matched-AddressMismatch';
-                        donation.qboCustomerId = data.customer.Id;
-                        showToast(data.addressMatch ?
-                            'Customer found in QBO with matching address' :
-                            'Customer found in QBO with address mismatch');
-                    } else {
-                        donation.qbCustomerStatus = 'New';
-                        showToast('Customer not found in QBO');
-                    }
-
-                    // Re-render the table
-                    renderDonationTable();
-                }
-            } else {
-                showToast(data.message || 'Error checking customer in QBO', 'danger');
-            }
-        })
-        .catch(error => {
-            console.error('Error checking customer:', error);
-            showToast('Error checking customer in QBO', 'danger');
-        });
-}
 
 function createCustomer(donationId) {
     // Get form data
@@ -722,10 +666,10 @@ function createCustomer(donationId) {
         .then(data => {
             if (data.success) {
                 // Update the donation's customer status in the UI
-                const donation = donations.find(d => d.internalId === donationId);
+                const donation = donations.find(d => d.internal_id === donationId);
                 if (donation) {
-                    donation.qbCustomerStatus = 'Matched';
-                    donation.qboCustomerId = data.customer.Id;
+                    donation.match_status = 'Matched';
+                    donation.qbo_customer_id = data.customer.Id;
 
                     // Re-render the table
                     renderDonationTable();
@@ -767,9 +711,9 @@ function updateCustomer(donationId) {
         .then(data => {
             if (data.success) {
                 // Update the donation's customer status in the UI
-                const donation = donations.find(d => d.internalId === donationId);
+                const donation = donations.find(d => d.internal_id === donationId);
                 if (donation) {
-                    donation.qbCustomerStatus = 'Matched';
+                    donation.match_status = 'Matched';
 
                     // Re-render the table
                     renderDonationTable();
@@ -815,12 +759,12 @@ function fetchQBOItems() {
                 }
                 return data.items;
             } else {
-                console.error("Error in fetchQBOItems response:", data.message || "Unknown error");
+                console.error('Error in fetchQBOItems response:', data.message || 'Unknown error');
                 return [];
             }
         })
         .catch(error => {
-            console.error("Error fetching QBO items:", error);
+            console.error('Error fetching QBO items:', error);
             return [];
         });
 }
@@ -846,12 +790,12 @@ function fetchQBOAccounts() {
 
                 return data.accounts;
             } else {
-                console.error("Error in fetchQBOAccounts response:", data.message || "Unknown error");
+                console.error('Error in fetchQBOAccounts response:', data.message || 'Unknown error');
                 return [];
             }
         })
         .catch(error => {
-            console.error("Error fetching QBO accounts:", error);
+            console.error('Error fetching QBO accounts:', error);
             return [];
         });
 }
@@ -873,12 +817,12 @@ function fetchQBOPaymentMethods() {
                 }
                 return data.paymentMethods;
             } else {
-                console.error("Error in fetchQBOPaymentMethods response:", data.message || "Unknown error");
+                console.error('Error in fetchQBOPaymentMethods response:', data.message || 'Unknown error');
                 return [];
             }
         })
         .catch(error => {
-            console.error("Error fetching QBO payment methods:", error);
+            console.error('Error fetching QBO payment methods:', error);
             return [];
         });
 }
@@ -892,12 +836,12 @@ function fetchQBOCustomers() {
                 console.log(`Loaded ${qboCustomers.length} QBO customers`);
                 return data.customers;
             } else {
-                console.error("Error fetching QBO customers:", data.message || "Unknown error");
+                console.error('Error fetching QBO customers:', data.message || 'Unknown error');
                 return [];
             }
         })
         .catch(error => {
-            console.error("Error fetching QBO customers:", error);
+            console.error('Error fetching QBO customers:', error);
             return [];
         });
 }
@@ -910,25 +854,25 @@ function manualMatchCustomer(donationId, customerId) {
         },
         body: JSON.stringify({ customerId: customerId })
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
             // Update the donation with the matched customer info
-            const donation = donations.find(d => d.internalId === donationId);
-            if (donation) {
-                donation.qbCustomerStatus = 'Matched';
-                donation.qboCustomerId = customerId;
-                renderDonationTable();
-                showToast('Customer matched successfully', 'success');
+                const donation = donations.find(d => d.internal_id === donationId);
+                if (donation) {
+                    donation.match_status = 'Matched';
+                    donation.qbo_customer_id = customerId;
+                    renderDonationTable();
+                    showToast('Customer matched successfully', 'success');
+                }
+            } else {
+                showToast('Error matching customer: ' + data.message, 'danger');
             }
-        } else {
-            showToast('Error matching customer: ' + data.message, 'danger');
-        }
-    })
-    .catch(error => {
-        console.error('Error matching customer:', error);
-        showToast('Error matching customer', 'danger');
-    });
+        })
+        .catch(error => {
+            console.error('Error matching customer:', error);
+            showToast('Error matching customer', 'danger');
+        });
 }
 
 function createNewCustomerInline(customerName, donation) {
@@ -949,56 +893,56 @@ function createNewCustomerInline(customerName, donation) {
         },
         body: JSON.stringify({ donations: donations })
     })
-    .then(response => response.json())
-    .then(saveResult => {
-        if (!saveResult.success) {
-            throw new Error('Failed to save donation data');
-        }
-
-        // Show loading
-        showToast('Creating new customer...', 'info');
-
-        // Now create the customer
-        return fetchWithCSRF(`/qbo/customer/create/${donation.internalId}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
+        .then(response => response.json())
+        .then(saveResult => {
+            if (!saveResult.success) {
+                throw new Error('Failed to save donation data');
             }
-        });
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success && data.customer) {
+
+            // Show loading
+            showToast('Creating new customer...', 'info');
+
+            // Now create the customer
+            return fetchWithCSRF(`/qbo/customer/create/${donation.internal_id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.customer) {
             // Add the new customer to our local list
-            const newCustomer = {
-                id: data.customer.Id,
-                name: data.customer.DisplayName || customerName,
-                address: 'No address on file'
-            };
-            qboCustomers.push(newCustomer);
+                const newCustomer = {
+                    id: data.customer.Id,
+                    name: data.customer.DisplayName || customerName,
+                    address: 'No address on file'
+                };
+                qboCustomers.push(newCustomer);
 
-            // Update the donation with the new customer
-            donation.qbCustomerStatus = 'Matched';
-            donation.qboCustomerId = data.customer.Id;
+                // Update the donation with the new customer
+                donation.match_status = 'Matched';
+                donation.qbo_customer_id = data.customer.Id;
 
-            // Update the input field
-            const activeCell = document.querySelector('td .form-control');
-            if (activeCell && activeCell.value !== undefined) {
-                activeCell.value = customerName;
+                // Update the input field
+                const activeCell = document.querySelector('td .form-control');
+                if (activeCell && activeCell.value !== undefined) {
+                    activeCell.value = customerName;
+                }
+
+                // Re-render the table
+                renderDonationTable();
+
+                showToast(`Customer "${customerName}" created and matched successfully`, 'success');
+            } else {
+                showToast('Error creating customer: ' + (data.message || 'Unknown error'), 'danger');
             }
-
-            // Re-render the table
-            renderDonationTable();
-
-            showToast(`Customer "${customerName}" created and matched successfully`, 'success');
-        } else {
-            showToast('Error creating customer: ' + (data.message || 'Unknown error'), 'danger');
-        }
-    })
-    .catch(error => {
-        console.error('Error creating customer:', error);
-        showToast('Error creating customer', 'danger');
-    });
+        })
+        .catch(error => {
+            console.error('Error creating customer:', error);
+            showToast('Error creating customer', 'danger');
+        });
 }
 
 function populateItemSelects() {
@@ -1018,16 +962,16 @@ function populateItemSelects() {
             // Check if we have items
             if (qboItems.length === 0) {
                 const option = document.createElement('option');
-                option.value = "";
-                option.textContent = "No items found";
+                option.value = '';
+                option.textContent = 'No items found';
                 select.appendChild(option);
                 return;
             }
 
             // Add default empty option
             const emptyOption = document.createElement('option');
-            emptyOption.value = "";
-            emptyOption.textContent = "Select a product/service...";
+            emptyOption.value = '';
+            emptyOption.textContent = 'Select a product/service...';
             select.appendChild(emptyOption);
 
             // Add items
@@ -1051,7 +995,7 @@ function populateItemSelects() {
 }
 
 function populateAccountSelects() {
-    console.log("Populating account dropdowns with", qboAccounts.length, "accounts");
+    console.log('Populating account dropdowns with', qboAccounts.length, 'accounts');
 
     // Get all account selects in the UI
     const selects = [
@@ -1064,7 +1008,7 @@ function populateAccountSelects() {
     selects.forEach(select => {
         if (!select) {
             // Skip if element doesn't exist in DOM
-            console.log("Account select element not found in DOM");
+            console.log('Account select element not found in DOM');
             return;
         }
 
@@ -1073,18 +1017,18 @@ function populateAccountSelects() {
 
         // Check if we have accounts
         if (!qboAccounts || qboAccounts.length === 0) {
-            console.log("No accounts available to populate dropdown");
+            console.log('No accounts available to populate dropdown');
             const option = document.createElement('option');
-            option.value = "";
-            option.textContent = "No accounts found";
+            option.value = '';
+            option.textContent = 'No accounts found';
             select.appendChild(option);
             return;
         }
 
         // Add default empty option
         const emptyOption = document.createElement('option');
-        emptyOption.value = "";
-        emptyOption.textContent = "Select an account...";
+        emptyOption.value = '';
+        emptyOption.textContent = 'Select an account...';
         select.appendChild(emptyOption);
 
         // Filter out expense accounts - only show asset, liability, and bank accounts
@@ -1137,7 +1081,7 @@ function populateAccountSelects() {
         }
 
         // If that didn't work, try the undepositedFundsAccount we found
-        if ((select.value === "" || !select.value) && undepositedFundsAccount) {
+        if ((select.value === '' || !select.value) && undepositedFundsAccount) {
             console.log(`Setting default account to Undeposited Funds: ${undepositedFundsAccount.id}`);
             select.value = undepositedFundsAccount.id;
 
@@ -1148,7 +1092,7 @@ function populateAccountSelects() {
         }
 
         // If still not set (rare case), add the account if we know it by ID
-        if ((select.value === "" || !select.value) && defaultAccountId) {
+        if ((select.value === '' || !select.value) && defaultAccountId) {
             // Find the account in our data
             const defaultAccount = qboAccounts.find(a => a.id === defaultAccountId);
             if (defaultAccount) {
@@ -1177,14 +1121,14 @@ function populateAccountSelects() {
             }
 
             // If still not set, create a fallback option
-            if (select.value === "" || !select.value) {
+            if (select.value === '' || !select.value) {
                 const option = document.createElement('option');
-                option.value = "12000"; // Common default ID for Undeposited Funds
-                option.textContent = "Undeposited Funds (Other Current Asset)";
+                option.value = '12000'; // Common default ID for Undeposited Funds
+                option.textContent = 'Undeposited Funds (Other Current Asset)';
                 option.className = 'fw-bold';
                 option.style.backgroundColor = '#f8f9fa';
                 select.appendChild(option);
-                select.value = "12000";
+                select.value = '12000';
             }
         }
 
@@ -1207,16 +1151,16 @@ function populateIncomeAccountSelect() {
         // Check if we have any income accounts
         if (incomeAccounts.length === 0) {
             const option = document.createElement('option');
-            option.value = "";
-            option.textContent = "No income accounts found";
+            option.value = '';
+            option.textContent = 'No income accounts found';
             incomeAccountSelect.appendChild(option);
             return;
         }
 
         // Add default empty option
         const emptyOption = document.createElement('option');
-        emptyOption.value = "";
-        emptyOption.textContent = "Select an income account...";
+        emptyOption.value = '';
+        emptyOption.textContent = 'Select an income account...';
         incomeAccountSelect.appendChild(emptyOption);
 
         // Add income accounts
@@ -1237,7 +1181,7 @@ function populateIncomeAccountSelect() {
 }
 
 function populatePaymentMethodSelects() {
-    console.log("Populating payment method dropdowns with", qboPaymentMethods.length, "methods");
+    console.log('Populating payment method dropdowns with', qboPaymentMethods.length, 'methods');
 
     // Get all payment method selects in the UI
     const selects = [
@@ -1250,7 +1194,7 @@ function populatePaymentMethodSelects() {
     selects.forEach(select => {
         if (!select) {
             // Skip if element doesn't exist in DOM
-            console.log("Payment method select element not found in DOM");
+            console.log('Payment method select element not found in DOM');
             return;
         }
 
@@ -1259,18 +1203,18 @@ function populatePaymentMethodSelects() {
 
         // Check if we have payment methods
         if (!qboPaymentMethods || qboPaymentMethods.length === 0) {
-            console.log("No payment methods available to populate dropdown");
+            console.log('No payment methods available to populate dropdown');
             const option = document.createElement('option');
-            option.value = "";
-            option.textContent = "No payment methods found";
+            option.value = '';
+            option.textContent = 'No payment methods found';
             select.appendChild(option);
             return;
         }
 
         // Add default empty option
         const emptyOption = document.createElement('option');
-        emptyOption.value = "";
-        emptyOption.textContent = "Select a payment method...";
+        emptyOption.value = '';
+        emptyOption.textContent = 'Select a payment method...';
         select.appendChild(emptyOption);
 
         // Add payment methods
@@ -1317,20 +1261,19 @@ function populatePaymentMethodSelects() {
                 }
             }
         } else {
-            console.warn("No default payment method ID set");
+            console.warn('No default payment method ID set');
         }
     });
 }
 
 // QuickBooks setup handling
-let setupAccountId, setupItemId, setupPaymentMethodId, pendingDonationId;
 // qboAccounts is already defined above
 // qboItems is already defined above
 // qboPaymentMethods is already defined above
 
 function showQboSetupModal(type, invalidId, message, detail, donationId) {
     // Store the donation ID for later use
-    pendingDonationId = donationId;
+    // (donationId stored for potential future use)
 
     // Hide all setup sections
     document.getElementById('accountSetupSection').classList.add('d-none');
@@ -1348,7 +1291,6 @@ function showQboSetupModal(type, invalidId, message, detail, donationId) {
 
     // Show the appropriate section based on type
     if (type === 'account') {
-        setupAccountId = invalidId;
         document.getElementById('missingAccountId').textContent = invalidId;
         document.getElementById('accountSetupSection').classList.remove('d-none');
 
@@ -1356,7 +1298,6 @@ function showQboSetupModal(type, invalidId, message, detail, donationId) {
         fetchQBOAccounts();
     }
     else if (type === 'item') {
-        setupItemId = invalidId;
         document.getElementById('missingItemId').textContent = invalidId;
         document.getElementById('itemSetupSection').classList.remove('d-none');
 
@@ -1364,7 +1305,6 @@ function showQboSetupModal(type, invalidId, message, detail, donationId) {
         fetchQBOItems();
     }
     else if (type === 'paymentMethod') {
-        setupPaymentMethodId = invalidId;
         document.getElementById('paymentMethodSetupSection').classList.remove('d-none');
 
         // Fetch payment methods
@@ -1380,71 +1320,6 @@ function showQboSetupModal(type, invalidId, message, detail, donationId) {
     qboSetupModal.show();
 }
 
-function fetchQBOAccounts() {
-    fetchWithCSRF('/qbo/accounts/all')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.accounts) {
-                qboAccounts = data.accounts;
-
-                // Populate the account select dropdown
-                const accountSelect = document.getElementById('alternativeAccountSelect');
-                accountSelect.innerHTML = '';
-
-                // Add all accounts as options
-                qboAccounts.forEach(account => {
-                    const option = document.createElement('option');
-                    option.value = account.id;
-                    option.textContent = `${account.name} (${account.type})`;
-                    accountSelect.appendChild(option);
-                });
-
-                // If Undeposited Funds account exists, select it
-                if (data.undepositedFunds) {
-                    accountSelect.value = data.undepositedFunds.id;
-                }
-
-                // Also populate the income accounts dropdown for item creation
-                const incomeAccountSelect = document.getElementById('newItemIncomeAccount');
-                if (incomeAccountSelect) {
-                    incomeAccountSelect.innerHTML = '';
-
-                    // Add only income accounts as options
-                    const incomeAccounts = qboAccounts.filter(account =>
-                        account.type === 'Income' || account.type.includes('Income'));
-
-                    if (incomeAccounts.length > 0) {
-                        incomeAccounts.forEach(account => {
-                            const option = document.createElement('option');
-                            option.value = account.id;
-                            option.textContent = account.name;
-                            incomeAccountSelect.appendChild(option);
-                        });
-                    } else {
-                        incomeAccountSelect.innerHTML = '<option value="">No income accounts found</option>';
-                    }
-                }
-            } else {
-                document.getElementById('alternativeAccountSelect').innerHTML =
-                    '<option value="">No accounts found</option>';
-
-                if (document.getElementById('newItemIncomeAccount')) {
-                    document.getElementById('newItemIncomeAccount').innerHTML =
-                        '<option value="">No income accounts found</option>';
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching accounts:', error);
-            document.getElementById('alternativeAccountSelect').innerHTML =
-                '<option value="">Error loading accounts</option>';
-
-            if (document.getElementById('newItemIncomeAccount')) {
-                document.getElementById('newItemIncomeAccount').innerHTML =
-                    '<option value="">Error loading accounts</option>';
-            }
-        });
-}
 
 function createQBOAccount() {
     // Show loading state
@@ -1470,8 +1345,8 @@ function createQBOAccount() {
     };
 
     // Add optional fields
-    if (accountNumber) accountData.accountNumber = accountNumber;
-    if (accountDescription) accountData.description = accountDescription;
+    if (accountNumber) {accountData.accountNumber = accountNumber;}
+    if (accountDescription) {accountData.description = accountDescription;}
 
     // Send request
     fetchWithCSRF('/qbo/account/create', {
@@ -1481,38 +1356,38 @@ function createQBOAccount() {
         },
         body: JSON.stringify(accountData)
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
             // Show success message
-            statusElement.innerHTML = '<div class="alert alert-success">Account created successfully!</div>';
+                statusElement.innerHTML = '<div class="alert alert-success">Account created successfully!</div>';
 
-            // Add to dropdown and select it
-            const newAccount = data.account;
+                // Add to dropdown and select it
+                const newAccount = data.account;
 
-            // If no accounts dropdown exists yet, refresh the accounts list
-            if (!document.getElementById('alternativeAccountSelect').options.length) {
-                fetchQBOAccounts();
-            } else {
+                // If no accounts dropdown exists yet, refresh the accounts list
+                if (!document.getElementById('alternativeAccountSelect').options.length) {
+                    fetchQBOAccounts();
+                } else {
                 // Add to dropdown
-                const option = document.createElement('option');
-                option.value = newAccount.id;
-                option.textContent = `${newAccount.name} (${newAccount.type})`;
-                const accountSelect = document.getElementById('alternativeAccountSelect');
-                accountSelect.appendChild(option);
-                accountSelect.value = newAccount.id;
-            }
+                    const option = document.createElement('option');
+                    option.value = newAccount.id;
+                    option.textContent = `${newAccount.name} (${newAccount.type})`;
+                    const accountSelect = document.getElementById('alternativeAccountSelect');
+                    accountSelect.appendChild(option);
+                    accountSelect.value = newAccount.id;
+                }
 
-            // Switch to "Use Existing" tab
-            document.getElementById('existing-account-tab').click();
-        } else {
-            statusElement.innerHTML = `<div class="alert alert-danger">${data.message || 'Error creating account'}</div>`;
-        }
-    })
-    .catch(error => {
-        console.error('Error creating account:', error);
-        statusElement.innerHTML = '<div class="alert alert-danger">Failed to create account. Please try again.</div>';
-    });
+                // Switch to "Use Existing" tab
+                document.getElementById('existing-account-tab').click();
+            } else {
+                statusElement.innerHTML = `<div class="alert alert-danger">${data.message || 'Error creating account'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error creating account:', error);
+            statusElement.innerHTML = '<div class="alert alert-danger">Failed to create account. Please try again.</div>';
+        });
 }
 
 function createQBOItem() {
@@ -1546,8 +1421,8 @@ function createQBOItem() {
     };
 
     // Add optional fields
-    if (itemDescription) itemData.description = itemDescription;
-    if (itemPrice) itemData.unitPrice = parseFloat(itemPrice);
+    if (itemDescription) {itemData.description = itemDescription;}
+    if (itemPrice) {itemData.unitPrice = parseFloat(itemPrice);}
 
     // Send request
     fetchWithCSRF('/qbo/item/create', {
@@ -1557,41 +1432,41 @@ function createQBOItem() {
         },
         body: JSON.stringify(itemData)
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
             // Show success message
-            statusElement.innerHTML = '<div class="alert alert-success">Item created successfully!</div>';
+                statusElement.innerHTML = '<div class="alert alert-success">Item created successfully!</div>';
 
-            // Add to dropdown and select it
-            const newItem = data.item;
+                // Add to dropdown and select it
+                const newItem = data.item;
 
-            // Refresh items list to include the new item
-            qboItems.push(newItem);
+                // Refresh items list to include the new item
+                qboItems.push(newItem);
 
-            // Update the items dropdown
-            const itemSelect = document.getElementById('alternativeItemSelect');
+                // Update the items dropdown
+                const itemSelect = document.getElementById('alternativeItemSelect');
 
-            // Add to dropdown
-            const option = document.createElement('option');
-            option.value = newItem.id;
-            option.textContent = newItem.name;
-            itemSelect.appendChild(option);
-            itemSelect.value = newItem.id;
+                // Add to dropdown
+                const option = document.createElement('option');
+                option.value = newItem.id;
+                option.textContent = newItem.name;
+                itemSelect.appendChild(option);
+                itemSelect.value = newItem.id;
 
-            // Also add to preview and batch item selects
-            populateItemSelects();
+                // Also add to preview and batch item selects
+                populateItemSelects();
 
-            // Switch to "Use Existing" tab
-            document.getElementById('existing-item-tab').click();
-        } else {
-            statusElement.innerHTML = `<div class="alert alert-danger">${data.message || 'Error creating item'}</div>`;
-        }
-    })
-    .catch(error => {
-        console.error('Error creating item:', error);
-        statusElement.innerHTML = '<div class="alert alert-danger">Failed to create item. Please try again.</div>';
-    });
+                // Switch to "Use Existing" tab
+                document.getElementById('existing-item-tab').click();
+            } else {
+                statusElement.innerHTML = `<div class="alert alert-danger">${data.message || 'Error creating item'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error creating item:', error);
+            statusElement.innerHTML = '<div class="alert alert-danger">Failed to create item. Please try again.</div>';
+        });
 }
 
 function createQBOPaymentMethod() {
@@ -1621,74 +1496,40 @@ function createQBOPaymentMethod() {
         },
         body: JSON.stringify(paymentMethodData)
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Show success message
-            statusElement.innerHTML = '<div class="alert alert-success">Payment method created successfully!</div>';
-
-            // Add to dropdown and select it
-            const newPaymentMethod = data.paymentMethod;
-
-            // If no payment methods dropdown exists yet, refresh the list
-            if (!document.getElementById('alternativePaymentMethodSelect').options.length) {
-                fetchQBOPaymentMethods();
-            } else {
-                // Add to dropdown
-                const option = document.createElement('option');
-                option.value = newPaymentMethod.id;
-                option.textContent = newPaymentMethod.name;
-                const methodSelect = document.getElementById('alternativePaymentMethodSelect');
-                methodSelect.appendChild(option);
-                methodSelect.value = newPaymentMethod.id;
-            }
-
-            // Switch to "Use Existing" tab
-            document.getElementById('existing-payment-method-tab').click();
-        } else {
-            statusElement.innerHTML = `<div class="alert alert-danger">${data.message || 'Error creating payment method'}</div>`;
-        }
-    })
-    .catch(error => {
-        console.error('Error creating payment method:', error);
-        statusElement.innerHTML = '<div class="alert alert-danger">Failed to create payment method. Please try again.</div>';
-    });
-}
-
-function fetchQBOPaymentMethods() {
-    fetchWithCSRF('/qbo/payment-methods/all')
         .then(response => response.json())
         .then(data => {
-            if (data.success && data.paymentMethods) {
-                qboPaymentMethods = data.paymentMethods;
+            if (data.success) {
+            // Show success message
+                statusElement.innerHTML = '<div class="alert alert-success">Payment method created successfully!</div>';
 
-                // Populate the payment method select dropdown
-                const methodSelect = document.getElementById('alternativePaymentMethodSelect');
-                methodSelect.innerHTML = '';
+                // Add to dropdown and select it
+                const newPaymentMethod = data.paymentMethod;
 
-                // Add all payment methods as options
-                qboPaymentMethods.forEach(method => {
+                // If no payment methods dropdown exists yet, refresh the list
+                if (!document.getElementById('alternativePaymentMethodSelect').options.length) {
+                    fetchQBOPaymentMethods();
+                } else {
+                // Add to dropdown
                     const option = document.createElement('option');
-                    option.value = method.id;
-                    option.textContent = method.name;
+                    option.value = newPaymentMethod.id;
+                    option.textContent = newPaymentMethod.name;
+                    const methodSelect = document.getElementById('alternativePaymentMethodSelect');
                     methodSelect.appendChild(option);
-                });
-
-                // If Check payment method exists, select it
-                if (data.checkMethod) {
-                    methodSelect.value = data.checkMethod.id;
+                    methodSelect.value = newPaymentMethod.id;
                 }
+
+                // Switch to "Use Existing" tab
+                document.getElementById('existing-payment-method-tab').click();
             } else {
-                document.getElementById('alternativePaymentMethodSelect').innerHTML =
-                    '<option value="">No payment methods found</option>';
+                statusElement.innerHTML = `<div class="alert alert-danger">${data.message || 'Error creating payment method'}</div>`;
             }
         })
         .catch(error => {
-            console.error('Error fetching payment methods:', error);
-            document.getElementById('alternativePaymentMethodSelect').innerHTML =
-                '<option value="">Error loading payment methods</option>';
+            console.error('Error creating payment method:', error);
+            statusElement.innerHTML = '<div class="alert alert-danger">Failed to create payment method. Please try again.</div>';
         });
 }
+
 
 function useAlternative() {
     // Get the setup type
@@ -1755,7 +1596,7 @@ function trySendWithAlternative(donationId, customFields) {
         .then(data => {
             if (data.success) {
                 // Update the donation's sync status in the UI
-                const donation = donations.find(d => d.internalId === donationId);
+                const donation = donations.find(d => d.internal_id === donationId);
                 if (donation) {
                     donation.qbSyncStatus = 'Sent';
                     donation.qboSalesReceiptId = data.salesReceipt.Id;
@@ -1800,8 +1641,8 @@ function trySendWithAlternative(donationId, customFields) {
 }
 
 function showSalesReceiptPreview(donationId) {
-    const donation = donations.find(d => d.internalId === donationId);
-    if (!donation) return;
+    const donation = donations.find(d => d.internal_id === donationId);
+    if (!donation) {return;}
 
     // Store donation ID for later use
     document.getElementById('previewDonationId').value = donationId;
@@ -1821,20 +1662,20 @@ function showSalesReceiptPreview(donationId) {
         fetchQBOPaymentMethods(),
         fetchQBOCustomers()
     ])
-    .then(() => {
+        .then(() => {
         // Now that data is loaded, populate the selects
-        populateItemSelects();
-        populateAccountSelects();
-        populatePaymentMethodSelects();
+            populateItemSelects();
+            populateAccountSelects();
+            populatePaymentMethodSelects();
 
-        // After populating, get the values
-        continuePreview();
-    })
-    .catch(error => {
-        console.error("Error fetching QBO data:", error);
-        // Try to continue anyway
-        continuePreview();
-    });
+            // After populating, get the values
+            continuePreview();
+        })
+        .catch(error => {
+            console.error('Error fetching QBO data:', error);
+            // Try to continue anyway
+            continuePreview();
+        });
 
     function continuePreview() {
         // Get the currently selected item ref - use a default if no item is selected
@@ -1866,68 +1707,68 @@ function showSalesReceiptPreview(donationId) {
                 paymentMethodId
             })
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const preview = data.salesReceiptPreview;
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const preview = data.salesReceiptPreview;
 
-                // Populate preview fields
-                document.getElementById('previewCustomer').textContent = preview.customerName;
-                document.getElementById('previewAmount').textContent = formatCurrency(preview.amount);
-                document.getElementById('previewReferenceNo').textContent = preview.referenceNo;
-                document.getElementById('previewDate').textContent = preview.date;
-                document.getElementById('previewDepositTo').textContent = preview.depositTo;
-                document.getElementById('previewServiceDate').textContent = preview.serviceDate;
-                document.getElementById('previewDocNumber').textContent = preview.docNumber;
-                document.getElementById('previewMessage').textContent = preview.message;
-                document.getElementById('previewDescription').textContent = preview.description;
+                    // Populate preview fields
+                    document.getElementById('previewCustomer').textContent = preview.customerName;
+                    document.getElementById('previewAmount').textContent = formatCurrency(preview.amount);
+                    document.getElementById('previewReferenceNo').textContent = preview.referenceNo;
+                    document.getElementById('previewDate').textContent = preview.date;
+                    document.getElementById('previewDepositTo').textContent = preview.depositTo;
+                    document.getElementById('previewServiceDate').textContent = preview.serviceDate;
+                    document.getElementById('previewDocNumber').textContent = preview.docNumber;
+                    document.getElementById('previewMessage').textContent = preview.message;
+                    document.getElementById('previewDescription').textContent = preview.description;
 
-                // Set the item ref if specified
-                if (preview.itemRef) {
-                    document.getElementById('previewItemRef').value = preview.itemRef;
-                }
+                    // Set the item ref if specified
+                    if (preview.itemRef) {
+                        document.getElementById('previewItemRef').value = preview.itemRef;
+                    }
 
-                // Set the deposit account if specified
-                if (preview.depositToAccountId) {
-                    const depositSelect = document.getElementById('previewDepositToAccount');
-                    if (depositSelect.querySelector(`option[value="${preview.depositToAccountId}"]`)) {
-                        depositSelect.value = preview.depositToAccountId;
-                    } else {
+                    // Set the deposit account if specified
+                    if (preview.depositToAccountId) {
+                        const depositSelect = document.getElementById('previewDepositToAccount');
+                        if (depositSelect.querySelector(`option[value="${preview.depositToAccountId}"]`)) {
+                            depositSelect.value = preview.depositToAccountId;
+                        } else {
                         // If the account doesn't exist in the dropdown, add it
-                        const option = document.createElement('option');
-                        option.value = preview.depositToAccountId;
-                        option.textContent = preview.depositTo;
-                        depositSelect.appendChild(option);
-                        depositSelect.value = preview.depositToAccountId;
+                            const option = document.createElement('option');
+                            option.value = preview.depositToAccountId;
+                            option.textContent = preview.depositTo;
+                            depositSelect.appendChild(option);
+                            depositSelect.value = preview.depositToAccountId;
+                        }
                     }
-                }
 
-                // Set the payment method if specified
-                if (preview.paymentMethodId) {
-                    const paymentMethodSelect = document.getElementById('previewPaymentMethodRef');
-                    if (paymentMethodSelect.querySelector(`option[value="${preview.paymentMethodId}"]`)) {
-                        paymentMethodSelect.value = preview.paymentMethodId;
-                    } else {
+                    // Set the payment method if specified
+                    if (preview.paymentMethodId) {
+                        const paymentMethodSelect = document.getElementById('previewPaymentMethodRef');
+                        if (paymentMethodSelect.querySelector(`option[value="${preview.paymentMethodId}"]`)) {
+                            paymentMethodSelect.value = preview.paymentMethodId;
+                        } else {
                         // If the payment method doesn't exist in the dropdown, add it
-                        const option = document.createElement('option');
-                        option.value = preview.paymentMethodId;
-                        option.textContent = preview.paymentMethod;
-                        paymentMethodSelect.appendChild(option);
-                        paymentMethodSelect.value = preview.paymentMethodId;
+                            const option = document.createElement('option');
+                            option.value = preview.paymentMethodId;
+                            option.textContent = preview.paymentMethod;
+                            paymentMethodSelect.appendChild(option);
+                            paymentMethodSelect.value = preview.paymentMethodId;
+                        }
                     }
+
+                    // Show the modal
+                    salesReceiptPreviewModal.show();
+                } else {
+                    showToast(data.message || 'Error previewing sales receipt', 'danger');
                 }
 
-                // Show the modal
-                salesReceiptPreviewModal.show();
-            } else {
-                showToast(data.message || 'Error previewing sales receipt', 'danger');
-            }
-
-            // Reset button state
-            if (previewBtn) {
-                previewBtn.disabled = false;
-                previewBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
-            }
+                // Reset button state
+                if (previewBtn) {
+                    previewBtn.disabled = false;
+                    previewBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+                }
             })
             .catch(error => {
                 console.error('Error previewing sales receipt:', error);
@@ -1950,7 +1791,7 @@ function sendToQBO(donationId) {
 function showBatchReceiptModal() {
     // Make sure we have the latest QBO data before showing the modal
     // Use Promise.all to fetch all data in parallel
-    const loadingToast = showToast('Loading QuickBooks data...', 'info');
+    showToast('Loading QuickBooks data...', 'info');
 
     Promise.all([
         fetchQBOItems(),
@@ -1958,19 +1799,19 @@ function showBatchReceiptModal() {
         fetchQBOPaymentMethods(),
         fetchQBOCustomers()
     ])
-    .then(() => {
+        .then(() => {
         // Now that we have all the data, populate the dropdowns
-        populateItemSelects();
-        populateAccountSelects();
-        populatePaymentMethodSelects();
+            populateItemSelects();
+            populateAccountSelects();
+            populatePaymentMethodSelects();
 
-        // Show the modal
-        batchReceiptModal.show();
-    })
-    .catch(error => {
-        console.error("Error loading QuickBooks data for batch modal:", error);
-        showToast('Error loading QuickBooks data. Please try again.', 'danger');
-    });
+            // Show the modal
+            batchReceiptModal.show();
+        })
+        .catch(error => {
+            console.error('Error loading QuickBooks data for batch modal:', error);
+            showToast('Error loading QuickBooks data. Please try again.', 'danger');
+        });
 }
 
 function sendAllToQBO() {
@@ -2029,13 +1870,13 @@ function sendAllToQBO() {
                 // Update the UI with results
                 data.results.forEach(result => {
                     if (result.success) {
-                        const donation = donations.find(d => d.internalId === result.internalId);
+                        const donation = donations.find(d => d.internal_id === result.internal_id);
                         if (donation) {
                             donation.qbSyncStatus = 'Sent';
                             donation.qboSalesReceiptId = result.salesReceiptId;
                         }
                     } else {
-                        const donation = donations.find(d => d.internalId === result.internalId);
+                        const donation = donations.find(d => d.internal_id === result.internal_id);
                         if (donation) {
                             donation.qbSyncStatus = 'Error';
                             donation.qbSyncError = result.message;
@@ -2066,7 +1907,7 @@ function sendAllToQBO() {
 
 function deleteDonation(donationId) {
     // Find the donation index
-    const index = donations.findIndex(d => d.internalId === donationId);
+    const index = donations.findIndex(d => d.internal_id === donationId);
     if (index !== -1) {
         // Remove the donation from the array
         donations.splice(index, 1);
@@ -2106,6 +1947,7 @@ function saveChanges() {
 
 function clearAllDonations() {
     // Show confirmation dialog
+    // eslint-disable-next-line no-alert
     if (!confirm('Are you sure you want to clear all donations? This action cannot be undone.')) {
         return;
     }
@@ -2120,20 +1962,20 @@ function clearAllDonations() {
             'Content-Type': 'application/json'
         }
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
             // Re-render the empty table
-            renderDonationTable();
-            showToast('All donations cleared successfully', 'success');
-        } else {
-            showToast('Error clearing donations: ' + data.message, 'danger');
-        }
-    })
-    .catch(error => {
-        console.error('Error clearing donations:', error);
-        showToast('Error clearing donations', 'danger');
-    });
+                renderDonationTable();
+                showToast('All donations cleared successfully', 'success');
+            } else {
+                showToast('Error clearing donations: ' + data.message, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error clearing donations:', error);
+            showToast('Error clearing donations', 'danger');
+        });
 }
 
 function generateReport() {
@@ -2316,173 +2158,7 @@ function processUploadResponse(uploadData) {
     return 0;
 }
 
-// Remove invalid donations from the server session
-function removeInvalidDonationsFromSession(invalidDonations) {
-    // Only proceed if there are invalid donations to remove
-    if (!invalidDonations || invalidDonations.length === 0) return;
 
-    const invalidIds = invalidDonations
-        .filter(donation => donation.internalId) // Only those with IDs
-        .map(donation => donation.internalId);
-
-    if (invalidIds.length === 0) return;
-
-    console.log(`Removing ${invalidIds.length} invalid donations from server session:`, invalidIds);
-
-    // Call server to remove these donations
-    fetchWithCSRF('/donations/remove-invalid', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ invalidIds })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            console.log(`Successfully removed ${data.removedCount} invalid donations from session`);
-        } else {
-            console.error('Error removing invalid donations:', data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Error calling remove-invalid endpoint:', error);
-    });
-}
-
-// Upload files and process them
-function uploadAndProcessFiles(files) {
-    // Create FormData object
-    const formData = new FormData();
-
-    // Add files to FormData
-    for (let i = 0; i < files.length; i++) {
-        formData.append('files', files[i]);
-    }
-
-    // Show uploading indicator
-    const uploadButton = document.getElementById('uploadButton');
-    uploadButton.disabled = true;
-    uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Processing...';
-
-    // Show progress display immediately
-    showProgressDisplay();
-
-    // Store session ID for later use
-    let sessionId = null;
-
-    // First get a session ID by starting the upload
-    fetchWithCSRF('/upload-start', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(startData => {
-        if (startData.sessionId) {
-            sessionId = startData.sessionId;
-            // Start progress stream immediately
-            console.log('Starting progress stream with session ID:', sessionId);
-            startProgressStream(sessionId);
-
-            // Add session ID to form data
-            formData.append('sessionId', sessionId);
-
-            // Small delay to ensure SSE connection is established, then upload
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    fetchWithCSRF('/upload', {
-                        method: 'POST',
-                        body: formData
-                    }).then(resolve);
-                }, 100);
-            });
-        } else {
-            // Fallback to original upload
-            return fetchWithCSRF('/upload', {
-                method: 'POST',
-                body: formData
-            });
-        }
-    })
-    .then(response => {
-        if (!response.ok) {
-            if (response.status === 413) {
-                throw new Error("File size too large. Maximum size is 50MB per upload.");
-            }
-            return response.json().then(data => {
-                throw new Error(data.message || `Server error: ${response.status}`);
-            });
-        }
-        return response.json();
-    })
-    .then(data => {
-        // Start progress stream immediately if session ID is provided (fallback)
-        if (data.progressSessionId && !sessionId) {
-            console.log('Starting progress stream with session ID:', data.progressSessionId);
-            startProgressStream(data.progressSessionId);
-        }
-
-        if (data.success) {
-                // Process the upload response
-                const processedCount = processUploadResponse(data);
-
-                if (processedCount === 0) {
-                    showToast('No donation data found in the uploaded files', 'warning');
-                }
-
-                // Check QuickBooks authentication status
-                if (data.qboAuthenticated === false) {
-                    console.warn("QuickBooks authentication warning: Not connected to QBO");
-                    showToast('QuickBooks is not connected. Connect to QuickBooks for automatic customer matching.', 'warning');
-
-                    // Highlight the Connect to QBO button
-                    const qboBtn = document.getElementById('connectQBOBtn');
-                    if (qboBtn) {
-                        qboBtn.classList.add('btn-warning');
-                        qboBtn.classList.remove('btn-primary');
-                    }
-                }
-
-                // Show warnings if any
-                if (data.warnings && data.warnings.length > 0) {
-                    console.warn("Processing warnings:", data.warnings);
-                    showToast(`Processed with warnings. Check console for details.`, 'warning');
-                }
-
-                // Clear the file list
-                document.getElementById('fileList').innerHTML = '';
-                document.getElementById('uploadPreview').classList.add('d-none');
-
-                // Hide progress display after a delay
-                setTimeout(hideProgressDisplay, 2000);
-            } else {
-                showToast(data.message || 'Error processing files', 'danger');
-                // Hide progress display on error
-                setTimeout(hideProgressDisplay, 1000);
-            }
-
-            // Reset upload button
-            uploadButton.disabled = false;
-            uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
-        })
-        .catch(error => {
-            console.error('Error uploading files:', error);
-            let errorMessage = 'Error uploading and processing files';
-
-            // Show more specific error messages
-            if (error.message) {
-                errorMessage = error.message;
-            }
-
-            showToast(errorMessage, 'danger');
-
-            // Hide progress display on error
-            setTimeout(hideProgressDisplay, 1000);
-
-            // Reset upload button
-            uploadButton.disabled = false;
-            uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
-        });
-}
 
 // Async upload function using Celery
 function uploadAndProcessFilesAsync(files) {
@@ -2509,160 +2185,160 @@ function uploadAndProcessFilesAsync(files) {
     fetchWithCSRF('/upload-start', {
         method: 'POST'
     })
-    .then(response => response.json())
-    .then(startData => {
-        if (startData.sessionId) {
-            sessionId = startData.sessionId;
-            // Start progress stream immediately
-            console.log('Starting progress stream with session ID:', sessionId);
-            startProgressStream(sessionId);
+        .then(response => response.json())
+        .then(startData => {
+            if (startData.sessionId) {
+                sessionId = startData.sessionId;
+                // Start progress stream immediately
+                console.log('Starting progress stream with session ID:', sessionId);
+                startProgressStream(sessionId);
 
-            // Add session ID to form data
-            formData.append('sessionId', sessionId);
+                // Add session ID to form data
+                formData.append('sessionId', sessionId);
 
-            // Small delay to ensure SSE connection is established, then upload
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    fetchWithCSRF('/upload-async', {
-                        method: 'POST',
-                        body: formData
-                    }).then(resolve);
-                }, 100);
-            });
-        } else {
+                // Small delay to ensure SSE connection is established, then upload
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        fetchWithCSRF('/upload-async', {
+                            method: 'POST',
+                            body: formData
+                        }).then(resolve);
+                    }, 100);
+                });
+            } else {
             // Fallback to async upload without session
-            return fetchWithCSRF('/upload-async', {
-                method: 'POST',
-                body: formData
-            });
-        }
-    })
-    .then(response => {
-        if (!response.ok) {
-            if (response.status === 413) {
-                throw new Error("File size too large. Maximum size is 50MB per upload.");
+                return fetchWithCSRF('/upload-async', {
+                    method: 'POST',
+                    body: formData
+                });
             }
-            return response.json().then(data => {
-                throw new Error(data.message || `Server error: ${response.status}`);
-            });
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.success) {
-            taskId = data.task_id;
-            showToast('Files queued for processing. Checking status...', 'info');
+        })
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 413) {
+                    throw new Error('File size too large. Maximum size is 50MB per upload.');
+                }
+                return response.json().then(data => {
+                    throw new Error(data.message || `Server error: ${response.status}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                taskId = data.task_id;
+                showToast('Files queued for processing. Checking status...', 'info');
 
-            // Poll for task completion
-            const pollInterval = setInterval(() => {
-                fetchWithCSRF(`/task-status/${taskId}`)
-                    .then(response => response.json())
-                    .then(statusData => {
-                        if (statusData.state === 'SUCCESS') {
-                            clearInterval(pollInterval);
+                // Poll for task completion
+                const pollInterval = setInterval(() => {
+                    fetchWithCSRF(`/task-status/${taskId}`)
+                        .then(response => response.json())
+                        .then(statusData => {
+                            if (statusData.state === 'SUCCESS') {
+                                clearInterval(pollInterval);
 
-                            // Process the result
-                            const result = statusData.result;
-                            if (result.success) {
+                                // Process the result
+                                const result = statusData.result;
+                                if (result.success) {
                                 // Update session with donations
-                                if (result.donations && result.donations.length > 0) {
+                                    if (result.donations && result.donations.length > 0) {
                                     // Log donation data to debug customer matching
-                                    console.log('[TASK RESULT] Received donations:', result.donations.length);
-                                    result.donations.slice(0, 4).forEach((donation, idx) => {
-                                        console.log(`[TASK RESULT] Donation ${idx}:`, {
-                                            donor: donation['Donor Name'],
-                                            status: donation.qbCustomerStatus,
-                                            id: donation.qboCustomerId,
-                                            matchMethod: donation.matchMethod,
-                                            matchConfidence: donation.matchConfidence
+                                        console.log('[TASK RESULT] Received donations:', result.donations.length);
+                                        result.donations.slice(0, 4).forEach((donation, idx) => {
+                                            console.log(`[TASK RESULT] Donation ${idx}:`, {
+                                                donor: donation.payer_info?.customer_lookup || 'Unknown',
+                                                status: donation.match_status,
+                                                id: donation.qbo_customer_id,
+                                                matchMethod: donation.match_method,
+                                                matchConfidence: donation.match_confidence
+                                            });
                                         });
-                                    });
 
-                                    // Store donations in session via API call
-                                    fetchWithCSRF('/donations/update-session', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json'
-                                        },
-                                        body: JSON.stringify({
-                                            donations: result.donations
-                                        })
-                                    }).then(() => {
+                                        // Store donations in session via API call
+                                        fetchWithCSRF('/donations/update-session', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json'
+                                            },
+                                            body: JSON.stringify({
+                                                donations: result.donations
+                                            })
+                                        }).then(() => {
                                         // Process the upload response
-                                        const processedCount = processUploadResponse(result);
+                                            const processedCount = processUploadResponse(result);
 
-                                        if (processedCount === 0) {
-                                            showToast('No donation data found in the uploaded files', 'warning');
-                                        } else {
-                                            showToast(`Successfully processed ${processedCount} donations`, 'success');
-                                        }
+                                            if (processedCount === 0) {
+                                                showToast('No donation data found in the uploaded files', 'warning');
+                                            } else {
+                                                showToast(`Successfully processed ${processedCount} donations`, 'success');
+                                            }
 
-                                        // Clear the file list
-                                        document.getElementById('fileList').innerHTML = '';
-                                        document.getElementById('uploadPreview').classList.add('d-none');
+                                            // Clear the file list
+                                            document.getElementById('fileList').innerHTML = '';
+                                            document.getElementById('uploadPreview').classList.add('d-none');
 
-                                        // Hide progress display after a delay
-                                        setTimeout(hideProgressDisplay, 2000);
-                                    });
+                                            // Hide progress display after a delay
+                                            setTimeout(hideProgressDisplay, 2000);
+                                        });
+                                    } else {
+                                        showToast(result.message || 'No donations found', 'warning');
+                                        setTimeout(hideProgressDisplay, 1000);
+                                    }
                                 } else {
-                                    showToast(result.message || 'No donations found', 'warning');
+                                    showToast(result.message || 'Processing failed', 'danger');
                                     setTimeout(hideProgressDisplay, 1000);
                                 }
-                            } else {
-                                showToast(result.message || 'Processing failed', 'danger');
+
+                                // Reset upload button
+                                uploadButton.disabled = false;
+                                uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
+
+                            } else if (statusData.state === 'FAILURE') {
+                                clearInterval(pollInterval);
+                                showToast('Processing failed: ' + statusData.error, 'danger');
+
+                                // Hide progress display on error
                                 setTimeout(hideProgressDisplay, 1000);
+
+                                // Reset upload button
+                                uploadButton.disabled = false;
+                                uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
                             }
-
-                            // Reset upload button
-                            uploadButton.disabled = false;
-                            uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
-
-                        } else if (statusData.state === 'FAILURE') {
-                            clearInterval(pollInterval);
-                            showToast('Processing failed: ' + statusData.error, 'danger');
-
-                            // Hide progress display on error
-                            setTimeout(hideProgressDisplay, 1000);
-
-                            // Reset upload button
-                            uploadButton.disabled = false;
-                            uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
-                        }
                         // Continue polling for PENDING, RUNNING states
-                    })
-                    .catch(error => {
-                        console.error('Error checking task status:', error);
-                    });
-            }, 2000); // Poll every 2 seconds
+                        })
+                        .catch(error => {
+                            console.error('Error checking task status:', error);
+                        });
+                }, 2000); // Poll every 2 seconds
 
-        } else {
-            showToast(data.message || 'Error queuing files', 'danger');
+            } else {
+                showToast(data.message || 'Error queuing files', 'danger');
+                // Hide progress display on error
+                setTimeout(hideProgressDisplay, 1000);
+
+                // Reset upload button
+                uploadButton.disabled = false;
+                uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
+            }
+        })
+        .catch(error => {
+            console.error('Error uploading files:', error);
+            let errorMessage = 'Error uploading and processing files';
+
+            // Show more specific error messages
+            if (error.message) {
+                errorMessage = error.message;
+            }
+
+            showToast(errorMessage, 'danger');
+
             // Hide progress display on error
             setTimeout(hideProgressDisplay, 1000);
 
             // Reset upload button
             uploadButton.disabled = false;
             uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
-        }
-    })
-    .catch(error => {
-        console.error('Error uploading files:', error);
-        let errorMessage = 'Error uploading and processing files';
-
-        // Show more specific error messages
-        if (error.message) {
-            errorMessage = error.message;
-        }
-
-        showToast(errorMessage, 'danger');
-
-        // Hide progress display on error
-        setTimeout(hideProgressDisplay, 1000);
-
-        // Reset upload button
-        uploadButton.disabled = false;
-        uploadButton.innerHTML = '<i class="fas fa-upload me-1"></i>Upload & Process Files';
-    });
+        });
 }
 
 // Progress display functions
@@ -2727,7 +2403,7 @@ function startProgressStream(sessionId) {
             // Show error to user if we were actively processing
             const statusDiv = document.getElementById('processingStatus');
             if (statusDiv && statusDiv.textContent.includes('Processing')) {
-                showToast("Connection interrupted. Please check if your files were processed.", "warning");
+                showToast('Connection interrupted. Please check if your files were processed.', 'warning');
             }
         };
     } catch (e) {
@@ -2737,12 +2413,13 @@ function startProgressStream(sessionId) {
 
 function handleProgressEvent(data) {
     switch (data.type) {
-        case 'progress':
+        case 'progress': {
             const lines = data.summary.split('\n');
             const action = lines[0] || 'Processing your files...';
             const detail = lines[1] || 'Please wait while we complete the process.';
             updateProgressDisplay(action, detail);
             break;
+        }
 
         case 'heartbeat':
             // Keep connection alive
@@ -2768,7 +2445,7 @@ function checkAuthAndProcessFiles() {
                 qboConnectionModal.hide();
 
                 // Process the files
-                showToast("Connected to QuickBooks successfully! Processing your files now.", "success");
+                showToast('Connected to QuickBooks successfully! Processing your files now.', 'success');
                 if (window.pendingFiles && window.pendingFiles.length > 0) {
                     const useAsyncProcessing = window.USE_ASYNC_PROCESSING || true;
                     if (useAsyncProcessing) {
@@ -2780,7 +2457,7 @@ function checkAuthAndProcessFiles() {
             }
         })
         .catch(error => {
-            console.error("Error checking QBO auth status:", error);
+            console.error('Error checking QBO auth status:', error);
         });
 }
 
@@ -2793,14 +2470,14 @@ function checkQBOAuthStatus() {
     fetchWithCSRF(`/qbo/environment?_=${cacheBuster}`)
         .then(response => response.json())
         .then(envData => {
-            console.log("Environment data received:", envData);
+            console.log('Environment data received:', envData);
             const envBadge = document.getElementById('qboEnvironmentBadge');
 
             // Update environment badge
             if (envBadge) {
                 // Get environment name with fallback
                 const envName = envData && envData.environment ? envData.environment : 'unknown';
-                console.log("Setting environment badge to:", envName.toUpperCase());
+                console.log('Setting environment badge to:', envName.toUpperCase());
 
                 // Set text content
                 envBadge.textContent = envName.toUpperCase();
@@ -2819,11 +2496,11 @@ function checkQBOAuthStatus() {
             }
         })
         .catch(error => {
-            console.error("Error fetching environment info:", error);
+            console.error('Error fetching environment info:', error);
             // Update badge to show error state
             const envBadge = document.getElementById('qboEnvironmentBadge');
             if (envBadge) {
-                envBadge.textContent = "ERROR";
+                envBadge.textContent = 'ERROR';
                 envBadge.classList.remove('bg-success', 'bg-info');
                 envBadge.classList.add('bg-danger');
             }
@@ -2851,13 +2528,13 @@ function checkQBOAuthStatus() {
                     fetchQBOPaymentMethods(),
                     fetchQBOCustomers()
                 ]).catch(error => {
-                    console.error("Error fetching QBO references:", error);
+                    console.error('Error fetching QBO references:', error);
                 });
 
                 // Check if we just connected and need to process pending files
                 if (data.justConnected && window.pendingFiles && window.pendingFiles.length > 0) {
-                    console.log("Just connected to QBO and have pending files - processing them now");
-                    showToast("Connected to QuickBooks successfully! Processing your files now.", "success");
+                    console.log('Just connected to QBO and have pending files - processing them now');
+                    showToast('Connected to QuickBooks successfully! Processing your files now.', 'success');
                     const useAsyncProcessing = window.USE_ASYNC_PROCESSING || true;
                     if (useAsyncProcessing) {
                         uploadAndProcessFilesAsync(window.pendingFiles);
@@ -2887,8 +2564,8 @@ function showManualMatchModal(donationId) {
     document.getElementById('matchDonationId').value = donationId;
 
     // Get the donation data for reference
-    const donation = donations.find(d => d.internalId === donationId);
-    if (!donation) return;
+    const donation = donations.find(d => d.internal_id === donationId);
+    if (!donation) {return;}
 
     // Show the modal
     customerMatchModal.show();
@@ -2903,7 +2580,7 @@ function showManualMatchModal(donationId) {
 
     // Set up search input handler
     const searchInput = document.getElementById('customerSearchInput');
-    searchInput.value = donation.customerLookup || donation['Donor Name'] || '';
+    searchInput.value = donation.payer_info?.customer_lookup || '';
 
     // Trigger search with the initial value after customers are loaded
     setTimeout(() => {
@@ -2998,7 +2675,7 @@ function populateCustomerTable(customers) {
 }
 
 function filterCustomers(searchTerm) {
-    if (!window.qboCustomers) return;
+    if (!window.qboCustomers) {return;}
 
     let filtered;
     if (!searchTerm) {
@@ -3028,11 +2705,12 @@ function manualMatchCustomerFromModal(customerId) {
         .then(data => {
             if (data.success) {
                 // Update the donation in the UI
-                const donation = donations.find(d => d.internalId === donationId);
+                const donation = donations.find(d => d.internal_id === donationId);
                 if (donation) {
-                    donation.qbCustomerStatus = 'Matched';
-                    donation.qboCustomerId = data.customer.id;
-                    donation.customerLookup = data.customer.displayName || data.customer.name;
+                    donation.match_status = 'Matched';
+                    donation.qbo_customer_id = data.customer.id;
+                    donation.payer_info = donation.payer_info || {};
+                    donation.payer_info.customer_lookup = data.customer.displayName || data.customer.name;
                     donation.matchMethod = 'manual';
                 }
 
@@ -3101,11 +2779,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Handle popup blocker case
         if (!authWindow || authWindow.closed || typeof authWindow.closed === 'undefined') {
-            showToast("Popup blocked! Please allow popups for this site and try again.", "danger");
+            showToast('Popup blocked! Please allow popups for this site and try again.', 'danger');
             return;
         }
 
-        showToast("Waiting for QuickBooks authentication...", "info");
+        showToast('Waiting for QuickBooks authentication...', 'info');
 
         // Start polling to check when QBO auth is complete
         const pollInterval = setInterval(function() {
@@ -3141,7 +2819,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 })
                 .catch(error => {
-                    console.error("Error checking QBO auth status:", error);
+                    console.error('Error checking QBO auth status:', error);
                 });
         }, 1000); // Check every second
     });
@@ -3149,7 +2827,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('skipQboConnectionBtn').addEventListener('click', function() {
         // If we have pending files, process them
         if (window.pendingFiles && window.pendingFiles.length > 0) {
-            showToast("Processing without QuickBooks connection. Customer matching will be unavailable.", "warning");
+            showToast('Processing without QuickBooks connection. Customer matching will be unavailable.', 'warning');
             const useAsyncProcessing = window.USE_ASYNC_PROCESSING || true;
             if (useAsyncProcessing) {
                 uploadAndProcessFilesAsync(window.pendingFiles);
@@ -3271,7 +2949,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 })
                 .catch(error => {
-                    console.error("Error checking QBO auth status:", error);
+                    console.error('Error checking QBO auth status:', error);
                     // Proceed with file processing if there's an error checking auth
                     uploadAndProcessFilesAsync(files);
                 });

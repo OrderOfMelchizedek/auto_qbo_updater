@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+tests/frontend/node_modules/
+**/node_modules/
+**/node_modules/**
+
+# Build outputs
+dist/
+build/
+coverage/
+htmlcov/
+
+# Logs
+logs/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.backup
+*.backup*
+
+# Deprecated files
+deprecated/
+
+# Vendor files
+vendor/
+
+# Generated files
+src/static/js/*.min.js
+src/static/js/vendor/
+
+# Test output
+test_output.json
+enriched_output.json

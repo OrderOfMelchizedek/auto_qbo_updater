@@ -568,13 +568,11 @@ app.cleanup_uploaded_file = cleanup_uploaded_file
 
 # Import and register blueprints
 from routes import auth_bp, donations_bp, files_bp, health_bp, qbo_bp
-from routes.donations_v2 import donations_v2_bp
 
 app.register_blueprint(health_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(files_bp)
 app.register_blueprint(donations_bp)
-app.register_blueprint(donations_v2_bp)  # New v2 endpoints
 app.register_blueprint(qbo_bp)
 
 

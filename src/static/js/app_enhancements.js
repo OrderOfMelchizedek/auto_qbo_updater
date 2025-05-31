@@ -5,7 +5,7 @@ function addEnrichmentIndicators(tr, donation) {
     // Find the customer status cell
     const statusCell = tr.querySelector('td:nth-child(11)'); // Adjust based on actual column position
 
-    if (!statusCell) return;
+    if (!statusCell) {return;}
 
     let indicators = '';
 
@@ -64,7 +64,7 @@ function addEnrichmentIndicators(tr, donation) {
 
 // Enhanced address display with comparison
 function showAddressComparison(donation) {
-    if (!donation.addressNeedsUpdate) return;
+    if (!donation.addressNeedsUpdate) {return;}
 
     const modalHtml = `
         <div class="modal fade" id="addressComparisonModal" tabindex="-1">
@@ -124,85 +124,7 @@ function showAddressComparison(donation) {
     modal.show();
 }
 
-// Show email/phone lists
-function showContactLists(donation) {
-    const emails = donation.qb_email || [];
-    const phones = donation.qb_phone || [];
 
-    let contactHtml = '<h6>Contact Information</h6>';
-
-    if (emails.length > 0) {
-        contactHtml += '<div class="mb-3"><strong>Email Addresses:</strong><ul>';
-        emails.forEach((email, index) => {
-            const isPrimary = index === 0;
-            const badge = isPrimary ? '<span class="badge bg-primary ms-2">Primary</span>' : '';
-            const newBadge = donation.emailUpdated && index === emails.length - 1 ? '<span class="badge bg-success ms-2">New</span>' : '';
-            contactHtml += `<li>${email}${badge}${newBadge}</li>`;
-        });
-        contactHtml += '</ul></div>';
-    }
-
-    if (phones.length > 0) {
-        contactHtml += '<div class="mb-3"><strong>Phone Numbers:</strong><ul>';
-        phones.forEach((phone, index) => {
-            const isPrimary = index === 0;
-            const badge = isPrimary ? '<span class="badge bg-primary ms-2">Primary</span>' : '';
-            const newBadge = donation.phoneUpdated && index === phones.length - 1 ? '<span class="badge bg-success ms-2">New</span>' : '';
-            contactHtml += `<li>${phone}${badge}${newBadge}</li>`;
-        });
-        contactHtml += '</ul></div>';
-    }
-
-    return contactHtml;
-}
-
-// Update QuickBooks address
-async function updateQBOAddress(donationId) {
-    const donation = donations.find(d => d.internalId === donationId);
-    if (!donation) return;
-
-    try {
-        const response = await fetchWithCSRF('/api/qbo/update-customer-address', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                customerId: donation.qboCustomerId,
-                address: {
-                    Line1: donation['Address - Line 1'],
-                    City: donation.City,
-                    CountrySubDivisionCode: donation.State,
-                    PostalCode: donation.ZIP
-                }
-            })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            showAlert('success', 'QuickBooks address updated successfully');
-
-            // Update local data
-            donation.qbo_address_line_1 = donation['Address - Line 1'];
-            donation.qbo_city = donation.City;
-            donation.qbo_state = donation.State;
-            donation.qbo_zip = donation.ZIP;
-            donation.addressNeedsUpdate = false;
-
-            // Refresh table
-            renderDonationTable();
-
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('addressComparisonModal'));
-            if (modal) modal.hide();
-        } else {
-            showAlert('danger', `Failed to update address: ${result.error || 'Unknown error'}`);
-        }
-    } catch (error) {
-        showAlert('danger', `Error updating address: ${error.message}`);
-    }
-}
 
 // Hook into existing render function
 const originalRenderDonationTable = window.renderDonationTable;

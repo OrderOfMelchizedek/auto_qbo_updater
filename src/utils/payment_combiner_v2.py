@@ -7,6 +7,8 @@ import logging
 from typing import Any, Dict, Optional
 
 from models.payment import PaymentRecord
+
+from .check_normalizer import normalize_check_number
 from .qbo_data_enrichment import QBODataEnrichment, normalize_zip
 
 logger = logging.getLogger(__name__)
@@ -72,8 +74,8 @@ class PaymentCombinerV2:
         """
         payment = payment_record.payment_info
 
-        # Determine check number or payment reference
-        check_no_or_ref = payment.check_no or payment.payment_ref or ""
+        # Determine check number or payment reference and normalize
+        check_no_or_ref = normalize_check_number(payment.check_no) or payment.payment_ref or ""
 
         # Use payment_date if available, otherwise check_date
         payment_date = payment.payment_date or payment.check_date or ""

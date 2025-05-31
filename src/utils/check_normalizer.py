@@ -8,7 +8,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-def normalize_check_number(check_no: Optional[str]) -> Optional[str]:
+def normalize_check_number(check_no: Optional[str]) -> str:
     """Normalize check number according to rules:
     - 3-4 digit check numbers: keep leading zeros
     - >4 digit check numbers: remove leading zeros
@@ -25,7 +25,7 @@ def normalize_check_number(check_no: Optional[str]) -> Optional[str]:
         Normalized check number
     """
     if not check_no:
-        return check_no
+        return ""
 
     # Convert to string and strip whitespace
     check_str = str(check_no).strip()

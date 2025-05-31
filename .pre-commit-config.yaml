@@ -4,15 +4,20 @@ repos:
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
+        exclude: '(^|/)node_modules/'
       - id: end-of-file-fixer
+        exclude: '(^|/)node_modules/'
       - id: check-yaml
       - id: check-added-large-files
         args: ['--maxkb=500']
+        exclude: '(^|/)node_modules/'
       - id: check-merge-conflict
       - id: check-json
+        exclude: '(^|/)node_modules/'
       - id: check-toml
       - id: debug-statements
       - id: mixed-line-ending
+        exclude: '(^|/)node_modules/'
       - id: requirements-txt-fixer
         files: requirements/.*\.txt$
 
@@ -59,9 +64,30 @@ repos:
   #       additional_dependencies: [types-requests, types-pyyaml]
   #       args: ['--ignore-missing-imports', '--no-error-summary', '--no-strict-optional']
 
+  # JavaScript/Frontend checks
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.56.0
+    hooks:
+      - id: eslint
+        files: \.(js|jsx)$
+        exclude: '(^|/)node_modules/'
+        types: [file]
+        additional_dependencies:
+          - eslint@8.56.0
+        args: ['--fix']
+
   # Run tests on commit (quick)
   - repo: local
     hooks:
+      - id: frontend-tests
+        name: Run frontend JavaScript tests
+        entry: bash -c 'if [ -f "tests/frontend/package.json" ]; then cd tests/frontend && npm ci --silent && npm test -- --passWithNoTests --silent; else echo "Frontend tests skipped (no package.json found)"; fi'
+        language: system
+        files: \.(js|jsx)$
+        pass_filenames: false
+        always_run: false
+        stages: [pre-commit]
+
       - id: tests-unit
         name: Run unit tests
         entry: python -m pytest tests/unit/ -q
@@ -70,8 +96,16 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      - id: frontend-tests-all
+        name: Run all frontend tests with coverage
+        entry: bash -c 'if [ -f "tests/frontend/package.json" ]; then cd tests/frontend && npm ci --silent && npm run test:coverage -- --passWithNoTests --silent; else echo "Frontend tests skipped (no package.json found)"; fi'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       - id: tests-all
-        name: Run all tests
+        name: Run all backend tests
         entry: python -m pytest -q
         language: system
         pass_filenames: false

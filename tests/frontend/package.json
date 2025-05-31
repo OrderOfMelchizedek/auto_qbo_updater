@@ -1,0 +1,44 @@
+{
+  "name": "fom-qbo-frontend-tests",
+  "version": "1.0.0",
+  "description": "Comprehensive test suite for FOM to QBO automation frontend JavaScript",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "jest --verbose",
+    "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand"
+  },
+  "keywords": [
+    "javascript",
+    "frontend",
+    "testing",
+    "jest",
+    "qbo",
+    "automation"
+  ],
+  "author": "Claude Code Assistant",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "babel-jest": "^29.7.0",
+    "identity-obj-proxy": "^3.0.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "babel": {
+    "presets": [
+      [
+        "@babel/preset-env",
+        {
+          "targets": {
+            "node": "current"
+          },
+          "modules": "commonjs"
+        }
+      ]
+    ]
+  }
+}
