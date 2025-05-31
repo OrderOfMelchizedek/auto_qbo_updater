@@ -16,10 +16,11 @@ from celery.exceptions import SoftTimeLimitExceeded
 from werkzeug.utils import secure_filename
 
 from .celery_app import celery_app
+from .enhanced_file_processor_v3_second_pass import EnhancedFileProcessorV3
 from .exceptions import FileProcessingException, FOMQBOException, ValidationException
-from .file_processor import FileProcessor
-from .gemini_adapter import create_gemini_service
-from .gemini_service import GeminiService
+from .gemini_adapter_v3 import GeminiAdapterV3
+
+# from .gemini_service import GeminiService - moved to deprecated
 from .memory_monitor import memory_monitor
 from .progress_logger import log_progress, progress_logger
 from .qbo_service import QBOService
@@ -91,7 +92,7 @@ def process_files_task(
         if not gemini_api_key:
             raise ValueError("GEMINI_API_KEY environment variable not set")
 
-        gemini_service = create_gemini_service(
+        gemini_service = GeminiAdapterV3(
             api_key=gemini_api_key, model_name=gemini_model or "gemini-2.5-flash-preview-04-17"
         )
         # Get QBO credentials from environment
@@ -122,7 +123,7 @@ def process_files_task(
                 qbo_service.token_expires_at = int(time.time()) + 3600
 
         # Initialize file processor with BOTH services
-        file_processor = FileProcessor(gemini_service, qbo_service)
+        file_processor = EnhancedFileProcessorV3(gemini_service, qbo_service)
 
         # Track processing results
         all_donations = []

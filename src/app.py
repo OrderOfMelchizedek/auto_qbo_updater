@@ -42,7 +42,7 @@ from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.utils import secure_filename
 
-from utils.enhanced_file_processor import EnhancedFileProcessor
+from utils.enhanced_file_processor_v3_second_pass import EnhancedFileProcessorV3
 
 # Try importing from the src package first
 from utils.exceptions import (
@@ -52,8 +52,9 @@ from utils.exceptions import (
     QBOAPIException,
     ValidationException,
 )
-from utils.gemini_adapter import create_gemini_service
-from utils.gemini_service import GeminiService
+from utils.gemini_adapter_v3 import GeminiAdapterV3
+
+# from utils.gemini_service import GeminiService - moved to deprecated
 from utils.memory_monitor import memory_monitor
 from utils.progress_logger import init_progress_logger, log_progress, progress_logger
 from utils.qbo_service import QBOService
@@ -540,8 +541,8 @@ if redis_url:
         redis_client = None
 
 # Initialize services
-# Use adapter for backward compatibility with structured extraction
-gemini_service = create_gemini_service(
+# Use V3 adapter for structured extraction
+gemini_service = GeminiAdapterV3(
     api_key=os.getenv("GEMINI_API_KEY"),
     model_name=gemini_model,  # Use the command-line specified model
 )
@@ -553,7 +554,7 @@ qbo_service = QBOService(
     redis_client=redis_client,  # Pass Redis client for token persistence
 )
 # Pass both services to the enhanced file processor for integrated customer matching and QBO enrichment
-file_processor = EnhancedFileProcessor(gemini_service, qbo_service, progress_logger)
+file_processor = EnhancedFileProcessorV3(gemini_service, qbo_service)
 
 # Initialize progress logger with Gemini service
 init_progress_logger(gemini_service)
