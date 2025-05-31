@@ -113,6 +113,9 @@ qbo api client ID and secret.md
 CLAUDE.md
 deprecated/
 
+# Frontend test coverage
+tests/frontend/coverage/
+
 # Ignore all CSV files (if you prefer a general rule)
 *.csv
 
