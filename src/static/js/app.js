@@ -171,42 +171,57 @@ function renderDonationTable() {
 
     donations.forEach(donation => {
         const tr = document.createElement('tr');
-        tr.dataset.id = donation.internalId;
+        // Use a unique identifier or create one
+        tr.dataset.id = donation.internal_id || `donation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         // Add class for merged donations
         if (donation.isMerged) {
             tr.classList.add('merged-donation');
         }
 
-        // Create cells for all fields
-        const fields = [
-            'customerLookup', 'Donor Name', 'Check No.', 'Gift Amount',
-            'Check Date', 'Address - Line 1', 'City', 'State', 'ZIP', 'Memo'
+        // Get data from V3 enriched format
+        const payerInfo = donation.payer_info || {};
+        const paymentInfo = donation.payment_info || {};
+
+        // Create cells for all fields using V3 format
+        const fieldMappings = [
+            { field: 'customerLookup', getValue: () => payerInfo.customer_lookup || payerInfo.full_name || 'Unknown' },
+            { field: 'donorName', getValue: () => payerInfo.customer_lookup || payerInfo.full_name || payerInfo.qb_organization_name || 'Unknown' },
+            { field: 'checkNo', getValue: () => paymentInfo.check_no_or_payment_ref || '' },
+            { field: 'giftAmount', getValue: () => paymentInfo.amount || 0, isAmount: true },
+            { field: 'checkDate', getValue: () => paymentInfo.payment_date || '' },
+            { field: 'addressLine1', getValue: () => payerInfo.qb_address_line_1 || payerInfo.extracted_address?.line_1 || '' },
+            { field: 'city', getValue: () => payerInfo.qb_city || payerInfo.extracted_address?.city || '' },
+            { field: 'state', getValue: () => payerInfo.qb_state || payerInfo.extracted_address?.state || '' },
+            { field: 'zip', getValue: () => payerInfo.qb_zip || payerInfo.extracted_address?.zip || '' },
+            { field: 'memo', getValue: () => paymentInfo.memo || '' }
         ];
 
-        fields.forEach(field => {
+        fieldMappings.forEach(mapping => {
             const td = document.createElement('td');
             td.className = 'editable-cell';
-            td.dataset.field = field;
+            td.dataset.field = mapping.field;
 
-            // Format currency for Gift Amount
-            if (field === 'Gift Amount' && donation[field]) {
-                td.textContent = formatCurrency(donation[field]);
+            const value = mapping.getValue();
+
+            // Format currency for amount fields
+            if (mapping.isAmount && value) {
+                td.textContent = formatCurrency(value);
             } else {
-                td.textContent = donation[field] || '';
+                td.textContent = value || '';
             }
 
             // Set up in-place editing
             td.addEventListener('click', function() {
                 // Create searchable autocomplete for customerLookup field
-                if (field === 'customerLookup') {
+                if (mapping.field === 'customerLookup') {
                     // Create container for input and suggestions
                     const container = document.createElement('div');
                     container.style.position = 'relative';
 
                     const input = document.createElement('input');
                     input.type = 'text';
-                    input.value = donation[field] || '';
+                    input.value = mapping.getValue() || '';
                     input.className = 'form-control form-control-sm';
                     input.placeholder = 'Start typing to search customers...';
 
@@ -332,11 +347,13 @@ function renderDonationTable() {
 
                     function selectCustomer(customer) {
                         input.value = customer.name;
-                        donation[field] = customer.name;
+                        // Update V3 format
+                        if (!donation.payer_info) donation.payer_info = {};
+                        donation.payer_info.customer_lookup = customer.name;
                         suggestions.style.display = 'none';
 
                         // Call manual match endpoint
-                        manualMatchCustomer(donation.internalId, customer.id);
+                        manualMatchCustomer(donation.internal_id || tr.dataset.id, customer.id);
                     }
 
                     // Handle input events
@@ -394,26 +411,74 @@ function renderDonationTable() {
                     td.appendChild(container);
                     input.focus();
                 } else {
-                    // Regular text input for other fields
+                    // Regular text input for V3 format fields
                     const input = document.createElement('input');
                     input.type = 'text';
-                    input.value = donation[field] || '';
+                    input.value = mapping.getValue() || '';
                     input.className = 'form-control form-control-sm';
 
                     input.addEventListener('blur', function() {
-                        // Save the value back to the donation object
-                        donation[field] = this.value;
+                        // Save the value back to the V3 donation object structure
+                        const newValue = this.value;
 
-                        // Apply formatting to fix all caps (except for Memo and State)
-                        if (field !== 'Memo' && field !== 'State') {
-                            donation = formatDonationData(donation);
+                        // Initialize nested objects if they don't exist
+                        if (!donation.payer_info) donation.payer_info = {};
+                        if (!donation.payment_info) donation.payment_info = {};
+
+                        // Update the appropriate part of the V3 structure
+                        switch(mapping.field) {
+                            case 'donorName':
+                                donation.payer_info.customer_lookup = newValue;
+                                break;
+                            case 'checkNo':
+                                donation.payment_info.check_no_or_payment_ref = newValue;
+                                break;
+                            case 'giftAmount':
+                                donation.payment_info.amount = parseFloat(newValue) || 0;
+                                break;
+                            case 'checkDate':
+                                donation.payment_info.payment_date = newValue;
+                                break;
+                            case 'addressLine1':
+                                donation.payer_info.qb_address_line_1 = newValue;
+                                break;
+                            case 'city':
+                                donation.payer_info.qb_city = newValue;
+                                break;
+                            case 'state':
+                                donation.payer_info.qb_state = newValue;
+                                break;
+                            case 'zip':
+                                donation.payer_info.qb_zip = newValue;
+                                break;
+                            case 'memo':
+                                donation.payment_info.memo = newValue;
+                                break;
                         }
 
-                        // If it's Gift Amount, format as currency
-                        if (field === 'Gift Amount') {
-                            td.textContent = formatCurrency(donation[field]);
+                        // Apply formatting to fix all caps (except for Memo and State)
+                        if (mapping.field !== 'memo' && mapping.field !== 'state') {
+                            const formattedValue = toProperCase(newValue);
+                            // Update the formatted value back to the structure
+                            switch(mapping.field) {
+                                case 'donorName':
+                                    donation.payer_info.customer_lookup = formattedValue;
+                                    break;
+                                case 'addressLine1':
+                                    donation.payer_info.qb_address_line_1 = formattedValue;
+                                    break;
+                                case 'city':
+                                    donation.payer_info.qb_city = formattedValue;
+                                    break;
+                            }
+                        }
+
+                        // Update display with new value from V3 structure
+                        const displayValue = mapping.getValue();
+                        if (mapping.isAmount) {
+                            td.textContent = formatCurrency(displayValue);
                         } else {
-                            td.textContent = donation[field] || this.value;
+                            td.textContent = displayValue || newValue;
                         }
 
                         // Replace input with text
@@ -443,29 +508,32 @@ function renderDonationTable() {
         const statusCell = document.createElement('td');
         let statusHtml = '';
 
-        // Customer status indicator
-        if (donation.qbCustomerStatus === 'New') {
+        // Customer status indicator using V3 format
+        const matchStatus = donation.match_status || 'New';
+        const hasCustomerId = donation.qbo_customer_id;
+        const payerInfo = donation.payer_info || {};
+
+        if (matchStatus === 'New') {
             statusHtml += '<span class="badge bg-info me-1">New Customer</span>';
-        } else if (donation.qbCustomerStatus === 'Matched-AddressMismatch') {
+        } else if (matchStatus === 'Matched' && payerInfo.address_needs_update) {
             statusHtml += '<span class="badge bg-warning me-1">Address Mismatch</span>';
-        } else if (donation.qbCustomerStatus === 'Matched-AddressNeedsReview') {
-            statusHtml += '<span class="badge bg-warning me-1">Review Address</span>';
-        } else if (donation.qbCustomerStatus === 'Matched') {
+        } else if (matchStatus === 'Matched') {
             statusHtml += '<span class="badge bg-success me-1">Customer Matched</span>';
         } else if (donation.matchRejectionReason) {
             // For rejected matches that initially looked like they might match
             statusHtml += `<span class="badge bg-danger me-1" title="${donation.matchRejectionReason}">Match Rejected</span>`;
-        } else if (donation.qbCustomerStatus === 'Unknown' && donation.qboCustomerId) {
-            // If status wasn't updated but we do have a customer ID, show as matched
+        } else if (hasCustomerId) {
+            // If we have a customer ID but no clear status, show as matched
             statusHtml += '<span class="badge bg-success me-1">Customer Matched</span>';
         }
 
-        // Sync status indicator
-        if (donation.qbSyncStatus === 'Pending') {
+        // Sync status indicator - use V3 format or default
+        const syncStatus = donation.qbSyncStatus || 'Pending'; // Default for V3 format
+        if (syncStatus === 'Pending') {
             statusHtml += '<span class="badge bg-warning">Not Sent</span>';
-        } else if (donation.qbSyncStatus === 'Sent') {
+        } else if (syncStatus === 'Sent') {
             statusHtml += '<span class="badge bg-success">Sent to QBO</span>';
-        } else if (donation.qbSyncStatus === 'Error') {
+        } else if (syncStatus === 'Error') {
             statusHtml += '<span class="badge bg-danger">Error</span>';
         }
 
@@ -476,32 +544,34 @@ function renderDonationTable() {
         const actionsCell = document.createElement('td');
         let actionsHtml = '';
 
-        // Show QBO actions for all donations
+        // Show QBO actions for all donations using V3 format
+        const donationId = donation.internal_id || tr.dataset.id;
+
         // Create, manual match or update customer buttons, depending on status
-        if (donation.qbCustomerStatus === 'New' || !donation.qbCustomerStatus) {
+        if (matchStatus === 'New' || !hasCustomerId) {
             // Manual match button to select from existing customers
-            actionsHtml += `<button class="btn btn-sm btn-outline-primary me-1 manual-match-btn" data-id="${donation.internalId}" title="Manually select customer from QBO">
+            actionsHtml += `<button class="btn btn-sm btn-outline-primary me-1 manual-match-btn" data-id="${donationId}" title="Manually select customer from QBO">
                 <i class="fas fa-link"></i>
             </button>`;
             // Create new customer button
-            actionsHtml += `<button class="btn btn-sm btn-outline-info me-1 create-customer-btn" data-id="${donation.internalId}" title="Create new customer in QBO">
+            actionsHtml += `<button class="btn btn-sm btn-outline-info me-1 create-customer-btn" data-id="${donationId}" title="Create new customer in QBO">
                 <i class="fas fa-user-plus"></i>
             </button>`;
-        } else if (donation.qbCustomerStatus === 'Matched-AddressMismatch' || donation.qbCustomerStatus === 'Matched-AddressNeedsReview') {
-            actionsHtml += `<button class="btn btn-sm btn-outline-warning me-1 update-customer-btn" data-id="${donation.internalId}" title="Update customer address in QBO">
+        } else if (matchStatus === 'Matched' && payerInfo.address_needs_update) {
+            actionsHtml += `<button class="btn btn-sm btn-outline-warning me-1 update-customer-btn" data-id="${donationId}" title="Update customer address in QBO">
                 <i class="fas fa-user-edit"></i>
             </button>`;
         }
 
         // Send to QBO button (only if not already sent and customer is matched)
-        if (donation.qbSyncStatus !== 'Sent' && donation.qbCustomerStatus === 'Matched') {
-            actionsHtml += `<button class="btn btn-sm btn-outline-success me-1 send-to-qbo-btn" data-id="${donation.internalId}" title="Send to QuickBooks Online">
+        if (syncStatus !== 'Sent' && matchStatus === 'Matched') {
+            actionsHtml += `<button class="btn btn-sm btn-outline-success me-1 send-to-qbo-btn" data-id="${donationId}" title="Send to QuickBooks Online">
                 <i class="fas fa-paper-plane"></i>
             </button>`;
         }
 
         // Delete button for all donations
-        actionsHtml += `<button class="btn btn-sm btn-outline-danger delete-donation-btn" data-id="${donation.internalId}" title="Delete donation">
+        actionsHtml += `<button class="btn btn-sm btn-outline-danger delete-donation-btn" data-id="${donationId}" title="Delete donation">
             <i class="fas fa-trash"></i>
         </button>`;
 
@@ -571,13 +641,14 @@ function showCustomerModal(donationId, mode) {
     const modalTitle = mode === 'create' ? 'Create New Customer' : 'Update Customer Address';
     document.getElementById('customerModalTitle').textContent = modalTitle;
 
-    // Set form fields
+    // Set form fields using V3 format
+    const payerInfo = donation.payer_info || {};
     document.getElementById('customerDonationId').value = donationId;
-    document.getElementById('customerName').value = donation.customerLookup || '';
-    document.getElementById('customerAddress').value = donation['Address - Line 1'] || '';
-    document.getElementById('customerCity').value = donation.City || '';
-    document.getElementById('customerState').value = donation.State || '';
-    document.getElementById('customerZip').value = donation.ZIP || '';
+    document.getElementById('customerName').value = payerInfo.customer_lookup || '';
+    document.getElementById('customerAddress').value = payerInfo.qb_address_line_1 || payerInfo.extracted_address?.line_1 || '';
+    document.getElementById('customerCity').value = payerInfo.qb_city || payerInfo.extracted_address?.city || '';
+    document.getElementById('customerState').value = payerInfo.qb_state || payerInfo.extracted_address?.state || '';
+    document.getElementById('customerZip').value = payerInfo.qb_zip || payerInfo.extracted_address?.zip || '';
 
     // Set button text based on mode
     const saveBtn = document.getElementById('saveCustomerBtn');
