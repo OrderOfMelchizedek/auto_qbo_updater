@@ -36,16 +36,26 @@ class GeminiStructuredServiceV2:
     # Smaller batch size for better accuracy
     BATCH_SIZE = 5
 
-    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash-exp"):
+    def __init__(self, api_key: str, model_name: str = None):
         """Initialize the Gemini service with API key and model name.
 
         Args:
             api_key: Gemini API key
-            model_name: Gemini model name (defaults to latest 2.0 flash)
+            model_name: Gemini model name (uses environment variable GEMINI_MODEL or defaults)
         """
         self.api_key = api_key
-        self.model_name = model_name if model_name is not None else "gemini-2.0-flash-exp"
+        default_model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-preview-05-20")
+        self.model_name = model_name if model_name is not None else default_model
         genai.configure(api_key=api_key)
+
+        # Configure safety settings to be most permissive
+        self.safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_CIVIC_INTEGRITY", "threshold": "BLOCK_NONE"},
+        ]
 
         # Initialize prompt managers for both old and new prompts
         self.prompt_manager = PromptManager(prompt_dir="lib/prompts_archive")
@@ -259,10 +269,11 @@ class GeminiStructuredServiceV2:
                         temperature=0.1,
                         max_output_tokens=2048,
                     ),
+                    safety_settings=self.safety_settings,
                 )
 
                 # Parse response
-                if batch_response.text:
+                if batch_response and hasattr(batch_response, "text") and batch_response.text:
                     logger.info(f"Received response for batch {batch_num + 1}")
 
                     try:
@@ -276,6 +287,18 @@ class GeminiStructuredServiceV2:
 
                     except Exception as e:
                         logger.error(f"Error parsing batch {batch_num + 1} response: {e}")
+                elif batch_response and hasattr(batch_response, "candidates"):
+                    # Check safety ratings if response was blocked
+                    candidate = batch_response.candidates[0] if batch_response.candidates else None
+                    if candidate and hasattr(candidate, "safety_ratings"):
+                        safety_info = [
+                            (rating.category.name, rating.probability.name) for rating in candidate.safety_ratings
+                        ]
+                        logger.warning(f"Batch {batch_num + 1} response blocked by safety filters: {safety_info}")
+                    else:
+                        logger.warning(f"Batch {batch_num + 1} returned empty response")
+                else:
+                    logger.warning(f"Batch {batch_num + 1} returned no valid response")
 
             except Exception as e:
                 logger.error(f"Error processing batch {batch_num + 1}: {e}")
@@ -301,11 +324,31 @@ class GeminiStructuredServiceV2:
             response_text = response_text.strip()
 
             # Remove markdown code blocks if present
-            if response_text.startswith("```") and response_text.endswith("```"):
-                lines = response_text.split("\n")
-                response_text = "\n".join(lines[1:-1])
-            elif response_text.startswith("```json") and response_text.endswith("```"):
-                response_text = response_text[7:-3].strip()
+            if response_text.startswith("```json"):
+                # Handle ```json at start
+                if response_text.endswith("```"):
+                    response_text = response_text[7:-3].strip()
+                else:
+                    # Find the closing ``` and remove everything after
+                    end_pos = response_text.rfind("```")
+                    if end_pos > 7:
+                        response_text = response_text[7:end_pos].strip()
+                    else:
+                        response_text = response_text[7:].strip()
+            elif response_text.startswith("```"):
+                # Handle generic ``` at start
+                if response_text.endswith("```"):
+                    lines = response_text.split("\n")
+                    response_text = "\n".join(lines[1:-1])
+                else:
+                    # Find the closing ``` and remove everything after
+                    end_pos = response_text.rfind("```")
+                    if end_pos > 3:
+                        lines = response_text[:end_pos].split("\n")
+                        response_text = "\n".join(lines[1:])
+                    else:
+                        lines = response_text.split("\n")
+                        response_text = "\n".join(lines[1:])
 
             # Parse JSON
             parsed_json = json.loads(response_text)

@@ -35,11 +35,15 @@ class RedisMemoryMonitor:
                 2: 3,  # TCP_KEEPINTVL
                 3: 3,  # TCP_KEEPCNT
             },
+            socket_timeout=5,  # Add timeout to prevent hanging
+            socket_connect_timeout=5,
         )
 
     def get_memory_info(self):
         """Get Redis memory usage information."""
         try:
+            # Test connection first
+            self.redis_client.ping()
             info = self.redis_client.info("memory")
             return {
                 "used_memory": info.get("used_memory", 0),
@@ -50,6 +54,12 @@ class RedisMemoryMonitor:
                 "maxmemory_human": info.get("maxmemory_human", "0B"),
                 "mem_fragmentation_ratio": info.get("mem_fragmentation_ratio", 0),
             }
+        except redis.ConnectionError as e:
+            logger.warning(f"Redis connection error (memory info): {e}")
+            return None
+        except redis.TimeoutError as e:
+            logger.warning(f"Redis timeout error (memory info): {e}")
+            return None
         except Exception as e:
             logger.error(f"Error getting Redis memory info: {e}")
             return None
