@@ -260,39 +260,75 @@ class GeminiStructuredServiceV3:
                 self._check_rate_limit()
                 logger.info(f"Sending batch of {len(batch_files)} files to Gemini with structured output")
 
-                # Use Gemini with structured outputs
+                # Try structured output first, fallback to manual JSON parsing
                 model = genai.GenerativeModel(self.model_name)
-                response = model.generate_content(
-                    contents=content_parts,
-                    generation_config=genai.GenerationConfig(
-                        response_mime_type="application/json",
-                        response_schema=response_schema,
-                        temperature=0.1,
-                        max_output_tokens=4096,
-                    ),
-                )
 
-                # Parse structured response
-                if response and hasattr(response, "parsed") and response.parsed:
-                    logger.info(f"Received structured response for batch {batch_num + 1}")
+                # First attempt: Try structured output
+                try:
+                    response = model.generate_content(
+                        contents=content_parts,
+                        generation_config=genai.GenerationConfig(
+                            response_mime_type="application/json",
+                            response_schema=response_schema,
+                            temperature=0.1,
+                            max_output_tokens=4096,
+                        ),
+                    )
 
-                    # Extract payments from parsed response
-                    if hasattr(response.parsed, "payments"):
-                        simple_payments = response.parsed.payments
-                        logger.info(f"Batch {batch_num + 1} extracted {len(simple_payments)} payments")
+                    # Parse structured response
+                    if response and hasattr(response, "parsed") and response.parsed:
+                        logger.info(f"Received structured response for batch {batch_num + 1}")
 
-                        # Convert simple models to full PaymentRecord objects
-                        for simple_payment in simple_payments:
-                            try:
-                                full_payment = self._convert_to_payment_record(simple_payment)
-                                all_results.append(full_payment)
-                            except Exception as e:
-                                logger.error(f"Error converting payment record: {e}")
-                                continue
+                        # Extract payments from parsed response
+                        if hasattr(response.parsed, "payments"):
+                            simple_payments = response.parsed.payments
+                            logger.info(f"Batch {batch_num + 1} extracted {len(simple_payments)} payments")
+
+                            # Convert simple models to full PaymentRecord objects
+                            for simple_payment in simple_payments:
+                                try:
+                                    full_payment = self._convert_to_payment_record(simple_payment)
+                                    all_results.append(full_payment)
+                                except Exception as e:
+                                    logger.error(f"Error converting payment record: {e}")
+                                    continue
+                        else:
+                            logger.warning(f"Batch {batch_num + 1} returned no payments in structured response")
+                            # Fall back to manual parsing
+                            raise ValueError("No structured payments found")
                     else:
-                        logger.warning(f"Batch {batch_num + 1} returned no payments in structured response")
-                else:
-                    logger.warning(f"Batch {batch_num + 1} returned no valid response")
+                        logger.warning(f"Batch {batch_num + 1} returned no valid structured response")
+                        # Fall back to manual parsing
+                        raise ValueError("No structured response")
+
+                except Exception as struct_error:
+                    logger.warning(f"Structured output failed for batch {batch_num + 1}: {struct_error}")
+                    logger.info(f"Falling back to manual JSON parsing for batch {batch_num + 1}")
+
+                    # Fallback: Manual JSON parsing approach
+                    try:
+                        response = model.generate_content(
+                            contents=content_parts,
+                            generation_config=genai.GenerationConfig(
+                                temperature=0.1,
+                                max_output_tokens=4096,
+                            ),
+                        )
+
+                        if response and hasattr(response, "text") and response.text:
+                            logger.info(f"Received text response for batch {batch_num + 1}")
+
+                            # Parse JSON manually
+                            batch_results = self._parse_text_response_to_payments(response.text)
+                            logger.info(
+                                f"Batch {batch_num + 1} extracted {len(batch_results)} payments via manual parsing"
+                            )
+                            all_results.extend(batch_results)
+                        else:
+                            logger.warning(f"Batch {batch_num + 1} returned no text response either")
+                    except Exception as manual_error:
+                        logger.error(f"Manual parsing also failed for batch {batch_num + 1}: {manual_error}")
+                        # Continue with other batches
 
             except Exception as e:
                 logger.error(f"Error processing batch {batch_num + 1}: {e}")
@@ -300,6 +336,81 @@ class GeminiStructuredServiceV3:
 
         logger.info(f"Successfully extracted {len(all_results)} payments total from {len(file_paths)} files")
         return all_results
+
+    def _parse_text_response_to_payments(self, response_text: str) -> List[PaymentRecord]:
+        """Parse text response manually and convert to PaymentRecord objects."""
+        try:
+            # Clean response text
+            response_text = response_text.strip()
+
+            # Remove markdown code blocks if present
+            if response_text.startswith("```json"):
+                if response_text.endswith("```"):
+                    response_text = response_text[7:-3].strip()
+                else:
+                    end_pos = response_text.rfind("```")
+                    if end_pos > 7:
+                        response_text = response_text[7:end_pos].strip()
+                    else:
+                        response_text = response_text[7:].strip()
+            elif response_text.startswith("```"):
+                if response_text.endswith("```"):
+                    lines = response_text.split("\n")
+                    response_text = "\n".join(lines[1:-1])
+                else:
+                    end_pos = response_text.rfind("```")
+                    if end_pos > 3:
+                        lines = response_text[:end_pos].split("\n")
+                        response_text = "\n".join(lines[1:])
+                    else:
+                        lines = response_text.split("\n")
+                        response_text = "\n".join(lines[1:])
+
+            # Parse JSON
+            import json
+
+            parsed_json = json.loads(response_text)
+            logger.info(
+                f"Successfully parsed JSON with {len(parsed_json) if isinstance(parsed_json, list) else 1} items"
+            )
+
+            # Extract payments array
+            payments_data = []
+            if isinstance(parsed_json, dict) and "payments" in parsed_json:
+                payments_data = parsed_json["payments"]
+            elif isinstance(parsed_json, list):
+                payments_data = parsed_json
+            else:
+                # Single payment, wrap in list
+                payments_data = [parsed_json]
+
+            # Convert to PaymentRecord objects
+            results = []
+            for payment_data in payments_data:
+                try:
+                    # Create SimplePaymentRecord from parsed data
+                    simple_payment = SimplePaymentRecord(
+                        payment_info=SimplePaymentInfo(**payment_data.get("payment_info", {})),
+                        payer_info=SimplePayerInfo(**payment_data.get("payer_info", {})),
+                        contact_info=SimpleContactInfo(**payment_data.get("contact_info", {})),
+                    )
+
+                    # Convert to full PaymentRecord
+                    full_payment = self._convert_to_payment_record(simple_payment)
+                    results.append(full_payment)
+                except Exception as e:
+                    logger.error(f"Error converting payment data: {e}")
+                    continue
+
+            return results
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON response: {e}")
+            logger.error(f"Response text: {response_text[:500]}...")
+            return []
+        except Exception as e:
+            logger.error(f"Error in manual parsing: {e}")
+            return []
 
     def _convert_to_payment_record(self, simple_payment: SimplePaymentRecord) -> PaymentRecord:
         """Convert simplified payment record to full PaymentRecord with validation."""
