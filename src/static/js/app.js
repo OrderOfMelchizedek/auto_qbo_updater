@@ -742,7 +742,7 @@ let qboPaymentMethods = [];
 let qboCustomers = [];
 let defaultItemId = '1';
 let defaultAccountId = '12000';
-let defaultPaymentMethodId = 'CHECK';
+let defaultPaymentMethodId = null; // Will be set from QBO data
 
 function fetchQBOItems() {
     return fetchWithCSRF('/qbo/items/all')
@@ -816,6 +816,20 @@ function fetchQBOPaymentMethods() {
                 if (data.checkMethod) {
                     defaultPaymentMethodId = data.checkMethod.id;
                     console.log(`Using default payment method: ${data.checkMethod.name} (${defaultPaymentMethodId})`);
+                } else {
+                    // Fallback: find any method with "check" in the name
+                    const checkMethod = data.paymentMethods.find(m =>
+                        m.name && m.name.toLowerCase().includes('check')
+                    );
+                    if (checkMethod) {
+                        defaultPaymentMethodId = checkMethod.id;
+                        console.log(`Using fallback check method: ${checkMethod.name} (${defaultPaymentMethodId})`);
+                    } else {
+                        console.log('No check payment method found, using first available method');
+                        if (data.paymentMethods && data.paymentMethods.length > 0) {
+                            defaultPaymentMethodId = data.paymentMethods[0].id;
+                        }
+                    }
                 }
                 return data.paymentMethods;
             } else {
@@ -1579,7 +1593,7 @@ function trySendWithAlternative(donationId, customFields) {
         if (paymentMethodSelect && paymentMethodSelect.value) {
             customFields.paymentMethodId = paymentMethodSelect.value;
         } else {
-            customFields.paymentMethodId = defaultPaymentMethodId || 'CHECK';
+            customFields.paymentMethodId = defaultPaymentMethodId || (qboPaymentMethods.length > 0 ? qboPaymentMethods[0].id : 'CHECK');
         }
     }
 
@@ -1691,7 +1705,7 @@ function showSalesReceiptPreview(donationId) {
         }
 
         // Get payment method with null check
-        let paymentMethodId = defaultPaymentMethodId || 'CHECK'; // Default fallback
+        let paymentMethodId = defaultPaymentMethodId || (qboPaymentMethods.length > 0 ? qboPaymentMethods[0].id : 'CHECK'); // Default fallback
         const paymentMethodElem = document.getElementById('previewPaymentMethodRef');
         if (paymentMethodElem && paymentMethodElem.value) {
             paymentMethodId = paymentMethodElem.value;
@@ -1842,7 +1856,7 @@ function sendAllToQBO() {
                                     defaultAccountId ||
                                     '12000';
 
-    const batchPaymentMethodId = document.getElementById('batchPaymentMethodRef').value || defaultPaymentMethodId || 'CHECK';
+    const batchPaymentMethodId = document.getElementById('batchPaymentMethodRef').value || defaultPaymentMethodId || (qboPaymentMethods.length > 0 ? qboPaymentMethods[0].id : 'CHECK');
 
     // Log what we're sending for debugging
     console.log(`Sending batch sales receipts with defaults - Item: ${batchItemRef}, Account: ${batchDepositToAccountId}, Payment Method: ${batchPaymentMethodId}`);

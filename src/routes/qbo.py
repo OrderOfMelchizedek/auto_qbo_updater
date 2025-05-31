@@ -609,7 +609,7 @@ def get_all_accounts():
                 }
                 break
 
-        return jsonify({"accounts": accounts, "undepositedFunds": undeposited_funds})
+        return jsonify({"success": True, "accounts": accounts, "undepositedFunds": undeposited_funds})
 
     except Exception as e:
         logger.error(f"Error fetching accounts: {str(e)}", exc_info=True)
@@ -630,10 +630,18 @@ def get_all_payment_methods():
 
         # Transform to expected format
         formatted_methods = []
-        for method in payment_methods:
-            formatted_methods.append({"id": method.get("Id"), "name": method.get("Name"), "type": method.get("Type")})
+        check_method = None
 
-        return jsonify({"success": True, "paymentMethods": formatted_methods})
+        for method in payment_methods:
+            formatted_method = {"id": method.get("Id"), "name": method.get("Name"), "type": method.get("Type")}
+            formatted_methods.append(formatted_method)
+
+            # Look for check payment method (case insensitive)
+            method_name = method.get("Name", "").lower()
+            if "check" in method_name or "cheque" in method_name:
+                check_method = formatted_method
+
+        return jsonify({"success": True, "paymentMethods": formatted_methods, "checkMethod": check_method})
 
     except Exception as e:
         logger.error(f"Error fetching payment methods: {str(e)}", exc_info=True)
