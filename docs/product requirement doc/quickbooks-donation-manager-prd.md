@@ -1,7 +1,7 @@
 # Product Requirements Document: QuickBooks Donation Manager
 
-**Version:** 1.0  
-**Date:** June 3, 2025  
+**Version:** 1.0
+**Date:** June 3, 2025
 **Status:** Draft
 
 ---
@@ -496,26 +496,26 @@ async def upload_documents(files: List[UploadFile] = File(...)):
   - Redis configuration for session management and Celery broker
   - S3 bucket setup for document storage
   - OAuth 2.0 authentication framework with authlib
-  
+
 - **Document Processing Engine**
   - Multi-file upload interface (up to 20 files, 20MB each)
   - PDF to image conversion with pdf2image
   - Google Gemini API integration with structured outputs
   - Concurrent extraction processing using Celery workers
   - Deduplication service implementation with pandas
-  
+
 - **QuickBooks Integration**
   - OAuth flow implementation using authlib
   - Customer search and fuzzy matching algorithms
   - Smart data synchronization logic with python-quickbooks
   - Error handling and retry mechanisms
-  
+
 - **User Interface**
   - React SPA with Material-UI components
   - FastAPI REST endpoints with automatic OpenAPI documentation
   - WebSocket support for real-time processing updates
   - Batch operations interface
-  
+
 - **Letter Generation**
   - Jinja2 template engine integration
   - PDF generation with weasyprint
@@ -608,7 +608,7 @@ async def upload_documents(files: List[UploadFile] = File(...)):
       "required_if": "payment_method == check"
     },
     "payment_ref": {
-      "type": "string", 
+      "type": "string",
       "required_if": "payment_method == online"
     },
     "amount": {
@@ -696,7 +696,7 @@ Thank you for your generous donation of $[Amount] to [Organization Name], receiv
 
 [If check: Your check #[Check No] has been processed and deposited.]
 
-Your support helps us [mission statement/impact]. 
+Your support helps us [mission statement/impact].
 
 For tax purposes, please retain this letter as your official receipt. No goods or services were provided in exchange for this contribution.
 

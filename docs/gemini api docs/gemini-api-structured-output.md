@@ -66,7 +66,7 @@ Here are some example schemas showing valid type-and-field combinations:
 { "type": "number", "format": "double" }
 { "type": "boolean" }
 { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": ... } }
-{ 
+{
   "type": "object",
   "properties": {
     "a": { "type": ... },

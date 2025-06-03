@@ -1,8 +1,12 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+"""Application configuration management using Pydantic settings."""
 from typing import Optional
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Application settings with environment variable support."""
+
     APP_NAME: str = "QuickBooks Donation Manager"
     DEBUG: bool = False
     SECRET_KEY: str = "your_secret_key_here"

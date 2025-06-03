@@ -34,7 +34,7 @@ async function main() {
     model: "gemini-2.0-flash",
     contents: "How does AI work?",
   });
-  
+
   console.log(response.text);
 }
 
@@ -58,7 +58,7 @@ func main() {
         APIKey: os.Getenv("GEMINI_API_KEY"),
         Backend: genai.BackendGeminiAPI,
     })
-    
+
     result, _ := client.Models.GenerateContent(
         ctx,
         "gemini-2.0-flash",

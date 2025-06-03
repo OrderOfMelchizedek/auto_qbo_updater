@@ -66,7 +66,7 @@ Inspired by Unix daemons:
 
 ```
 web: 3 processes
-worker: 5 processes  
+worker: 5 processes
 clock: 1 process
 ```
 

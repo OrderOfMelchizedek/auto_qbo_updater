@@ -285,7 +285,7 @@ import { GoogleGenAI } from "@google/genai";
 
 async function main() {
   const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
-  
+
   const imageUrl = "https://goo.gle/instrument-img";
   const response = await fetch(imageUrl);
   const imageArrayBuffer = await response.arrayBuffer();

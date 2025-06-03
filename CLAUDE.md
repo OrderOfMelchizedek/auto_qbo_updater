@@ -2,7 +2,7 @@
 The product requirement document is found in '/Users/svaug/dev/svl_apps/fom_to_qbo_automation/docs/product requirement doc/quickbooks-donation-manager-prd.md'. Refer to this to understand the full specification of the project. Update this as required or requested by the user.
 
 # Development Methodology
-Follow the 12-Factor App principles where applicable (reference: 'docs/12factor-reference') and Test-Driven Development: 
+Follow the 12-Factor App principles where applicable (reference: 'docs/12factor-reference') and Test-Driven Development:
 - Write failing tests first
 - Implement code to pass tests
 - Refactor while keeping tests green
@@ -75,7 +75,7 @@ class QuickBooksIntegrationError(DonationProcessingError): pass
 
 ## Logging Standards
 - **ERROR**: API failures, processing errors
-- **WARNING**: Retryable errors, data quality issues  
+- **WARNING**: Retryable errors, data quality issues
 - **INFO**: Successful operations, milestones
 - **DEBUG**: Detailed payloads (never log sensitive data)
 - Include correlation IDs for request tracking
@@ -96,7 +96,7 @@ class QuickBooksIntegrationError(DonationProcessingError): pass
 
 ## CI/CD Pipeline
 1. **Pre-commit hooks**: flake8, Black, isort, run all tests
-2. **Deployment**: 
+2. **Deployment**:
    - Update version in pyproject.toml
    - Deploy to staging → smoke test → production
    - Monitor logs for 30 minutes post-deploy
@@ -105,3 +105,6 @@ class QuickBooksIntegrationError(DonationProcessingError): pass
 - Health endpoint at `/health`
 - Use Sentry for error tracking
 - Alert thresholds: >5% error rate, >30s processing, failed QB syncs
+
+# Development Principles
+- Don't disable aspects of CI/CD or testing workflows just to commit unless I specifically ask you to.
