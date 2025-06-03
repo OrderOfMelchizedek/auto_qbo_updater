@@ -2,9 +2,9 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
+*.pyd
+*.dll
 
 # Distribution / packaging
 .Python
@@ -14,8 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-# lib/ - commented out to allow prompt files
-lib64/
+lib64/  # Standard ignore, but ensure 'lib/' (project specific) is NOT ignored
 parts/
 sdist/
 var/
@@ -26,9 +25,8 @@ wheels/
 MANIFEST
 
 # PyInstaller
-# Usually these files are created by PyInstaller
-# One-file bundle, PyInstaller Co., Ltd.
-# *.spec
+*.manifest
+*.spec
 
 # Installer logs
 pip-log.txt
@@ -44,42 +42,41 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
+*.log
 .hypothesis/
 .pytest_cache/
 
-# Translations
-*.mo
-*.pot
+# Celery
+celerybeat-schedule
+*.pid
 
-# Django stuff:
-# *.log (covered by generic *.log below)
-local_settings.py
-db.sqlite3
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation build output
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints
-
-# Virtual environments
+# Environments
 .env
+.env.*
+!.env.example  # Keep .env.example in repo
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# IDEs
+.idea/
+.vscode/
+*.project
+*.pydevproject
+.sublime-project
+.sublime-workspace
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# VS Code specific
+.history/
+.vscode-test/
 
 # Spyder project settings
 .spyderproject
@@ -88,48 +85,16 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
-# mkdocs documentation
-/site
-
-# mypy cache
-.mypy_cache/
-
-# macOS specific
+# Operating System Files
 .DS_Store
-.AppleDouble
-.LSOverride
-
-# Windows specific
-Thumbs.db
+._*
+.Spotlight-V100
+.Trashes
 ehthumbs.db
-Desktop.ini
+Thumbs.db
+desktop.ini
 
-# Linux specific (often editor backups)
-*~
-
-# Project specific
-uploads/
-qbo api client ID and secret.md
-CLAUDE.md
-deprecated/
-
-# Frontend test coverage
-tests/frontend/coverage/
-
-# Ignore all CSV files (if you prefer a general rule)
-*.csv
-
-# Log files
-*.log
-
-# IDE specific files (optional, but common)
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# If you want to ignore other documentation files not loaded at runtime:
-# docs/*
-# !docs/prompts_archive/
-# !docs/FOM_deposit_report_header_descriptions_2025-04-12.md
-# !docs/FOM Deposit Assistant Prompt 2025-04-12.md
+# Static and media files that might be generated or user-uploaded locally
+# but a general rule would be to serve static from a CDN or define specifics
+# staticfiles/
+# mediafiles/

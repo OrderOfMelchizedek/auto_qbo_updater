@@ -1,0 +1,24 @@
+from fastapi import FastAPI
+from config.settings import settings
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    debug=settings.DEBUG
+)
+
+
+@app.get("/")
+async def read_root():
+    return {"message": f"Welcome to {settings.APP_NAME}"}
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+
+# The following is for illustrative purposes for local running;
+# Uvicorn will typically be run by Procfile in deployment.
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
