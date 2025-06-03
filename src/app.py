@@ -1,7 +1,7 @@
 """Main FastAPI application module."""
 from fastapi import FastAPI
 
-from config.settings import settings
+from src.config.settings import settings
 
 app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
 
