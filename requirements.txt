@@ -6,3 +6,6 @@ python-dotenv
 celery[redis]
 # Core libraries for FastAPI and async tasks
 # We will add more specific libraries like google-generativeai, python-quickbooks, etc., later.
+
+# Development dependencies
+pre-commit
