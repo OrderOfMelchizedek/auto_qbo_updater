@@ -1,6 +1,6 @@
 """S3 storage service for document management."""
 import logging
-from typing import BinaryIO, Optional
+from typing import BinaryIO, Optional, Union
 
 import boto3
 from botocore.exceptions import ClientError
@@ -30,13 +30,19 @@ class S3Service:
             region_name=settings.AWS_S3_REGION,
         )
 
-    def upload_file(self, file_object: BinaryIO, key: str) -> str:
+    def upload_file(
+        self,
+        file_object: Union[BinaryIO, bytes],
+        key: str,
+        content_type: Optional[str] = None,
+    ) -> str:
         """
         Upload a file to S3.
 
         Args:
-            file_object: File-like object to upload
+            file_object: File-like object or bytes to upload
             key: S3 object key (path)
+            content_type: Optional content type
 
         Returns:
             The S3 key of the uploaded file
@@ -45,11 +51,12 @@ class S3Service:
             S3StorageError: If upload fails
         """
         try:
+            extra_args = {"ServerSideEncryption": "AES256"}
+            if content_type:
+                extra_args["ContentType"] = content_type
+
             self.client.put_object(
-                Bucket=self.bucket_name,
-                Key=key,
-                Body=file_object,
-                ServerSideEncryption="AES256",
+                Bucket=self.bucket_name, Key=key, Body=file_object, **extra_args
             )
             logger.info(f"Successfully uploaded file to S3: {key}")
             return key
@@ -133,6 +140,80 @@ class S3Service:
         except ClientError as e:
             logger.error(f"Failed to generate presigned URL: {e}")
             return None
+
+    def generate_presigned_upload_url(self, key: str, expires_in: int = 3600) -> str:
+        """
+        Generate a presigned URL for uploading a file.
+
+        Args:
+            key: S3 object key (path)
+            expires_in: URL expiration time in seconds
+
+        Returns:
+            Presigned upload URL
+        """
+        try:
+            url = self.client.generate_presigned_url(
+                "put_object",
+                Params={"Bucket": self.bucket_name, "Key": key},
+                ExpiresIn=expires_in,
+            )
+            return url
+        except ClientError as e:
+            logger.error(f"Failed to generate presigned upload URL: {e}")
+            raise S3StorageError(
+                "Failed to generate presigned upload URL",
+                details={"key": key, "error": str(e)},
+            )
+
+    def file_exists(self, key: str) -> bool:
+        """
+        Check if a file exists in S3.
+
+        Args:
+            key: S3 object key (path)
+
+        Returns:
+            True if file exists, False otherwise
+        """
+        try:
+            self.client.head_object(Bucket=self.bucket_name, Key=key)
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "404":
+                return False
+            logger.error(f"Failed to check file existence: {e}")
+            raise S3StorageError(
+                "Failed to check file existence",
+                details={"key": key, "error": str(e)},
+            )
+
+    def get_file_info(self, key: str) -> dict:
+        """
+        Get file metadata from S3.
+
+        Args:
+            key: S3 object key (path)
+
+        Returns:
+            Dictionary with file metadata
+        """
+        try:
+            response = self.client.head_object(Bucket=self.bucket_name, Key=key)
+            return {
+                "ContentLength": response.get("ContentLength", 0),
+                "ContentType": response.get("ContentType", ""),
+                "LastModified": response.get("LastModified"),
+                "ETag": response.get("ETag", ""),
+            }
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "404":
+                raise S3StorageError("File not found in S3", details={"key": key})
+            logger.error(f"Failed to get file info: {e}")
+            raise S3StorageError(
+                "Failed to get file info",
+                details={"key": key, "error": str(e)},
+            )
 
     def list_files(self, prefix: str = "") -> list:
         """

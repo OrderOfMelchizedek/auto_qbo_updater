@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from src.api.endpoints import auth
+from src.api.endpoints import auth, documents, donations, letters, quickbooks
 from src.api.middleware.security import setup_middleware
 from src.config.logging_config import setup_logging
 from src.config.settings import settings
@@ -20,6 +20,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.APP_NAME,
+    description="Automated donation processing and QuickBooks integration",
+    version="1.0.0",
     debug=settings.DEBUG,
     lifespan=lifespan,
 )
@@ -29,6 +31,10 @@ setup_middleware(app)
 
 # Include routers
 app.include_router(auth.router)
+app.include_router(documents.router)
+app.include_router(donations.router)
+app.include_router(quickbooks.router)
+app.include_router(letters.router)
 
 
 @app.get("/")
