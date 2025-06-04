@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donation Receipt - {{ organization.name }}</title>
+    <style>
+        @page {
+            size: letter;
+            margin: 1in;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+
+        .letterhead {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+        }
+
+        .letterhead h1 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 28px;
+        }
+
+        .letterhead p {
+            margin: 5px 0;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .date {
+            text-align: right;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .recipient {
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .recipient p {
+            margin: 2px 0;
+        }
+
+        .salutation {
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+
+        .body {
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+
+        .body p {
+            margin: 15px 0;
+        }
+
+        .amount {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .tax-info {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            font-size: 14px;
+        }
+
+        .signature {
+            margin-top: 60px;
+            font-size: 16px;
+        }
+
+        .signature-line {
+            margin-top: 60px;
+            width: 250px;
+            border-bottom: 1px solid #333;
+        }
+
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <!-- Letterhead -->
+    <div class="letterhead">
+        {% if organization.logo_url %}
+        <img src="{{ organization.logo_url }}" alt="{{ organization.name }} Logo" style="max-height: 80px; margin-bottom: 10px;">
+        {% endif %}
+        <h1>{{ organization.name }}</h1>
+        <p>{{ organization.address_line1 }}{% if organization.address_line2 %} • {{ organization.address_line2 }}{% endif %}</p>
+        <p>{{ organization.city }}, {{ organization.state }} {{ organization.postal_code }}</p>
+        {% if organization.phone %}
+        <p>Phone: {{ organization.phone }}{% if organization.email %} • Email: {{ organization.email }}{% endif %}</p>
+        {% else %}
+        {% if organization.email %}<p>Email: {{ organization.email }}</p>{% endif %}
+        {% endif %}
+    </div>
+
+    <!-- Date -->
+    <div class="date">
+        {{ current_date|date }}
+    </div>
+
+    <!-- Recipient Address -->
+    <div class="recipient">
+        <p><strong>{{ donor_name }}</strong></p>
+        {% if has_address %}
+        <p>{{ address.street1 }}</p>
+        {% if address.street2 %}
+        <p>{{ address.street2 }}</p>
+        {% endif %}
+        <p>{{ address.city }}, {{ address.state }} {{ address.postal_code }}</p>
+        {% endif %}
+    </div>
+
+    <!-- Salutation -->
+    <div class="salutation">
+        Dear {{ salutation }} {{ last_name }},
+    </div>
+
+    <!-- Letter Body -->
+    <div class="body">
+        <p>
+            Thank you for your generous donation of <span class="amount">{{ amount|currency }}</span>
+            to {{ organization.name }}, received on {{ payment_date|date }}.
+        </p>
+
+        {% if check_number %}
+        <p>
+            Your check #{{ check_number }} has been processed and deposited.
+        </p>
+        {% endif %}
+
+        {% if organization.mission_statement %}
+        <p>
+            Your support helps us {{ organization.mission_statement }}
+        </p>
+        {% else %}
+        <p>
+            Your support helps us continue our important work in the community.
+        </p>
+        {% endif %}
+
+        {% if custom_data and custom_data.custom_message %}
+        <p>
+            {{ custom_data.custom_message }}
+        </p>
+        {% endif %}
+    </div>
+
+    <!-- Tax Information Box -->
+    <div class="tax-info">
+        <strong>Tax Deduction Information:</strong><br>
+        For tax purposes, please retain this letter as your official receipt.
+        No goods or services were provided in exchange for this contribution.<br><br>
+        {{ organization.name }} is a 501(c)(3) tax-exempt organization.<br>
+        Our Federal Tax ID (EIN) is: <strong>{{ organization.ein }}</strong>
+    </div>
+
+    <!-- Signature -->
+    <div class="signature">
+        <p>With gratitude,</p>
+        <div class="signature-line"></div>
+        <p>
+            {{ organization.treasurer_name }}<br>
+            {{ organization.treasurer_title }}
+        </p>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>Thank you for making a difference!</p>
+    </div>
+</body>
+</html>

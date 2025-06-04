@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donation Receipt</title>
+    <style>
+        @page {
+            size: letter;
+            margin: 1in;
+        }
+
+        body {
+            font-family: 'Georgia', serif;
+            line-height: 1.5;
+            color: #000;
+            margin: 0;
+            padding: 0;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .content {
+            margin: 30px 0;
+            font-size: 14px;
+        }
+
+        .content p {
+            margin: 20px 0;
+        }
+
+        .signature {
+            margin-top: 80px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ organization.name }}</h1>
+        <p>{{ organization.ein }}</p>
+    </div>
+
+    <p>{{ current_date|date }}</p>
+
+    <p>{{ donor_name }}<br>
+    {% if has_address %}
+    {{ address.street1 }}<br>
+    {% if address.street2 %}{{ address.street2 }}<br>{% endif %}
+    {{ address.city }}, {{ address.state }} {{ address.postal_code }}
+    {% endif %}
+    </p>
+
+    <div class="content">
+        <p>Dear {{ donor_name }},</p>
+
+        <p>Thank you for your donation of {{ amount|currency }} on {{ payment_date|date }}.</p>
+
+        <p>This letter serves as your official tax receipt. No goods or services were provided in exchange for this contribution.</p>
+
+        <p>{{ organization.name }} is a 501(c)(3) organization. EIN: {{ organization.ein }}</p>
+    </div>
+
+    <div class="signature">
+        <p>Sincerely,</p>
+        <br><br>
+        <p>{{ organization.treasurer_name }}<br>
+        {{ organization.treasurer_title }}</p>
+    </div>
+</body>
+</html>
