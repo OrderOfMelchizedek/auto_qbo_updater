@@ -21,6 +21,18 @@ class Settings(BaseSettings):
     QBO_REDIRECT_URI: Optional[str] = None
     QBO_ENVIRONMENT: str = "sandbox"
 
+    # QuickBooks API Settings (for services)
+    QUICKBOOKS_CLIENT_ID: Optional[str] = None
+    QUICKBOOKS_CLIENT_SECRET: Optional[str] = None
+    QUICKBOOKS_REDIRECT_URI: str = "http://localhost:8000/api/quickbooks/callback"
+    QUICKBOOKS_BASE_URL: str = "https://sandbox-quickbooks.api.intuit.com"
+    QUICKBOOKS_AUTHORIZATION_BASE_URL: str = (
+        "https://appcenter.intuit.com/connect/oauth2"
+    )
+    QUICKBOOKS_TOKEN_URL: str = (
+        "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
+    )
+
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
@@ -57,6 +69,20 @@ class Settings(BaseSettings):
             self.CELERY_BROKER_URL = self.REDIS_URL
         if not self.CELERY_RESULT_BACKEND:
             self.CELERY_RESULT_BACKEND = self.REDIS_URL
+
+        # Sync QuickBooks settings (QBO_ prefix vs QUICKBOOKS_ prefix)
+        if self.QBO_CLIENT_ID and not self.QUICKBOOKS_CLIENT_ID:
+            self.QUICKBOOKS_CLIENT_ID = self.QBO_CLIENT_ID
+        if self.QBO_CLIENT_SECRET and not self.QUICKBOOKS_CLIENT_SECRET:
+            self.QUICKBOOKS_CLIENT_SECRET = self.QBO_CLIENT_SECRET
+        if self.QBO_REDIRECT_URI and not self.QUICKBOOKS_REDIRECT_URI:
+            self.QUICKBOOKS_REDIRECT_URI = self.QBO_REDIRECT_URI
+
+        # Set QuickBooks URLs based on environment
+        if self.QBO_ENVIRONMENT == "production":
+            self.QUICKBOOKS_BASE_URL = "https://quickbooks.api.intuit.com"
+        else:
+            self.QUICKBOOKS_BASE_URL = "https://sandbox-quickbooks.api.intuit.com"
 
 
 settings = Settings()

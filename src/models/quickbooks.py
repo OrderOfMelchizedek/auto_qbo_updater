@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from src.models.donation import DonationEntry
+
 
 class MatchConfidence(str, Enum):
     """Confidence levels for QuickBooks customer matching."""
@@ -38,11 +40,14 @@ class QBCustomer(BaseModel):
 class CustomerMatch(BaseModel):
     """Result of matching a donor to QuickBooks customer."""
 
-    qb_customer: Optional[QBCustomer] = Field(
-        None, description="Matched QuickBooks customer"
-    )
-    confidence: MatchConfidence = Field(..., description="Match confidence level")
-    score: float = Field(0.0, description="Match score (0-100)")
+    customer_id: str = Field(..., description="QuickBooks customer ID")
+    display_name: str = Field(..., description="Customer display name")
+    company_name: Optional[str] = Field(None, description="Company name")
+    given_name: Optional[str] = Field(None, description="First name")
+    family_name: Optional[str] = Field(None, description="Last name")
+    email: Optional[str] = Field(None, description="Primary email")
+    phone: Optional[str] = Field(None, description="Primary phone")
+    confidence_score: float = Field(0.0, description="Match confidence score (0-1)")
     match_reasons: List[str] = Field(
         default_factory=list, description="Reasons for the match"
     )
@@ -124,3 +129,104 @@ class QBConfig(BaseModel):
     custom_field_mappings: Dict[str, str] = Field(
         default_factory=dict, description="Map internal fields to QB custom fields"
     )
+
+
+class SyncStatus(str, Enum):
+    """Status of QuickBooks sync operation."""
+
+    SYNCED = "synced"
+    PENDING_REVIEW = "pending_review"
+    ERROR = "error"
+
+
+class QuickBooksAuthCallback(BaseModel):
+    """OAuth callback data from QuickBooks."""
+
+    code: str = Field(..., description="Authorization code")
+    state: str = Field(..., description="State parameter")
+    realmId: str = Field(..., description="QuickBooks company ID")
+
+
+class QuickBooksCustomer(BaseModel):
+    """QuickBooks customer details."""
+
+    id: str = Field(..., description="Customer ID")
+    sync_token: str = Field(..., description="Sync token for updates")
+    display_name: str = Field(..., description="Display name")
+    company_name: Optional[str] = Field(None, description="Company name")
+    given_name: Optional[str] = Field(None, description="Given name")
+    family_name: Optional[str] = Field(None, description="Family name")
+    email: Optional[str] = Field(None, description="Email address")
+    phone: Optional[str] = Field(None, description="Phone number")
+    active: bool = Field(True, description="Active status")
+    balance: Decimal = Field(Decimal("0"), description="Customer balance")
+
+
+class SalesReceiptLine(BaseModel):
+    """Line item in a sales receipt."""
+
+    id: Optional[str] = Field(None, description="Line ID")
+    line_num: Optional[int] = Field(None, description="Line number")
+    amount: Decimal = Field(..., description="Line amount")
+    description: Optional[str] = Field(None, description="Line description")
+    item_ref: Optional[str] = Field(None, description="Item reference ID")
+
+
+class QuickBooksSalesReceipt(BaseModel):
+    """QuickBooks sales receipt details."""
+
+    id: str = Field(..., description="Receipt ID")
+    sync_token: str = Field(..., description="Sync token")
+    doc_number: Optional[str] = Field(None, description="Document number")
+    txn_date: str = Field(..., description="Transaction date")
+    customer_ref: str = Field(..., description="Customer ID reference")
+    total_amt: Decimal = Field(..., description="Total amount")
+    payment_method_ref: Optional[str] = Field(None, description="Payment method ID")
+    payment_ref_num: Optional[str] = Field(None, description="Payment reference number")
+    deposit_to_account_ref: Optional[str] = Field(
+        None, description="Deposit account ID"
+    )
+    private_note: Optional[str] = Field(None, description="Private note")
+    lines: List[SalesReceiptLine] = Field(
+        default_factory=list, description="Line items"
+    )
+
+
+class QuickBooksSyncRequest(BaseModel):
+    """Request to sync a donation to QuickBooks."""
+
+    donation: DonationEntry = Field(..., description="Donation to sync")
+    strategy: str = Field(
+        "auto_high", description="Matching strategy (auto_high, manual, create_new)"
+    )
+    customer_id: Optional[str] = Field(
+        None, description="Pre-selected customer ID for manual matching"
+    )
+
+
+class QuickBooksSyncResult(BaseModel):
+    """Result of syncing a donation to QuickBooks."""
+
+    donation_id: str = Field(..., description="Donation ID")
+    status: SyncStatus = Field(..., description="Sync status")
+    customer_id: Optional[str] = Field(None, description="Matched/created customer ID")
+    customer_name: Optional[str] = Field(None, description="Customer display name")
+    receipt_id: Optional[str] = Field(None, description="Created receipt ID")
+    receipt_number: Optional[str] = Field(None, description="Receipt document number")
+    match_confidence: Optional[float] = Field(
+        None, description="Match confidence score"
+    )
+    customer_matches: Optional[List[CustomerMatch]] = Field(
+        None, description="Potential matches for manual review"
+    )
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+
+
+class ManualReviewRequest(BaseModel):
+    """Request to complete manual customer matching."""
+
+    donation_id: str = Field(..., description="Donation ID")
+    customer_id: Optional[str] = Field(
+        None, description="Selected customer ID (if matching existing)"
+    )
+    create_new: bool = Field(False, description="Whether to create a new customer")
