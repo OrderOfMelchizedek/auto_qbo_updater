@@ -108,8 +108,18 @@ def test_complete_upload_success(mock_s3, auth_headers):
     assert data["data"][0]["original_name"] == "donation1.jpg"
 
 
-def test_get_processing_status(auth_headers):
+@patch("src.workers.tasks.document_tasks.check_extraction_status")
+def test_get_processing_status(mock_check_status, auth_headers):
     """Test getting document processing status."""
+    # Mock the Celery task status check
+    mock_check_status.return_value = {
+        "task_id": "task_123",
+        "status": "STARTED",
+        "ready": False,
+        "successful": None,
+        "result": {"batch_id": "batch_123"},
+    }
+
     response = client.get(
         "/api/documents/processing/task_123",
         headers=auth_headers,

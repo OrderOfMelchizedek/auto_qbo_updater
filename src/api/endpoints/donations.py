@@ -1,6 +1,6 @@
 """Donation management endpoints."""
 import logging
-from typing import Annotated, List
+from typing import Annotated, Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -149,6 +149,53 @@ async def update_donation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update donation",
+        )
+
+
+@router.post("/deduplicate", response_model=APIResponse[Dict])
+async def deduplicate_donations(
+    donations: List[Dict[str, Any]],
+    current_user: CurrentUser,
+) -> APIResponse[Dict]:
+    """
+    Deduplicate a list of extracted donations.
+
+    This endpoint merges duplicate donations based on check number and amount.
+    """
+    try:
+        from src.services.deduplication.donation_deduplicator import (
+            DonationDeduplicator,
+        )
+
+        deduplicator = DonationDeduplicator()
+        deduplicated, merge_log = deduplicator.deduplicate_donations(donations)
+
+        # Convert DonationEntry objects to dicts for JSON response
+        deduplicated_dicts = [entry.dict() for entry in deduplicated]
+
+        result = {
+            "deduplicated_donations": deduplicated_dicts,
+            "merge_log": merge_log,
+            "original_count": len(donations),
+            "deduplicated_count": len(deduplicated),
+            "duplicates_found": len(donations) - len(deduplicated),
+        }
+
+        logger.info(
+            f"Deduplicated {len(donations)} donations to "
+            f"{len(deduplicated)} unique entries"
+        )
+
+        return APIResponse(
+            success=True,
+            data=result,
+            message=f"Found {len(merge_log)} duplicate groups",
+        )
+    except Exception as e:
+        logger.error(f"Failed to deduplicate donations: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to deduplicate donations",
         )
 
 

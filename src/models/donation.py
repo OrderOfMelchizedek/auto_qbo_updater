@@ -2,7 +2,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -190,3 +190,33 @@ class DonationFilter(BaseModel):
     amount_max: Optional[Decimal] = None
     donor_name: Optional[str] = None
     check_number: Optional[str] = None
+
+
+class QuickBooksInfo(BaseModel):
+    """QuickBooks sync information for a donation."""
+
+    customer_id: Optional[str] = Field(None, description="Matched QB customer ID")
+    customer_name: Optional[str] = Field(None, description="QB customer name")
+    receipt_id: Optional[str] = Field(None, description="QB sales receipt ID")
+    sync_status: Optional[str] = Field(None, description="Sync status")
+    sync_date: Optional[datetime] = Field(None, description="When synced")
+    match_confidence: Optional[str] = Field(
+        None, description="Customer match confidence"
+    )
+
+
+class DonationEntry(BaseModel):
+    """Complete donation entry after extraction and deduplication."""
+
+    payment_info: Optional[PaymentInfo] = Field(None, description="Payment details")
+    payer_info: Optional[PayerInfo] = Field(None, description="Payer/donor information")
+    contact_info: Optional[ContactInfo] = Field(None, description="Contact details")
+    source_documents: List[str] = Field(
+        default_factory=list, description="Source document IDs"
+    )
+    confidence_scores: Optional[Dict[str, float]] = Field(
+        None, description="Extraction confidence scores"
+    )
+    quickbooks_info: Optional[QuickBooksInfo] = Field(
+        None, description="QuickBooks sync information"
+    )

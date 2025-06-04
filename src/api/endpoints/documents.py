@@ -298,6 +298,61 @@ async def upload_files_batch(
         )
 
 
+@router.post("/extract", response_model=APIResponse[ProcessingTask])
+async def extract_documents(
+    batch_id: str,
+    current_user: CurrentUser,
+) -> APIResponse[ProcessingTask]:
+    """
+    Start extraction process for uploaded documents.
+
+    This endpoint initiates the document extraction pipeline:
+    1. Converts documents to images (if needed)
+    2. Extracts donation information using Gemini AI
+    3. Returns a task ID for tracking progress
+    """
+    try:
+        # Get file IDs for the batch
+        # TODO: In production, this would query the database
+        # For now, we'll simulate getting file IDs
+        file_ids: List[str] = []  # This should come from database query
+
+        if not file_ids:
+            # For testing, let's assume some files were uploaded
+            file_ids = ["file_1", "file_2", "file_3"]
+
+        # Import here to avoid circular import
+        from src.workers.tasks.document_tasks import process_document_batch
+
+        # Start the batch processing task
+        task = process_document_batch.delay(
+            batch_id=batch_id,
+            file_ids=file_ids,
+            user_id=current_user.get("email", "unknown"),
+        )
+
+        # Create processing task response
+        processing_task = ProcessingTask(
+            task_id=task.id,
+            file_id=batch_id,  # Using batch_id as identifier
+            status=ProcessingStatus.PROCESSING,
+        )
+
+        logger.info(f"Started extraction for batch {batch_id}, task ID: {task.id}")
+
+        return APIResponse(
+            success=True,
+            data=processing_task,
+            message=f"Extraction started for {len(file_ids)} files",
+        )
+    except Exception as e:
+        logger.error(f"Failed to start extraction: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to start extraction process",
+        )
+
+
 @router.get("/processing/{task_id}", response_model=APIResponse[ProcessingTask])
 async def get_processing_status(
     task_id: str,
@@ -305,11 +360,34 @@ async def get_processing_status(
 ) -> APIResponse[ProcessingTask]:
     """Get status of a document processing task."""
     try:
-        # TODO: Get task status from Celery
+        # Import here to avoid circular import
+        from src.workers.tasks.document_tasks import check_extraction_status
+
+        # Get task status
+        status_info = check_extraction_status(task_id)
+
+        # Map Celery status to our ProcessingStatus enum
+        status_mapping = {
+            "PENDING": ProcessingStatus.PENDING,
+            "STARTED": ProcessingStatus.PROCESSING,
+            "SUCCESS": ProcessingStatus.COMPLETED,
+            "FAILURE": ProcessingStatus.FAILED,
+            "RETRY": ProcessingStatus.PROCESSING,
+            "REVOKED": ProcessingStatus.FAILED,
+        }
+
+        processing_status = status_mapping.get(
+            status_info["status"], ProcessingStatus.PROCESSING
+        )
+
         task = ProcessingTask(
             task_id=task_id,
-            file_id="file_123",
-            status=ProcessingStatus.PROCESSING,
+            file_id=status_info.get("result", {}).get("batch_id", "unknown"),
+            status=processing_status,
+            result=status_info.get("result") if status_info["ready"] else None,
+            error=status_info.get("result")
+            if processing_status == ProcessingStatus.FAILED
+            else None,
         )
 
         return APIResponse(
