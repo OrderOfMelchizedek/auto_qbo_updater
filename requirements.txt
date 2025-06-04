@@ -39,6 +39,7 @@ httpx==0.25.2
 
 # Type stubs
 types-redis==4.6.0.11
+boto3-stubs[s3]==1.29.7
 
 # Development dependencies
 pre-commit

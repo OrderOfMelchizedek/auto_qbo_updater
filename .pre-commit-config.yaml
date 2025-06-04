@@ -43,3 +43,4 @@ repos:
         args: ['--ignore-missing-imports']
         additional_dependencies:
           - types-redis
+          - boto3-stubs[s3]

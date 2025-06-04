@@ -1,9 +1,26 @@
 """Main FastAPI application module."""
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
+from src.config.logging_config import setup_logging
 from src.config.settings import settings
 
-app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Configure application lifespan events."""
+    # Startup
+    setup_logging()
+    yield
+    # Shutdown
+
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    debug=settings.DEBUG,
+    lifespan=lifespan,
+)
 
 
 @app.get("/")
