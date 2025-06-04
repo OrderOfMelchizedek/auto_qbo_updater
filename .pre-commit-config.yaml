@@ -44,3 +44,4 @@ repos:
         additional_dependencies:
           - types-redis
           - boto3-stubs[s3]
+          - types-requests

@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from src.api.endpoints import auth
+from src.api.middleware.security import setup_middleware
 from src.config.logging_config import setup_logging
 from src.config.settings import settings
 
@@ -21,6 +23,12 @@ app = FastAPI(
     debug=settings.DEBUG,
     lifespan=lifespan,
 )
+
+# Set up middleware
+setup_middleware(app)
+
+# Include routers
+app.include_router(auth.router)
 
 
 @app.get("/")

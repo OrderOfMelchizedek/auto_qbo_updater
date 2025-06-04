@@ -10,6 +10,7 @@ celery[redis]
 authlib==1.2.1
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.6
+requests==2.31.0
 
 # External APIs
 google-generativeai==0.3.0
@@ -40,6 +41,7 @@ httpx==0.25.2
 # Type stubs
 types-redis==4.6.0.11
 boto3-stubs[s3]==1.29.7
+types-requests==2.31.0.10
 
 # Development dependencies
 pre-commit
