@@ -37,6 +37,7 @@ class UploadedFile(BaseModel):
     s3_url: Optional[str] = Field(None, description="S3 presigned URL")
     uploaded_by: str = Field(..., description="User who uploaded the file")
     uploaded_at: datetime = Field(default_factory=datetime.now)
+    batch_id: Optional[str] = Field(None, description="Associated batch ID")
     page_count: Optional[int] = Field(None, description="Number of pages (for PDFs)")
 
     @field_validator("file_size")

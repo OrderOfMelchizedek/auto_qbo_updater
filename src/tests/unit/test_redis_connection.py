@@ -8,8 +8,14 @@ from src.utils.redis_client import RedisConnectionError, get_redis_client
 
 def test_get_redis_client_returns_client():
     """Test that get_redis_client returns a Redis client."""
+    # Reset the global client to None to force reconnection
+    import src.utils.redis_client
+
+    src.utils.redis_client._redis_client = None
+
     with patch("src.utils.redis_client.redis.from_url") as mock_from_url:
         mock_client = Mock()
+        mock_client.ping.return_value = True  # Mock the ping method
         mock_from_url.return_value = mock_client
 
         client = get_redis_client()

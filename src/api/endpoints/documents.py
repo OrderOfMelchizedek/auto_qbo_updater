@@ -53,7 +53,7 @@ async def prepare_upload(
 
             # Generate file ID and S3 key
             file_id = str(uuid.uuid4())
-            user_id = current_user.get("sub")
+            user_id = current_user.get("email", "unknown")
             s3_key = f"uploads/{user_id}/{batch_id}/{file_id}/{filename}"
 
             # Get presigned upload URL
@@ -118,7 +118,7 @@ async def complete_upload(
                 file_type=FileType(file_info["file_type"]),
                 file_size=file_size,
                 s3_key=s3_key,
-                uploaded_by=current_user.get("sub", "unknown"),
+                uploaded_by=current_user.get("email", "unknown"),
             )
             uploaded_files.append(uploaded_file)
 
@@ -171,7 +171,7 @@ async def upload_file_direct(
         # Generate IDs and S3 key
         file_id = str(uuid.uuid4())
         batch_id = batch_id or str(uuid.uuid4())
-        user_id = current_user.get("sub")
+        user_id = current_user.get("email", "unknown")
         s3_key = f"uploads/{user_id}/{batch_id}/{file_id}/{file.filename}"
 
         # Upload to S3
@@ -208,6 +208,93 @@ async def upload_file_direct(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to upload file",
+        )
+
+
+@router.post("/upload/batch", response_model=APIResponse[List[UploadedFile]])
+async def upload_files_batch(
+    current_user: CurrentUser,
+    files: Annotated[List[UploadFile], File()],
+    batch_id: Optional[str] = None,
+) -> APIResponse[List[UploadedFile]]:
+    """
+    Upload multiple files directly through the API.
+
+    Supports up to 20 files per batch as per PRD specifications.
+    """
+    try:
+        # Validate file count
+        if len(files) > 20:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Maximum 20 files allowed per batch",
+            )
+
+        # Generate batch ID if not provided
+        batch_id = batch_id or str(uuid.uuid4())
+        user_id = current_user.get("email", "unknown")
+        uploaded_files = []
+
+        # Process each file
+        for file in files:
+            # Validate file
+            if not file.filename or not validate_file_type(file.filename):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Unsupported file type: {file.filename}",
+                )
+
+            # Read file content
+            content = await file.read()
+            if not validate_file_size(len(content)):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"File size exceeds maximum allowed (20MB): {file.filename}",
+                )
+
+            # Generate file ID and S3 key
+            file_id = str(uuid.uuid4())
+            s3_key = f"uploads/{user_id}/{batch_id}/{file_id}/{file.filename}"
+
+            # Upload to S3
+            s3_service.upload_file(content, s3_key, content_type=file.content_type)
+
+            # Create file record
+            file_extension = (
+                file.filename.split(".")[-1].lower() if file.filename else ""
+            )
+            uploaded_file = UploadedFile(
+                file_id=file_id,
+                original_name=file.filename or "unknown",
+                file_type=FileType(file_extension),
+                file_size=len(content),
+                s3_key=s3_key,
+                uploaded_by=current_user.get("email", "unknown"),
+                batch_id=batch_id,
+            )
+            uploaded_files.append(uploaded_file)
+
+        # TODO: Store metadata in database
+        # TODO: Queue processing tasks for all files
+
+        return APIResponse(
+            success=True,
+            data=uploaded_files,
+            message=f"Uploaded {len(uploaded_files)} files successfully",
+        )
+    except HTTPException:
+        raise
+    except S3StorageError as e:
+        logger.error(f"S3 upload failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload files to storage",
+        )
+    except Exception as e:
+        logger.error(f"Failed to upload files: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload files",
         )
 
 

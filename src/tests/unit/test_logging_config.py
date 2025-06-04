@@ -8,7 +8,8 @@ from src.config.logging_config import setup_logging
 def test_setup_logging_configures_root_logger():
     """Test that setup_logging configures the root logger."""
     with patch("logging.basicConfig") as mock_basic_config:
-        setup_logging()
+        # Explicitly pass debug=False to override environment variable
+        setup_logging(debug=False)
 
         mock_basic_config.assert_called_once()
         call_kwargs = mock_basic_config.call_args.kwargs
