@@ -17,9 +17,15 @@ def mock_s3_client():
 
 def test_s3_service_initialization(mock_s3_client):
     """Test S3Service initialization."""
-    service = S3Service()
-    assert service.bucket_name is not None
-    assert service.client is not None
+    with patch("src.services.storage.s3_service.settings") as mock_settings:
+        mock_settings.AWS_S3_BUCKET_NAME = "test-bucket"
+        mock_settings.AWS_ACCESS_KEY_ID = "test-key-id"
+        mock_settings.AWS_SECRET_ACCESS_KEY = "test-secret"
+        mock_settings.AWS_S3_REGION = "us-east-1"
+
+        service = S3Service()
+        assert service.bucket_name == "test-bucket"
+        assert service.client is not None
 
 
 def test_upload_file_success(mock_s3_client):

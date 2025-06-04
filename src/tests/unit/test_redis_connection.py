@@ -20,6 +20,11 @@ def test_get_redis_client_returns_client():
 
 def test_get_redis_client_handles_connection_error():
     """Test that get_redis_client handles connection errors gracefully."""
+    # Reset the global client to None to force reconnection
+    import src.utils.redis_client
+
+    src.utils.redis_client._redis_client = None
+
     with patch("src.utils.redis_client.redis.from_url") as mock_from_url:
         mock_from_url.side_effect = Exception("Connection failed")
 
