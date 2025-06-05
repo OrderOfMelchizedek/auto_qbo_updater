@@ -261,7 +261,7 @@ export const UploadPage = () => {
                   {file.result && (
                     <IconButton
                       edge="end"
-                      onClick={() => setSelectedResult(file.result)}
+                      onClick={() => setSelectedResult(file.result!)}
                       sx={{ mr: 1 }}
                     >
                       <Visibility />

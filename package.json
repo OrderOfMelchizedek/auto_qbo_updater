@@ -1,0 +1,11 @@
+{
+  "name": "donation-manager",
+  "version": "1.0.0",
+  "description": "Donation Manager with QuickBooks Integration",
+  "scripts": {
+    "heroku-postbuild": "cd frontend && npm install && npm run build"
+  },
+  "cacheDirectories": [
+    "frontend/node_modules"
+  ]
+}

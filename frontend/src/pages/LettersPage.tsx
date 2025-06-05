@@ -18,10 +18,6 @@ import {
   Select,
   MenuItem,
   Chip,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
   IconButton,
   Skeleton,
   Alert,
@@ -33,11 +29,8 @@ import {
   Download,
   Preview,
   Send,
-  Edit,
   Add,
   CheckCircle,
-  Schedule,
-  Error as ErrorIcon,
 } from '@mui/icons-material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -126,7 +119,7 @@ export const LettersPage = () => {
   const { data: pendingDonations = [] } = useQuery({
     queryKey: ['donations-pending-letters'],
     queryFn: async () => {
-      const response = await api.get('/donations?needs_letter=true')
+      const response = await api.get<any[]>('/donations?needs_letter=true')
       return response.data
     },
   })

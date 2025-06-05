@@ -12,8 +12,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Checkbox,
-  FormControlLabel,
   Alert,
   Badge,
   Tooltip,
@@ -27,12 +25,9 @@ import {
   FilterList,
   Merge,
   Edit,
-  Delete,
   CheckCircle,
-  Warning,
   ViewList,
   ViewModule,
-  MoreVert,
   Download,
 } from '@mui/icons-material'
 import { DataGrid, GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
@@ -486,7 +481,6 @@ export const DonationsPage = () => {
                 rows={selectedGroup.donations}
                 columns={columns.filter((col) => col.field !== 'actions')}
                 checkboxSelection
-                disableMultipleRowSelection
                 rowSelectionModel={[selectedGroup.master_id]}
                 onRowSelectionModelChange={(ids) => {
                   if (ids.length > 0) {

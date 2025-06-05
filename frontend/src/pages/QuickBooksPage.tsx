@@ -29,7 +29,6 @@ import {
 import {
   Sync,
   CheckCircle,
-  Error,
   Warning,
   CloudUpload,
   Receipt,
@@ -43,11 +42,6 @@ import { useNotification } from '@/contexts/NotificationContext'
 import { authService } from '@/services/auth'
 import { api } from '@/services/api'
 
-interface QBConnectionStatus {
-  connected: boolean
-  company_name?: string
-  last_sync?: string
-}
 
 interface SyncableTransaction {
   donation_id: string
@@ -212,11 +206,6 @@ export const QuickBooksPage = () => {
               <Typography variant="body1">
                 Connected to <strong>{connectionStatus.company_name}</strong>
               </Typography>
-              {connectionStatus.last_sync && (
-                <Typography variant="caption" color="text.secondary">
-                  Last sync: {format(new Date(connectionStatus.last_sync), 'MMM d, yyyy h:mm a')}
-                </Typography>
-              )}
             </Box>
           </Box>
           <Button
