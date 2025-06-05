@@ -145,7 +145,7 @@ class TestGeminiService(unittest.TestCase):
 
         with patch("builtins.open", mock_open(read_data="This is a test prompt")):
             with patch("src.geminiservice.Path.exists", return_value=True):
-                result = load_prompt("test_prompt")
+                result = load_prompt("document_extraction_prompt")
                 self.assertEqual(result, "This is a test prompt")
 
     def test_load_prompt_file_not_found(self):
@@ -343,7 +343,7 @@ class TestGeminiService(unittest.TestCase):
 
                         # Call should succeed
                         result = call_gemini_api_with_image(
-                            "image_analysis", str(test_image_path)
+                            "document_extraction_prompt", str(test_image_path)
                         )
                         self.assertEqual(result, "Test response")
 
@@ -356,7 +356,7 @@ class TestGeminiService(unittest.TestCase):
         from src.geminiservice import call_gemini_api_with_image
 
         # This test uses the actual API and real image file
-        image_path = "src/tests/test_files/2025-05-17 12.50.27-1.jpg"
+        image_path = "src/tests/test_files/test_batch_1/2025-05-17 12.50.27-1.jpg"
 
         # Check if the image file exists
         if not Path(image_path).exists():
@@ -364,7 +364,9 @@ class TestGeminiService(unittest.TestCase):
 
         try:
             # Make the actual API call
-            result = call_gemini_api_with_image("image_analysis", image_path)
+            result = call_gemini_api_with_image(
+                "document_extraction_prompt", image_path
+            )
 
             # Assertions
             self.assertIsInstance(result, str)
@@ -456,7 +458,7 @@ class TestGeminiService(unittest.TestCase):
         from src.geminiservice import call_gemini_api_with_pdf
 
         # This test uses the actual API and real PDF file
-        pdf_path = "src/tests/test_files/2025-05-17-12-48-17.pdf"
+        pdf_path = "src/tests/test_files/test_batch_1/2025-05-17-12-48-17.pdf"
 
         # Check if the PDF file exists
         if not Path(pdf_path).exists():
@@ -464,7 +466,7 @@ class TestGeminiService(unittest.TestCase):
 
         try:
             # Make the actual API call
-            result = call_gemini_api_with_pdf("document_extraction", pdf_path)
+            result = call_gemini_api_with_pdf("document_extraction_prompt", pdf_path)
 
             # Assertions
             self.assertIsInstance(result, str)
@@ -530,7 +532,7 @@ class TestGeminiService(unittest.TestCase):
             files = ["test_file1.pdf", "test_file2.jpg", "test_file3.pdf"]
 
             # Call the function
-            result = process_multiple_files("document_extraction", files)
+            result = process_multiple_files("document_extraction_prompt", files)
 
             # Assertions
             self.assertIsInstance(result, str)
@@ -555,7 +557,9 @@ class TestGeminiService(unittest.TestCase):
         from src.geminiservice import process_multiple_files
 
         with self.assertRaises(ValueError) as context:
-            process_multiple_files("document_extraction", ["test.txt", "test.docx"])
+            process_multiple_files(
+                "document_extraction_prompt", ["test.txt", "test.docx"]
+            )
 
         self.assertIn("Unsupported file format", str(context.exception))
 
@@ -609,7 +613,7 @@ class TestGeminiService(unittest.TestCase):
                 self.skipTest(f"Test file not found: {file}")
 
         try:
-            result = process_multiple_files("document_extraction", files)
+            result = process_multiple_files("document_extraction_prompt", files)
 
             # Assertions
             self.assertIsInstance(result, str)
@@ -647,7 +651,7 @@ class TestGeminiService(unittest.TestCase):
                 self.skipTest(f"Test file not found: {file}")
 
         try:
-            result = process_multiple_files("document_extraction", files)
+            result = process_multiple_files("document_extraction_prompt", files)
 
             # Assertions
             self.assertIsInstance(result, str)
@@ -685,7 +689,7 @@ class TestGeminiService(unittest.TestCase):
                 self.skipTest(f"Test file not found: {file}")
 
         try:
-            result = process_multiple_files("document_extraction", files)
+            result = process_multiple_files("document_extraction_prompt", files)
 
             # Assertions
             self.assertIsInstance(result, str)
@@ -728,7 +732,7 @@ class TestGeminiService(unittest.TestCase):
                 self.skipTest(f"Test file not found: {file}")
 
         try:
-            result = process_multiple_files("document_extraction", files)
+            result = process_multiple_files("document_extraction_prompt", files)
 
             # Assertions
             self.assertIsInstance(result, str)
