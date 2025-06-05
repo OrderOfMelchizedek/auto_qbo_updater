@@ -98,3 +98,10 @@ desktop.ini
 # but a general rule would be to serve static from a CDN or define specifics
 # staticfiles/
 # mediafiles/
+
+# Test data files (too large for version control)
+src/tests/test_files/
+*.pdf
+*.jpg
+*.jpeg
+*.png
