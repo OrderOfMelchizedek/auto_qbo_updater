@@ -56,6 +56,24 @@ def health_check():
     )
 
 
+@app.route("/api/debug/build", methods=["GET"])
+def debug_build():
+    """Debug endpoint to check build directory contents."""
+    build_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
+    )
+
+    result = {"build_dir": build_dir, "exists": os.path.exists(build_dir), "files": []}
+
+    if os.path.exists(build_dir):
+        for root, _dirs, files in os.walk(build_dir):
+            for file in files:
+                relative_path = os.path.relpath(os.path.join(root, file), build_dir)
+                result["files"].append(relative_path)
+
+    return jsonify(result)
+
+
 @app.route("/api/upload", methods=["POST"])
 def upload_files():
     """
@@ -326,8 +344,8 @@ def serve_react_app(path):
         )
 
         # Log for debugging
-        logger.info(f"Looking for React build at: {build_dir}")
-        logger.info(f"Build directory exists: {os.path.exists(build_dir)}")
+        logger.info(f"Requested path: {path}")
+        logger.info(f"Build directory: {build_dir}")
 
         if not os.path.exists(build_dir):
             logger.error(f"React build directory not found at {build_dir}")
@@ -338,18 +356,27 @@ def serve_react_app(path):
                 500,
             )
 
-        # Serve static files from React build
-        file_path = os.path.join(build_dir, path)
-        if path != "" and os.path.exists(file_path):
-            return send_from_directory(build_dir, path)
-        else:
-            # Serve index.html for React routing
-            index_path = os.path.join(build_dir, "index.html")
-            if os.path.exists(index_path):
-                return send_from_directory(build_dir, "index.html")
+        # Try to serve the exact file path first
+        if path:
+            file_path = os.path.join(build_dir, path)
+            logger.info(f"Looking for file at: {file_path}")
+            if os.path.isfile(file_path):
+                logger.info(f"Serving file: {file_path}")
+                # Get the directory and filename separately for send_from_directory
+                directory = os.path.dirname(file_path)
+                filename = os.path.basename(file_path)
+                return send_from_directory(directory, filename)
             else:
-                logger.error(f"index.html not found at {index_path}")
-                return jsonify({"error": "index.html not found"}), 500
+                logger.warning(f"File not found: {file_path}")
+
+        # Serve index.html for all non-file routes (React routing)
+        index_path = os.path.join(build_dir, "index.html")
+        if os.path.exists(index_path):
+            logger.info("Serving index.html")
+            return send_from_directory(build_dir, "index.html")
+        else:
+            logger.error(f"index.html not found at {index_path}")
+            return jsonify({"error": "index.html not found"}), 500
     else:
         # In development, redirect to React dev server
         return jsonify(
