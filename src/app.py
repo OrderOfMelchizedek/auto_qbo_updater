@@ -345,42 +345,19 @@ def serve_react_app(path):
             os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
         )
 
-        # Log for debugging
-        logger.info(f"Requested path: {path}")
-        logger.info(f"Build directory: {build_dir}")
-
         if not os.path.exists(build_dir):
-            logger.error(f"React build directory not found at {build_dir}")
-            return (
-                jsonify(
-                    {"error": "React build not found. Please check deployment logs."}
-                ),
-                500,
-            )
+            return jsonify({"error": "React build not found"}), 500
 
-        # Try to serve the exact file path first
-        if path:
-            file_path = os.path.join(build_dir, path)
-            logger.info(f"Looking for file at: {file_path}")
-            if os.path.isfile(file_path):
-                logger.info(f"Serving file: {file_path}")
-                # Get the directory and filename separately for send_from_directory
-                directory = os.path.dirname(file_path)
-                filename = os.path.basename(file_path)
-                return send_from_directory(directory, filename)
-            else:
-                logger.warning(f"File not found: {file_path}")
+        # For static files, serve them directly
+        if path and not path.endswith("/"):
+            static_file = os.path.join(build_dir, path)
+            if os.path.isfile(static_file):
+                return send_from_directory(build_dir, path)
 
-        # Serve index.html for all non-file routes (React routing)
-        index_path = os.path.join(build_dir, "index.html")
-        if os.path.exists(index_path):
-            logger.info("Serving index.html")
-            return send_from_directory(build_dir, "index.html")
-        else:
-            logger.error(f"index.html not found at {index_path}")
-            return jsonify({"error": "index.html not found"}), 500
+        # For everything else (including root), serve index.html
+        return send_from_directory(build_dir, "index.html")
     else:
-        # In development, redirect to React dev server
+        # In development mode
         return jsonify(
             {
                 "message": "Development mode - React app runs on http://localhost:3000",
