@@ -3,12 +3,20 @@ Configuration module for selecting storage and session backends.
 
 Automatically chooses between local (development) and cloud (production) backends.
 """
+import base64
 import logging
 import os
+from pathlib import Path
 from typing import Tuple
+
+from cryptography.fernet import Fernet
+from dotenv import load_dotenv
 
 from .session import LocalSession, RedisSession, SessionBackend
 from .storage import LocalStorage, S3Storage, StorageBackend
+
+# Load environment variables
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +72,18 @@ class Config:
     # Upload ID format
     UPLOAD_ID_PREFIX = "batch"
 
+    # QuickBooks OAuth2 settings
+    QBO_CLIENT_ID = os.getenv("QBO_CLIENT_ID", "")
+    QBO_CLIENT_SECRET = os.getenv("QBO_CLIENT_SECRET", "")
+    QBO_REDIRECT_URI = os.getenv("QBO_REDIRECT_URI", "")
+    QBO_ENVIRONMENT = os.getenv("QBO_ENVIRONMENT", "sandbox")  # sandbox or production
+
+    # Encryption key for token storage
+    ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "")
+
     @staticmethod
     def is_allowed_file(filename: str) -> bool:
         """Check if file extension is allowed."""
-        from pathlib import Path
-
         return Path(filename).suffix.lower() in Config.ALLOWED_EXTENSIONS
 
     @staticmethod
@@ -78,3 +93,20 @@ class Config:
 
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         return f"{Config.UPLOAD_ID_PREFIX}_{timestamp}"
+
+    @staticmethod
+    def get_or_create_encryption_key() -> bytes:
+        """Get or create encryption key for token storage."""
+        if Config.ENCRYPTION_KEY:
+            # Use provided key (must be URL-safe base64 encoded)
+            try:
+                return base64.urlsafe_b64decode(Config.ENCRYPTION_KEY)
+            except Exception:
+                logger.warning("Invalid ENCRYPTION_KEY format, generating new one")
+
+        # Generate new key if not provided or invalid
+        key = Fernet.generate_key()
+        logger.warning(
+            f"Generated new encryption key. Add to .env: ENCRYPTION_KEY={key.decode()}"
+        )
+        return key

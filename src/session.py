@@ -84,6 +84,37 @@ class SessionBackend(ABC):
         """
         pass
 
+    # OAuth2 token storage methods
+    @abstractmethod
+    def store_auth_state(self, session_id: str, state_data: Dict[str, Any]) -> bool:
+        """Store OAuth2 state for CSRF protection."""
+        pass
+
+    @abstractmethod
+    def get_auth_state(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve OAuth2 state."""
+        pass
+
+    @abstractmethod
+    def delete_auth_state(self, session_id: str) -> bool:
+        """Delete OAuth2 state."""
+        pass
+
+    @abstractmethod
+    def store_tokens(self, session_id: str, encrypted_tokens: bytes) -> bool:
+        """Store encrypted OAuth2 tokens."""
+        pass
+
+    @abstractmethod
+    def get_tokens(self, session_id: str) -> Optional[bytes]:
+        """Retrieve encrypted OAuth2 tokens."""
+        pass
+
+    @abstractmethod
+    def delete_tokens(self, session_id: str) -> bool:
+        """Delete OAuth2 tokens."""
+        pass
+
 
 class LocalSession(SessionBackend):
     """JSON file-based session storage for development."""
@@ -177,6 +208,77 @@ class LocalSession(SessionBackend):
         uploads.sort(key=lambda x: x.get("created_at", ""), reverse=True)
 
         return uploads[:limit]
+
+    # OAuth2 token storage implementation
+    def store_auth_state(self, session_id: str, state_data: Dict[str, Any]) -> bool:
+        """Store OAuth2 state for CSRF protection."""
+        try:
+            state_path = self.base_path / "auth_states" / f"{session_id}.json"
+            state_path.parent.mkdir(exist_ok=True)
+
+            with open(state_path, "w") as f:
+                json.dump(state_data, f)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store auth state: {e}")
+            return False
+
+    def get_auth_state(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve OAuth2 state."""
+        try:
+            state_path = self.base_path / "auth_states" / f"{session_id}.json"
+            if state_path.exists():
+                with open(state_path, "r") as f:
+                    return json.load(f)
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get auth state: {e}")
+            return None
+
+    def delete_auth_state(self, session_id: str) -> bool:
+        """Delete OAuth2 state."""
+        try:
+            state_path = self.base_path / "auth_states" / f"{session_id}.json"
+            if state_path.exists():
+                state_path.unlink()
+            return True
+        except Exception:
+            return False
+
+    def store_tokens(self, session_id: str, encrypted_tokens: bytes) -> bool:
+        """Store encrypted OAuth2 tokens."""
+        try:
+            token_path = self.base_path / "tokens" / f"{session_id}.bin"
+            token_path.parent.mkdir(exist_ok=True)
+
+            with open(token_path, "wb") as f:
+                f.write(encrypted_tokens)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store tokens: {e}")
+            return False
+
+    def get_tokens(self, session_id: str) -> Optional[bytes]:
+        """Retrieve encrypted OAuth2 tokens."""
+        try:
+            token_path = self.base_path / "tokens" / f"{session_id}.bin"
+            if token_path.exists():
+                with open(token_path, "rb") as f:
+                    return f.read()
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get tokens: {e}")
+            return None
+
+    def delete_tokens(self, session_id: str) -> bool:
+        """Delete OAuth2 tokens."""
+        try:
+            token_path = self.base_path / "tokens" / f"{session_id}.bin"
+            if token_path.exists():
+                token_path.unlink()
+            return True
+        except Exception:
+            return False
 
 
 class RedisSession(SessionBackend):
@@ -318,3 +420,68 @@ class RedisSession(SessionBackend):
         except Exception as e:
             logger.error(f"Failed to cleanup old uploads: {e}")
             return 0
+
+    # OAuth2 token storage implementation
+    def store_auth_state(self, session_id: str, state_data: Dict[str, Any]) -> bool:
+        """Store OAuth2 state for CSRF protection."""
+        try:
+            key = f"auth_state:{session_id}"
+            # Short TTL for auth state (10 minutes)
+            self.redis_client.setex(key, 600, json.dumps(state_data))
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store auth state in Redis: {e}")
+            return False
+
+    def get_auth_state(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve OAuth2 state."""
+        try:
+            key = f"auth_state:{session_id}"
+            data = self.redis_client.get(key)
+            if data:
+                return json.loads(data)
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get auth state from Redis: {e}")
+            return None
+
+    def delete_auth_state(self, session_id: str) -> bool:
+        """Delete OAuth2 state."""
+        try:
+            key = f"auth_state:{session_id}"
+            self.redis_client.delete(key)
+            return True
+        except Exception:
+            return False
+
+    def store_tokens(self, session_id: str, encrypted_tokens: bytes) -> bool:
+        """Store encrypted OAuth2 tokens."""
+        try:
+            key = f"oauth_tokens:{session_id}"
+            # Store with 100 day TTL (matching refresh token expiry)
+            self.redis_client.setex(key, 86400 * 100, encrypted_tokens)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store tokens in Redis: {e}")
+            return False
+
+    def get_tokens(self, session_id: str) -> Optional[bytes]:
+        """Retrieve encrypted OAuth2 tokens."""
+        try:
+            key = f"oauth_tokens:{session_id}"
+            data = self.redis_client.get(key)
+            if data:
+                return data.encode() if isinstance(data, str) else data
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get tokens from Redis: {e}")
+            return None
+
+    def delete_tokens(self, session_id: str) -> bool:
+        """Delete OAuth2 tokens."""
+        try:
+            key = f"oauth_tokens:{session_id}"
+            self.redis_client.delete(key)
+            return True
+        except Exception:
+            return False
