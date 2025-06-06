@@ -548,12 +548,24 @@ def process_files():
         )
 
 
+# Specific route for auth callback
+@app.route("/auth/callback")
+def auth_callback():
+    """Serve React app for OAuth callback."""
+    if app.static_folder and os.path.exists(app.static_folder):
+        return app.send_static_file("index.html")
+    else:
+        return jsonify({"error": "React app not found"}), 404
+
+
 # Catch-all route for React client-side routing
 # This must be at the end to avoid catching API routes
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve_react_app(path):
     """Serve React app for client-side routing."""
+    logger.info(f"Catch-all route hit with path: {path}")
+
     # Check if we have a static folder (production mode)
     if app.static_folder and os.path.exists(app.static_folder):
         # Check if it's an API route that wasn't matched
@@ -563,6 +575,7 @@ def serve_react_app(path):
         # For paths that don't have a file extension, serve index.html
         # This handles React routes like /auth/callback
         if not path or "." not in path:
+            logger.info(f"Serving index.html for path: {path}")
             return app.send_static_file("index.html")
 
         # Try to serve the exact file if it exists
@@ -570,6 +583,7 @@ def serve_react_app(path):
             return app.send_static_file(path)
         except Exception:
             # If file doesn't exist, serve index.html for React routing
+            logger.info(f"File not found, serving index.html for path: {path}")
             return app.send_static_file("index.html")
     else:
         # In development mode
