@@ -541,13 +541,18 @@ def process_files():
 @app.route("/<path:path>")
 def serve_react_app(path):
     """Serve React app for client-side routing."""
-    # In production, Flask's static_folder handles static files automatically
-    # This route only needs to handle client-side routing (non-existent paths)
-    if os.environ.get("NODE_ENV") == "production":
+    # In production, serve the React app for non-API routes
+    if os.environ.get("NODE_ENV") == "production" or os.environ.get("DYNO"):
         # Check if it's an API route that wasn't matched
         if path.startswith("api/"):
             return jsonify({"error": "API endpoint not found"}), 404
-        # For everything else, serve index.html
+
+        # Check if path is a static file
+        static_file_path = os.path.join(app.static_folder, path)
+        if os.path.exists(static_file_path) and os.path.isfile(static_file_path):
+            return app.send_static_file(path)
+
+        # For everything else (including /auth/callback), serve index.html
         return app.send_static_file("index.html")
     else:
         # In development mode
