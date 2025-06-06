@@ -57,12 +57,18 @@ class QuickBooksAuth:
         scopes = [Scopes.ACCOUNTING]
 
         # Get authorization URL
-        # The intuit-oauth library includes state in the URL automatically
         auth_url = self.auth_client.get_authorization_url(scopes)
 
-        # Append our custom state parameter
-        separator = "&" if "?" in auth_url else "?"
-        auth_url = f"{auth_url}{separator}state={state}"
+        # Check if state already exists in URL
+        if "state=" not in auth_url:
+            # Append our custom state parameter
+            separator = "&" if "?" in auth_url else "?"
+            auth_url = f"{auth_url}{separator}state={state}"
+        else:
+            # Replace the existing state with our custom state
+            import re
+
+            auth_url = re.sub(r"state=[^&]*", f"state={state}", auth_url)
 
         logger.info(f"Generated authorization URL for session {session_id}")
         return auth_url, state
@@ -302,4 +308,8 @@ class QuickBooksAuth:
 
 
 # Global instance
-qbo_auth = QuickBooksAuth()
+try:
+    qbo_auth: Optional[QuickBooksAuth] = QuickBooksAuth()
+except Exception as e:
+    logger.error(f"Failed to initialize QuickBooks auth: {e}")
+    qbo_auth = None

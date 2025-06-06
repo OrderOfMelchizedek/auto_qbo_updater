@@ -1,19 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import FileUpload from './components/FileUpload';
 import DonationsTable from './components/DonationsTable';
 import QuickBooksConnection from './components/QuickBooksConnection';
 import { ProcessingStatus } from './components/ProcessingStatus';
 import { uploadFiles, processDonations } from './services/api';
+import { authService } from './services/authService';
 import { Donation, ProcessingMetadata } from './types';
 
 function App() {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [uploadId, setUploadId] = useState<string | null>(null); // Store for future use
   const [donations, setDonations] = useState<Donation[]>([]);
   const [metadata, setMetadata] = useState<ProcessingMetadata | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConnectedToQB, setIsConnectedToQB] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [authCheckComplete, setAuthCheckComplete] = useState(false);
+
+  useEffect(() => {
+    // Check initial auth status
+    const checkAuth = async () => {
+      try {
+        const status = await authService.checkAuthStatus();
+        if (status && typeof status.authenticated === 'boolean') {
+          setIsConnectedToQB(status.authenticated);
+        }
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+      }
+      setAuthCheckComplete(true);
+    };
+
+    checkAuth();
+  }, []);
 
   const handleFilesUpload = async (files: File[]) => {
     setError(null);
@@ -112,6 +133,7 @@ function App() {
         <QuickBooksConnection
           isConnected={isConnectedToQB}
           onConnect={() => setIsConnectedToQB(true)}
+          onDisconnect={() => setIsConnectedToQB(false)}
         />
       </header>
 
