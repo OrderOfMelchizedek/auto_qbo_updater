@@ -105,3 +105,10 @@ src/tests/test_files/
 *.jpg
 *.jpeg
 *.png
+
+# Local storage and session data
+uploaded_documents/
+session_data/
+
+# Large frontend files (can be regenerated)
+frontend/package-lock.json

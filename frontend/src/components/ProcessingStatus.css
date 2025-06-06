@@ -1,0 +1,36 @@
+.processing-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+  color: #4CAF50;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.processing-status p {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.processing-hint {
+  font-size: 14px !important;
+  color: #666 !important;
+  margin-bottom: 0 !important;
+}

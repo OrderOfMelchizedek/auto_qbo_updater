@@ -1,0 +1,52 @@
+.qb-connection-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #0077C5;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 119, 197, 0.2);
+}
+
+.qb-connection-button:hover:not(:disabled) {
+  background: #005a95;
+  box-shadow: 0 4px 8px rgba(0, 119, 197, 0.3);
+  transform: translateY(-1px);
+}
+
+.qb-connection-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 119, 197, 0.2);
+}
+
+.qb-connection-button.connected {
+  background: #4CAF50;
+  cursor: default;
+  box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2);
+}
+
+.qb-connection-button.connected:hover {
+  background: #4CAF50;
+  transform: none;
+}
+
+.qb-connection-button:disabled {
+  opacity: 0.8;
+}
+
+.qb-connection-button svg {
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .qb-connection-button {
+    font-size: 14px;
+    padding: 10px 20px;
+  }
+}
