@@ -320,12 +320,36 @@ def serve_react_app(path):
 
     # Check if we're in production (Heroku sets NODE_ENV)
     if os.environ.get("NODE_ENV") == "production":
+        # Get the absolute path to the build directory
+        build_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
+        )
+
+        # Log for debugging
+        logger.info(f"Looking for React build at: {build_dir}")
+        logger.info(f"Build directory exists: {os.path.exists(build_dir)}")
+
+        if not os.path.exists(build_dir):
+            logger.error(f"React build directory not found at {build_dir}")
+            return (
+                jsonify(
+                    {"error": "React build not found. Please check deployment logs."}
+                ),
+                500,
+            )
+
         # Serve static files from React build
-        if path != "" and os.path.exists(os.path.join("frontend/build", path)):
-            return send_from_directory("frontend/build", path)
+        file_path = os.path.join(build_dir, path)
+        if path != "" and os.path.exists(file_path):
+            return send_from_directory(build_dir, path)
         else:
             # Serve index.html for React routing
-            return send_from_directory("frontend/build", "index.html")
+            index_path = os.path.join(build_dir, "index.html")
+            if os.path.exists(index_path):
+                return send_from_directory(build_dir, "index.html")
+            else:
+                logger.error(f"index.html not found at {index_path}")
+                return jsonify({"error": "index.html not found"}), 500
     else:
         # In development, redirect to React dev server
         return jsonify(
