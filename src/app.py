@@ -76,6 +76,31 @@ def debug_build():
     return jsonify(result)
 
 
+@app.route("/static/<path:filename>")
+def serve_static(filename):
+    """Serve static files from React build."""
+    if os.environ.get("NODE_ENV") == "production":
+        build_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
+        )
+        return send_from_directory(os.path.join(build_dir, "static"), filename)
+    return jsonify({"error": "Not found"}), 404
+
+
+@app.route("/favicon.ico")
+@app.route("/manifest.json")
+@app.route("/robots.txt")
+def serve_root_files():
+    """Serve root-level static files."""
+    if os.environ.get("NODE_ENV") == "production":
+        build_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
+        )
+        filename = request.path.lstrip("/")
+        return send_from_directory(build_dir, filename)
+    return jsonify({"error": "Not found"}), 404
+
+
 @app.route("/api/upload", methods=["POST"])
 def upload_files():
     """
@@ -329,37 +354,27 @@ def process_files():
         )
 
 
-# Serve React app for production
-@app.route("/", defaults={"path": ""})
+# Serve React app index.html for client-side routing
+@app.route("/")
 @app.route("/<path:path>")
-def serve_react_app(path):
-    """Serve React app in production."""
-    # Skip API routes
-    if path.startswith("api/"):
+def serve_react_app(path=""):
+    """Serve React app for client-side routing."""
+    # Skip API and static routes
+    if path.startswith(("api/", "static/")) or path in [
+        "favicon.ico",
+        "manifest.json",
+        "robots.txt",
+    ]:
         return jsonify({"error": "Not found"}), 404
 
-    # Check if we're in production (Heroku sets NODE_ENV)
+    # In production, serve index.html for all non-static routes
     if os.environ.get("NODE_ENV") == "production":
-        # Get the absolute path to the build directory
         build_dir = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
         )
-
-        if not os.path.exists(build_dir):
-            return jsonify({"error": "React build not found"}), 500
-
-        # For static files, serve them directly
-        if path and not path.endswith("/"):
-            static_file = os.path.join(build_dir, path)
-            logger.info(f"Looking for static file: {static_file}")
-            if os.path.isfile(static_file):
-                logger.info(f"Serving static file: {path}")
-                return send_from_directory(build_dir, path)
-            else:
-                logger.warning(f"Static file not found: {static_file}")
-
-        # For everything else (including root), serve index.html
-        return send_from_directory(build_dir, "index.html")
+        if os.path.exists(build_dir):
+            return send_from_directory(build_dir, "index.html")
+        return jsonify({"error": "React build not found"}), 500
     else:
         # In development mode
         return jsonify(
