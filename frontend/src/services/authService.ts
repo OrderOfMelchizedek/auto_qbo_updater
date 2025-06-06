@@ -195,7 +195,7 @@ class AuthService {
    */
   async refreshToken(): Promise<boolean> {
     try {
-      await apiService.post('/auth/qbo/refresh', {}, {
+      await apiService.post('/api/auth/qbo/refresh', {}, {
         headers: {
           'X-Session-ID': this.getSessionId()
         }
@@ -215,7 +215,7 @@ class AuthService {
    */
   async revokeAuth(): Promise<void> {
     try {
-      await apiService.post('/auth/qbo/revoke', {}, {
+      await apiService.post('/api/auth/qbo/revoke', {}, {
         headers: {
           'X-Session-ID': this.getSessionId()
         }
