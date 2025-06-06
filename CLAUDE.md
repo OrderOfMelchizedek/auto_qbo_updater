@@ -1,0 +1,1 @@
+- Any variable not being used should be removed.

@@ -1,4 +1,5 @@
 """Flask application with donation processing API endpoints."""
+import glob
 import logging
 import os
 from contextlib import suppress
@@ -66,9 +67,10 @@ def debug_build():
     result = {"build_dir": build_dir, "exists": os.path.exists(build_dir), "files": []}
 
     if os.path.exists(build_dir):
-        for root, _dirs, files in os.walk(build_dir):
-            for file in files:
-                relative_path = os.path.relpath(os.path.join(root, file), build_dir)
+        all_files = glob.glob(os.path.join(build_dir, "**/*"), recursive=True)
+        for file_path in all_files:
+            if os.path.isfile(file_path):
+                relative_path = os.path.relpath(file_path, build_dir)
                 result["files"].append(relative_path)
 
     return jsonify(result)
