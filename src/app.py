@@ -560,6 +560,11 @@ def serve_react_app(path):
         if path.startswith("api/"):
             return jsonify({"error": "API endpoint not found"}), 404
 
+        # For paths that don't have a file extension, serve index.html
+        # This handles React routes like /auth/callback
+        if not path or "." not in path:
+            return app.send_static_file("index.html")
+
         # Try to serve the exact file if it exists
         try:
             return app.send_static_file(path)
