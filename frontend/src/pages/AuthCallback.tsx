@@ -10,7 +10,23 @@ const AuthCallback: React.FC = () => {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Get parameters from URL
+      // Check if this is a redirect from backend after successful auth
+      const success = searchParams.get('success');
+      const backendRealmId = searchParams.get('realm_id');
+
+      if (success === 'true' && backendRealmId) {
+        // Backend already handled the OAuth flow successfully
+        setStatus('success');
+        notifyParentWindow(true);
+
+        // Close window after a short delay
+        setTimeout(() => {
+          window.close();
+        }, 2000);
+        return;
+      }
+
+      // Get parameters from URL for direct OAuth callback
       const code = searchParams.get('code');
       const state = searchParams.get('state');
       const realmId = searchParams.get('realmId');
