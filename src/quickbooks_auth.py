@@ -57,7 +57,12 @@ class QuickBooksAuth:
         scopes = [Scopes.ACCOUNTING]
 
         # Get authorization URL
-        auth_url = self.auth_client.get_authorization_url(scopes, state=state)
+        # The intuit-oauth library includes state in the URL automatically
+        auth_url = self.auth_client.get_authorization_url(scopes)
+
+        # Append our custom state parameter
+        separator = "&" if "?" in auth_url else "?"
+        auth_url = f"{auth_url}{separator}state={state}"
 
         logger.info(f"Generated authorization URL for session {session_id}")
         return auth_url, state
