@@ -351,8 +351,12 @@ def serve_react_app(path):
         # For static files, serve them directly
         if path and not path.endswith("/"):
             static_file = os.path.join(build_dir, path)
+            logger.info(f"Looking for static file: {static_file}")
             if os.path.isfile(static_file):
+                logger.info(f"Serving static file: {path}")
                 return send_from_directory(build_dir, path)
+            else:
+                logger.warning(f"Static file not found: {static_file}")
 
         # For everything else (including root), serve index.html
         return send_from_directory(build_dir, "index.html")
