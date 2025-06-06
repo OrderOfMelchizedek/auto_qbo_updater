@@ -4,7 +4,7 @@ import logging
 import os
 from contextlib import suppress
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
@@ -20,7 +20,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize Flask app
-app = Flask(__name__)
+if os.environ.get("NODE_ENV") == "production":
+    # In production, serve static files from React build
+    static_folder = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
+    )
+    app = Flask(__name__, static_folder=static_folder, static_url_path="")
+else:
+    # In development, use default static folder
+    app = Flask(__name__)
+
 app.config["MAX_CONTENT_LENGTH"] = (
     Config.MAX_FILE_SIZE_BYTES * Config.MAX_FILES_PER_UPLOAD
 )
@@ -74,31 +83,6 @@ def debug_build():
                 result["files"].append(relative_path)
 
     return jsonify(result)
-
-
-@app.route("/static/<path:filename>")
-def serve_static(filename):
-    """Serve static files from React build."""
-    if os.environ.get("NODE_ENV") == "production":
-        build_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
-        )
-        return send_from_directory(os.path.join(build_dir, "static"), filename)
-    return jsonify({"error": "Not found"}), 404
-
-
-@app.route("/favicon.ico")
-@app.route("/manifest.json")
-@app.route("/robots.txt")
-def serve_root_files():
-    """Serve root-level static files."""
-    if os.environ.get("NODE_ENV") == "production":
-        build_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
-        )
-        filename = request.path.lstrip("/")
-        return send_from_directory(build_dir, filename)
-    return jsonify({"error": "Not found"}), 404
 
 
 @app.route("/api/upload", methods=["POST"])
@@ -354,27 +338,20 @@ def process_files():
         )
 
 
-# Serve React app index.html for client-side routing
-@app.route("/")
+# Catch-all route for React client-side routing
+# This must be at the end to avoid catching API routes
+@app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
-def serve_react_app(path=""):
+def serve_react_app(path):
     """Serve React app for client-side routing."""
-    # Skip API and static routes
-    if path.startswith(("api/", "static/")) or path in [
-        "favicon.ico",
-        "manifest.json",
-        "robots.txt",
-    ]:
-        return jsonify({"error": "Not found"}), 404
-
-    # In production, serve index.html for all non-static routes
+    # In production, Flask's static_folder handles static files automatically
+    # This route only needs to handle client-side routing (non-existent paths)
     if os.environ.get("NODE_ENV") == "production":
-        build_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
-        )
-        if os.path.exists(build_dir):
-            return send_from_directory(build_dir, "index.html")
-        return jsonify({"error": "React build not found"}), 500
+        # Check if it's an API route that wasn't matched
+        if path.startswith("api/"):
+            return jsonify({"error": "API endpoint not found"}), 404
+        # For everything else, serve index.html
+        return app.send_static_file("index.html")
     else:
         # In development mode
         return jsonify(
