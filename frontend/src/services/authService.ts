@@ -58,12 +58,20 @@ class AuthService {
       });
 
       const responseData = response.data?.data || response.data;
-      const { auth_url, session_id } = responseData;
+      const { auth_url, state, session_id } = responseData;
 
       // Update session ID if server provided one
       if (session_id && session_id !== this.sessionId) {
         this.sessionId = session_id;
         localStorage.setItem('qbo_session_id', session_id);
+      }
+
+      // Store session ID with state for callback reference
+      if (state) {
+        sessionStorage.setItem(`oauth_state_${state}`, JSON.stringify({
+          sessionId: this.getSessionId(),
+          timestamp: Date.now()
+        }));
       }
 
       // Open authorization popup
