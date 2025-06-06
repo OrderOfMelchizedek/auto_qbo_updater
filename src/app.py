@@ -161,6 +161,18 @@ def qbo_callback():
             code=code, realm_id=realm_id, state=state, session_id=session_id
         )
 
+        # In production, redirect to React callback page instead of returning JSON
+        # The React app will handle the UI update
+        if (
+            request.accept_mimetypes.best == "text/html"
+            or "appcenter.intuit.com" in request.headers.get("Referer", "")
+        ):
+            # Redirect to React callback page with success indicator
+            from flask import redirect
+
+            return redirect(f"/auth/callback?success=true&realm_id={realm_id}")
+
+        # For API calls (from React), return JSON
         return jsonify({"success": True, "data": result})
 
     except ValueError as e:
