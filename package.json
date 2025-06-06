@@ -1,0 +1,12 @@
+{
+  "name": "fom-to-qbo-automation",
+  "version": "1.0.0",
+  "description": "QuickBooks Donation Manager",
+  "scripts": {
+    "heroku-postbuild": "cd frontend && npm install && npm run build",
+    "start": "gunicorn src.app:app"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}

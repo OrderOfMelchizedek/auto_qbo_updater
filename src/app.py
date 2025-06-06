@@ -1,8 +1,9 @@
 """Flask application with donation processing API endpoints."""
 import logging
+import os
 from contextlib import suppress
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
@@ -27,7 +28,7 @@ app.config["MAX_CONTENT_LENGTH"] = (
 CORS(app)
 
 
-@app.route("/")
+@app.route("/api/")
 def hello():
     """Return API information."""
     return jsonify(
@@ -305,6 +306,33 @@ def process_files():
         return (
             jsonify({"success": False, "error": "An error occurred during processing"}),
             500,
+        )
+
+
+# Serve React app for production
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_react_app(path):
+    """Serve React app in production."""
+    # Skip API routes
+    if path.startswith("api/"):
+        return jsonify({"error": "Not found"}), 404
+
+    # Check if we're in production (Heroku sets NODE_ENV)
+    if os.environ.get("NODE_ENV") == "production":
+        # Serve static files from React build
+        if path != "" and os.path.exists(os.path.join("frontend/build", path)):
+            return send_from_directory("frontend/build", path)
+        else:
+            # Serve index.html for React routing
+            return send_from_directory("frontend/build", "index.html")
+    else:
+        # In development, redirect to React dev server
+        return jsonify(
+            {
+                "message": "Development mode - React app runs on http://localhost:3000",
+                "api": "http://localhost:5000/api/",
+            }
         )
 
 
