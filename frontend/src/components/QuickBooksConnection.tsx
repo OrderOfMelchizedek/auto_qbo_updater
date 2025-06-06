@@ -7,12 +7,16 @@ interface QuickBooksConnectionProps {
   isConnected: boolean;
   onConnect: () => void;
   onDisconnect?: () => void;
+  triggerAuth?: boolean;
+  onAuthTriggered?: () => void;
 }
 
 const QuickBooksConnection: React.FC<QuickBooksConnectionProps> = ({
   isConnected,
   onConnect,
-  onDisconnect
+  onDisconnect,
+  triggerAuth,
+  onAuthTriggered
 }) => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -32,6 +36,29 @@ const QuickBooksConnection: React.FC<QuickBooksConnectionProps> = ({
 
     return unsubscribe;
   }, [onConnect]);
+
+  // Handle triggered authentication from FileUpload
+  useEffect(() => {
+    if (triggerAuth && !isConnected && !isAuthenticating) {
+      const startAuth = async () => {
+        setIsAuthenticating(true);
+        setAuthError(null);
+
+        try {
+          await authService.startAuthorization();
+        } catch (error) {
+          console.error('Failed to start authorization:', error);
+          setAuthError('Failed to start authorization. Please try again.');
+          setIsAuthenticating(false);
+        }
+      };
+
+      startAuth();
+      if (onAuthTriggered) {
+        onAuthTriggered();
+      }
+    }
+  }, [triggerAuth, isConnected, isAuthenticating, onAuthTriggered]);
 
   const handleConnect = async () => {
     setIsAuthenticating(true);

@@ -31,12 +31,19 @@ const AuthCallback: React.FC = () => {
       const state = searchParams.get('state');
       const realmId = searchParams.get('realmId');
       const error = searchParams.get('error');
+      const errorDescription = searchParams.get('error_description');
 
       // Handle error from QuickBooks
       if (error) {
         setStatus('error');
-        setError(`QuickBooks error: ${error}`);
-        notifyParentWindow(false, error);
+        const errorMessage = errorDescription || error;
+        setError(`QuickBooks error: ${errorMessage}`);
+        notifyParentWindow(false, errorMessage);
+
+        // Close window after a delay
+        setTimeout(() => {
+          window.close();
+        }, 3000);
         return;
       }
 

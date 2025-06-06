@@ -40,12 +40,36 @@ app.config["MAX_CONTENT_LENGTH"] = (
     Config.MAX_FILE_SIZE_BYTES * Config.MAX_FILES_PER_UPLOAD
 )
 
+# Configure secure cookies for production
+if os.environ.get("DYNO"):
+    # In production on Heroku
+    app.config["SESSION_COOKIE_SECURE"] = True
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
 # Enable CORS for all routes with specific configuration
+# In production, add the Heroku domain to allowed origins
+allowed_origins = ["http://localhost:3000", "http://localhost:5000"]
+
+# Add production domain if available
+production_domain = os.environ.get("PRODUCTION_DOMAIN")
+if production_domain:
+    allowed_origins.append(f"https://{production_domain}")
+    allowed_origins.append(f"http://{production_domain}")
+
+# If on Heroku, also add the Heroku app domain
+if os.environ.get("DYNO"):
+    app_name = os.environ.get("APP_NAME", "auto-qbo-updater")
+    allowed_origins.append(f"https://{app_name}.herokuapp.com")
+    allowed_origins.append(f"https://{app_name}-*.herokuapp.com")
+    # Also add the specific Heroku domain
+    allowed_origins.append("https://auto-qbo-updater-b8a695c1c287.herokuapp.com")
+
 CORS(
     app,
     resources={
         r"/api/*": {
-            "origins": ["http://localhost:3000", "http://localhost:5000"],
+            "origins": allowed_origins,
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "X-Session-ID"],
             "supports_credentials": True,
@@ -141,11 +165,22 @@ def qbo_callback():
         code = request.args.get("code")
         state = request.args.get("state")
         realm_id = request.args.get("realmId")
+        error = request.args.get("error")
+        error_description = request.args.get("error_description")
 
+        # Log the callback for debugging
         logger.info(
-            f"OAuth2 callback received - code: {code[:10]}..., "
-            f"state: {state}, realmId: {realm_id}"
+            f"OAuth2 callback received - code: {code[:10] if code else 'None'}..., "
+            f"state: {state}, realmId: {realm_id}, error: {error}"
         )
+
+        # Handle OAuth errors from QuickBooks
+        if error:
+            logger.error(f"OAuth2 error: {error} - {error_description}")
+            # Redirect to React app with error
+            from flask import redirect
+
+            return redirect(f"/auth/callback?success=false&error={error}")
 
         if not all([code, state, realm_id]):
             logger.error(

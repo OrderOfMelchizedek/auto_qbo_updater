@@ -18,6 +18,7 @@ function App() {
   const [isConnectedToQB, setIsConnectedToQB] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [authCheckComplete, setAuthCheckComplete] = useState(false);
+  const [triggerAuth, setTriggerAuth] = useState(false);
 
   useEffect(() => {
     // Check initial auth status
@@ -134,13 +135,19 @@ function App() {
           isConnected={isConnectedToQB}
           onConnect={() => setIsConnectedToQB(true)}
           onDisconnect={() => setIsConnectedToQB(false)}
+          triggerAuth={triggerAuth}
+          onAuthTriggered={() => setTriggerAuth(false)}
         />
       </header>
 
       <main className="App-main">
         {donations.length === 0 ? (
           <div className="upload-section">
-            <FileUpload onFilesUpload={handleFilesUpload} />
+            <FileUpload
+              onFilesUpload={handleFilesUpload}
+              isConnectedToQB={isConnectedToQB}
+              onAuthRequired={() => setTriggerAuth(true)}
+            />
             {isProcessing && <ProcessingStatus />}
             {error && (
               <div className="error-message">
