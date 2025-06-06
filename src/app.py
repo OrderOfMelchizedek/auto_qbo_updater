@@ -21,15 +21,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize Flask app
-if os.environ.get("NODE_ENV") == "production":
+# Check if we're on Heroku (production) or local development
+if os.environ.get("DYNO") or os.path.exists(
+    os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
+):
     # In production, serve static files from React build
     static_folder = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
     )
     app = Flask(__name__, static_folder=static_folder, static_url_path="")
+    logger.info(f"Flask initialized with static folder: {static_folder}")
 else:
     # In development, use default static folder
     app = Flask(__name__)
+    logger.info("Flask initialized for development mode")
 
 app.config["MAX_CONTENT_LENGTH"] = (
     Config.MAX_FILE_SIZE_BYTES * Config.MAX_FILES_PER_UPLOAD
@@ -270,7 +275,15 @@ def debug_build():
         os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
     )
 
-    result = {"build_dir": build_dir, "exists": os.path.exists(build_dir), "files": []}
+    result = {
+        "build_dir": build_dir,
+        "exists": os.path.exists(build_dir),
+        "static_folder": app.static_folder,
+        "static_folder_exists": os.path.exists(app.static_folder)
+        if app.static_folder
+        else False,
+        "files": [],
+    }
 
     if os.path.exists(build_dir):
         all_files = glob.glob(os.path.join(build_dir, "**/*"), recursive=True)
@@ -541,19 +554,18 @@ def process_files():
 @app.route("/<path:path>")
 def serve_react_app(path):
     """Serve React app for client-side routing."""
-    # In production, serve the React app for non-API routes
-    if os.environ.get("NODE_ENV") == "production" or os.environ.get("DYNO"):
+    # Check if we have a static folder (production mode)
+    if app.static_folder and os.path.exists(app.static_folder):
         # Check if it's an API route that wasn't matched
         if path.startswith("api/"):
             return jsonify({"error": "API endpoint not found"}), 404
 
-        # Check if path is a static file
-        static_file_path = os.path.join(app.static_folder, path)
-        if os.path.exists(static_file_path) and os.path.isfile(static_file_path):
+        # Try to serve the exact file if it exists
+        try:
             return app.send_static_file(path)
-
-        # For everything else (including /auth/callback), serve index.html
-        return app.send_static_file("index.html")
+        except Exception:
+            # If file doesn't exist, serve index.html for React routing
+            return app.send_static_file("index.html")
     else:
         # In development mode
         return jsonify(
