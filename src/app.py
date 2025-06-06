@@ -11,6 +11,7 @@ from werkzeug.utils import secure_filename
 
 from .config import Config, session_backend, storage_backend
 from .donation_processor import process_donation_documents
+from .quickbooks_auth import qbo_auth
 from .storage import S3Storage
 
 # Configure logging
@@ -49,6 +50,11 @@ def hello():
                 "/api/upload": "POST - Upload donation documents",
                 "/api/process": "POST - Process uploaded documents",
                 "/api/health": "GET - Health check",
+                "/api/auth/qbo/authorize": "GET - Get OAuth2 authorization URL",
+                "/api/auth/qbo/callback": "GET - Handle OAuth2 callback",
+                "/api/auth/qbo/refresh": "POST - Refresh access token",
+                "/api/auth/qbo/revoke": "POST - Revoke tokens",
+                "/api/auth/qbo/status": "GET - Check authentication status",
             },
         }
     )
@@ -64,6 +70,160 @@ def health_check():
             "session": type(session_backend).__name__,
         }
     )
+
+
+# QuickBooks OAuth2 endpoints
+@app.route("/api/auth/qbo/authorize", methods=["GET"])
+def qbo_authorize():
+    """
+    Generate QuickBooks OAuth2 authorization URL.
+
+    Returns:
+        JSON with authorization URL and state
+    """
+    try:
+        # Get session ID from request or generate new one
+        session_id = request.headers.get("X-Session-ID", Config.generate_upload_id())
+
+        # Generate authorization URL
+        auth_url, state = qbo_auth.get_authorization_url(session_id)
+
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "auth_url": auth_url,
+                    "state": state,
+                    "session_id": session_id,
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to generate auth URL: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/auth/qbo/callback", methods=["GET"])
+def qbo_callback():
+    """
+    Handle OAuth2 callback from QuickBooks.
+
+    Query params:
+        code: Authorization code
+        state: CSRF state token
+        realmId: QuickBooks company ID
+    """
+    try:
+        # Get parameters from query string
+        code = request.args.get("code")
+        state = request.args.get("state")
+        realm_id = request.args.get("realmId")
+
+        if not all([code, state, realm_id]):
+            return (
+                jsonify({"success": False, "error": "Missing required parameters"}),
+                400,
+            )
+
+        # Get session ID from header
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            return jsonify({"success": False, "error": "Missing session ID"}), 400
+
+        # Exchange code for tokens
+        result = qbo_auth.exchange_authorization_code(
+            code=code, realm_id=realm_id, state=state, session_id=session_id
+        )
+
+        return jsonify({"success": True, "data": result})
+
+    except ValueError as e:
+        logger.error(f"OAuth2 callback validation error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"OAuth2 callback error: {e}")
+        return jsonify({"success": False, "error": "Authentication failed"}), 500
+
+
+@app.route("/api/auth/qbo/refresh", methods=["POST"])
+def qbo_refresh():
+    """
+    Refresh expired access token.
+
+    Requires:
+        X-Session-ID header
+    """
+    try:
+        # Get session ID from header
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            return jsonify({"success": False, "error": "Missing session ID"}), 400
+
+        # Refresh token
+        result = qbo_auth.refresh_access_token(session_id)
+
+        return jsonify({"success": True, "data": result})
+
+    except ValueError as e:
+        logger.error(f"Token refresh error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Token refresh error: {e}")
+        return jsonify({"success": False, "error": "Failed to refresh token"}), 500
+
+
+@app.route("/api/auth/qbo/revoke", methods=["POST"])
+def qbo_revoke():
+    """
+    Revoke QuickBooks access tokens.
+
+    Requires:
+        X-Session-ID header
+    """
+    try:
+        # Get session ID from header
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            return jsonify({"success": False, "error": "Missing session ID"}), 400
+
+        # Revoke tokens
+        success = qbo_auth.revoke_tokens(session_id)
+
+        return jsonify(
+            {
+                "success": success,
+                "message": "Tokens revoked" if success else "Revocation failed",
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Token revocation error: {e}")
+        return jsonify({"success": False, "error": "Failed to revoke tokens"}), 500
+
+
+@app.route("/api/auth/qbo/status", methods=["GET"])
+def qbo_status():
+    """
+    Check QuickBooks authentication status.
+
+    Requires:
+        X-Session-ID header
+    """
+    try:
+        # Get session ID from header
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            return jsonify({"success": True, "data": {"authenticated": False}})
+
+        # Get auth status
+        status = qbo_auth.get_auth_status(session_id)
+
+        return jsonify({"success": True, "data": status})
+
+    except Exception as e:
+        logger.error(f"Status check error: {e}")
+        return jsonify({"success": True, "data": {"authenticated": False}})
 
 
 @app.route("/api/debug/build", methods=["GET"])

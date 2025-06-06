@@ -109,6 +109,8 @@ src/tests/test_files/
 # Local storage and session data
 uploaded_documents/
 session_data/
+session_data/auth_states/
+session_data/tokens/
 
 # Large frontend files (can be regenerated)
 frontend/package-lock.json
