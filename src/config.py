@@ -3,7 +3,6 @@ Configuration module for selecting storage and session backends.
 
 Automatically chooses between local (development) and cloud (production) backends.
 """
-import base64
 import logging
 import os
 from pathlib import Path
@@ -98,9 +97,11 @@ class Config:
     def get_or_create_encryption_key() -> bytes:
         """Get or create encryption key for token storage."""
         if Config.ENCRYPTION_KEY:
-            # Use provided key (must be URL-safe base64 encoded)
+            # Use provided key directly if it's already a valid Fernet key
             try:
-                return base64.urlsafe_b64decode(Config.ENCRYPTION_KEY)
+                # Test if it's a valid Fernet key
+                Fernet(Config.ENCRYPTION_KEY.encode())
+                return Config.ENCRYPTION_KEY.encode()
             except Exception:
                 logger.warning("Invalid ENCRYPTION_KEY format, generating new one")
 

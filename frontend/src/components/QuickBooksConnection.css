@@ -1,3 +1,10 @@
+.qb-connection-wrapper {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .qb-connection-button {
   display: flex;
   align-items: center;
@@ -27,21 +34,50 @@
 
 .qb-connection-button.connected {
   background: #4CAF50;
-  cursor: default;
   box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2);
 }
 
-.qb-connection-button.connected:hover {
-  background: #4CAF50;
-  transform: none;
+.qb-connection-button.connected:hover:not(:disabled) {
+  background: #45a049;
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+  transform: translateY(-1px);
+}
+
+.qb-connection-button.authenticating {
+  background: #6b7280;
+  cursor: wait;
 }
 
 .qb-connection-button:disabled {
   opacity: 0.8;
+  cursor: not-allowed;
 }
 
 .qb-connection-button svg {
   flex-shrink: 0;
+}
+
+.spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.auth-error {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #ef4444;
+  font-size: 14px;
+  margin-top: 4px;
 }
 
 @media (max-width: 768px) {

@@ -35,8 +35,18 @@ app.config["MAX_CONTENT_LENGTH"] = (
     Config.MAX_FILE_SIZE_BYTES * Config.MAX_FILES_PER_UPLOAD
 )
 
-# Enable CORS for all routes
-CORS(app)
+# Enable CORS for all routes with specific configuration
+CORS(
+    app,
+    resources={
+        r"/api/*": {
+            "origins": ["http://localhost:3000", "http://localhost:5000"],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "X-Session-ID"],
+            "supports_credentials": True,
+        }
+    },
+)
 
 
 @app.route("/api/")
@@ -82,11 +92,18 @@ def qbo_authorize():
         JSON with authorization URL and state
     """
     try:
+        if qbo_auth is None:
+            return jsonify({"success": False, "error": "OAuth2 not configured"}), 500
+
         # Get session ID from request or generate new one
         session_id = request.headers.get("X-Session-ID", Config.generate_upload_id())
 
         # Generate authorization URL
         auth_url, state = qbo_auth.get_authorization_url(session_id)
+
+        logger.info(f"Generated auth URL: {auth_url}")
+        logger.info(f"Session ID: {session_id}")
+        logger.info(f"State: {state}")
 
         return jsonify(
             {
@@ -120,7 +137,16 @@ def qbo_callback():
         state = request.args.get("state")
         realm_id = request.args.get("realmId")
 
+        logger.info(
+            f"OAuth2 callback received - code: {code[:10]}..., "
+            f"state: {state}, realmId: {realm_id}"
+        )
+
         if not all([code, state, realm_id]):
+            logger.error(
+                f"Missing parameters - code: {bool(code)}, "
+                f"state: {bool(state)}, realm_id: {bool(realm_id)}"
+            )
             return (
                 jsonify({"success": False, "error": "Missing required parameters"}),
                 400,
@@ -128,6 +154,8 @@ def qbo_callback():
 
         # Get session ID from header
         session_id = request.headers.get("X-Session-ID")
+        logger.info(f"Session ID from header: {session_id}")
+
         if not session_id:
             return jsonify({"success": False, "error": "Missing session ID"}), 400
 
