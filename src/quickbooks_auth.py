@@ -46,11 +46,25 @@ class QuickBooksAuth:
         Returns:
             Tuple of (authorization_url, state)
         """
-        # Generate CSRF state token
-        state = secrets.token_urlsafe(32)
+        # Generate CSRF state token that includes session ID
+        # Format: base64(json({csrf: token, sid: session_id}))
+        import base64
+        import json
+
+        csrf_token = secrets.token_urlsafe(32)
+        state_data = {"csrf": csrf_token, "sid": session_id}
+        state = (
+            base64.urlsafe_b64encode(json.dumps(state_data).encode())
+            .decode()
+            .rstrip("=")
+        )
 
         # Store state in session for validation
-        session_data = {"state": state, "session_id": session_id}
+        session_data = {
+            "state": state,
+            "csrf_token": csrf_token,
+            "session_id": session_id,
+        }
         session_backend.store_auth_state(session_id, session_data)
 
         # Define required scopes
@@ -74,7 +88,7 @@ class QuickBooksAuth:
         return auth_url, state
 
     def exchange_authorization_code(
-        self, code: str, realm_id: str, state: str, session_id: str
+        self, code: str, realm_id: str, state: str, session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Exchange authorization code for access tokens.
@@ -83,7 +97,7 @@ class QuickBooksAuth:
             code: Authorization code from QuickBooks
             realm_id: QuickBooks company ID
             state: CSRF state token
-            session_id: Session identifier
+            session_id: Session identifier (optional, can be extracted from state)
 
         Returns:
             Dict containing token information
@@ -92,9 +106,33 @@ class QuickBooksAuth:
             ValueError: If state validation fails
             AuthClientError: If token exchange fails
         """
+        # If no session_id provided, try to extract from state
+        csrf_token = None
+        if not session_id:
+            try:
+                import base64
+                import json
+
+                # Add padding if needed
+                padded_state = state + "=" * (4 - len(state) % 4)
+                state_data = json.loads(base64.urlsafe_b64decode(padded_state))
+                session_id = state_data.get("sid")
+                csrf_token = state_data.get("csrf")
+            except Exception:
+                raise ValueError("Invalid state parameter format")
+
+        if not session_id:
+            raise ValueError("No session ID found in state parameter")
+
         # Validate state
         session_data = session_backend.get_auth_state(session_id)
-        if not session_data or session_data.get("state") != state:
+        if not session_data:
+            raise ValueError("Invalid session - state not found")
+
+        # Check if state matches (for backward compatibility)
+        if session_data.get("state") != state and (
+            not csrf_token or session_data.get("csrf_token") != csrf_token
+        ):
             raise ValueError("Invalid state parameter - possible CSRF attack")
 
         try:

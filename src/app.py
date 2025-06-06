@@ -152,14 +152,11 @@ def qbo_callback():
                 400,
             )
 
-        # Get session ID from header
+        # Get session ID from header (optional now)
         session_id = request.headers.get("X-Session-ID")
         logger.info(f"Session ID from header: {session_id}")
 
-        if not session_id:
-            return jsonify({"success": False, "error": "Missing session ID"}), 400
-
-        # Exchange code for tokens
+        # Exchange code for tokens (session_id can be extracted from state)
         result = qbo_auth.exchange_authorization_code(
             code=code, realm_id=realm_id, state=state, session_id=session_id
         )
