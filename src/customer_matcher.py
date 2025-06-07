@@ -1,12 +1,129 @@
 """Customer matching logic for QuickBooks integration."""
 import logging
+import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .customer_data_source import create_customer_data_source
 from .quickbooks_service import QuickBooksError
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_name(name: str) -> str:
+    """
+    Normalize a name by removing punctuation and extra spaces.
+
+    Args:
+        name: Name to normalize
+
+    Returns:
+        Normalized name
+    """
+    # Remove periods after single letters (initials)
+    name = re.sub(r"\b(\w)\.", r"\1", name)
+
+    # Remove other punctuation except spaces and hyphens
+    name = re.sub(r"[^\w\s\-]", " ", name)
+
+    # Normalize multiple spaces to single space
+    name = " ".join(name.split())
+
+    return name.strip()
+
+
+def generate_search_variations(aliases: List[str], org_name: str = "") -> List[str]:
+    """
+    Generate search variations for better matching.
+
+    Args:
+        aliases: List of name aliases
+        org_name: Organization name if applicable
+
+    Returns:
+        List of search terms to try
+    """
+    variations = []
+    seen = set()
+
+    # Process individual name aliases
+    for alias in aliases:
+        # Add original
+        if alias and alias not in seen:
+            variations.append(alias)
+            seen.add(alias)
+
+        # Normalize and add
+        normalized = normalize_name(alias)
+        if normalized and normalized not in seen:
+            variations.append(normalized)
+            seen.add(normalized)
+
+        # Split name parts
+        parts = normalized.split()
+
+        if len(parts) >= 2:
+            # Try without middle name/initial
+            if len(parts) >= 3:
+                # First + Last
+                name_no_middle = f"{parts[0]} {parts[-1]}"
+                if name_no_middle not in seen:
+                    variations.append(name_no_middle)
+                    seen.add(name_no_middle)
+
+            # Last name only
+            last_name = parts[-1]
+            if last_name not in seen and len(last_name) > 2:
+                variations.append(last_name)
+                seen.add(last_name)
+
+            # Handle "Last, First" format
+            if "," in alias:
+                # Already handled by normalization
+                pass
+
+    # Process organization name
+    if org_name:
+        # Add original
+        if org_name not in seen:
+            variations.append(org_name)
+            seen.add(org_name)
+
+        # Normalize
+        normalized_org = normalize_name(org_name)
+        if normalized_org and normalized_org not in seen:
+            variations.append(normalized_org)
+            seen.add(normalized_org)
+
+        # Extract significant words (longer than 3 chars)
+        org_words = [word for word in normalized_org.split() if len(word) > 3]
+
+        # Common words to skip
+        skip_words = {"the", "and", "inc", "llc", "corp", "corporation", "company"}
+        org_words = [w for w in org_words if w.lower() not in skip_words]
+
+        # Try significant word combinations
+        if len(org_words) >= 2:
+            # First two significant words
+            two_words = " ".join(org_words[:2])
+            if two_words not in seen:
+                variations.append(two_words)
+                seen.add(two_words)
+
+            # Most significant single word
+            if org_words[0] not in seen and len(org_words[0]) > 4:
+                variations.append(org_words[0])
+                seen.add(org_words[0])
+
+        # Handle special cases like "DAFgiving360"
+        # Split on case changes
+        case_split = re.sub(r"([A-Z]+)([a-z])", r"\1 \2", org_name)
+        case_split = re.sub(r"([a-z])([A-Z])", r"\1 \2", case_split)
+        if case_split != org_name and case_split not in seen:
+            variations.append(case_split)
+            seen.add(case_split)
+
+    return variations
 
 
 def compare_addresses(extracted: Dict[str, str], qb: Dict[str, str]) -> Dict[str, Any]:
@@ -60,77 +177,139 @@ def calculate_match_score(donation: Dict[str, Any], customer: Dict[str, Any]) ->
     Returns:
         Match score (0-100)
     """
-    # Initial score
-
     # Get payer info
     payer_info = donation.get("PayerInfo", {})
 
-    # For individuals - check aliases
-    aliases = payer_info.get("Aliases", [])
+    # Get customer info in lowercase for comparison
     display_name = customer.get("DisplayName", "").lower()
-
-    # Also check component names
     given_name = (customer.get("GivenName") or "").lower()
     family_name = (customer.get("FamilyName") or "").lower()
+    company_name = (customer.get("CompanyName") or "").lower()
+
+    # Normalize display name for better matching
+    normalized_display = normalize_name(display_name).lower()
+
+    # For individuals - check aliases
+    aliases = payer_info.get("Aliases", [])
+    best_score = 0.0
 
     for alias in aliases:
         alias_lower = alias.lower()
+        normalized_alias = normalize_name(alias).lower()
 
-        # Exact match
+        # Exact match (after normalization)
+        if normalized_alias == normalized_display:
+            best_score = max(best_score, 100.0)
+            continue
+
+        # Original exact match
         if alias_lower == display_name:
-            return 100.0
+            best_score = max(best_score, 98.0)
+            continue
 
-        # Check if first and last name match (ignoring middle initial/name)
-        alias_parts = alias_lower.split()
+        # Check component names
+        alias_parts = normalized_alias.split()
+
         if len(alias_parts) >= 2 and given_name and family_name:
-            # Check first and last name
+            # Exact first and last name match
             if alias_parts[0] == given_name and alias_parts[-1] == family_name:
-                return 95.0  # High score for first/last match
+                best_score = max(best_score, 95.0)
+                continue
 
-            # Check "Last, First" format
-            if ", " in alias_lower:
-                last_first = alias_lower.split(", ")
-                if (
-                    len(last_first) == 2
-                    and last_first[0] == family_name
-                    and last_first[1].startswith(given_name)
-                ):
-                    return 95.0
+            # Last name exact match with partial first name
+            if alias_parts[-1] == family_name and given_name.startswith(alias_parts[0]):
+                best_score = max(best_score, 90.0)
+                continue
 
-        # Partial name matching - all significant words present
-        if (
-            given_name
-            and family_name
-            and given_name in alias_lower
-            and family_name in alias_lower
-        ):
-            return 90.0
+            # Both names present anywhere
+            if given_name in normalized_alias and family_name in normalized_alias:
+                best_score = max(best_score, 85.0)
+                continue
+
+        # Check if customer name contains the search term
+        if normalized_alias in normalized_display:
+            best_score = max(best_score, 80.0)
+            continue
+
+        # Check last name only match
+        if len(alias_parts) >= 2 and family_name and alias_parts[-1] == family_name:
+            best_score = max(best_score, 75.0)
+            continue
+
+        # Partial match - any significant word matches
+        if len(alias_parts) >= 2:
+            for part in alias_parts:
+                if len(part) > 2 and part in normalized_display:
+                    best_score = max(best_score, 60.0)
+                    break
 
     # For organizations
     org_name = payer_info.get("Organization_Name", "")
-    company_name = customer.get("CompanyName", "")
 
-    if org_name and company_name:
+    if org_name and (company_name or (not aliases and display_name)):
         org_lower = org_name.lower()
-        company_lower = company_name.lower()
+        normalized_org = normalize_name(org_name).lower()
 
-        # Exact match
-        if org_lower == company_lower:
-            return 100.0
+        # Use company name if available, otherwise display name
+        compare_name = company_name if company_name else display_name
+        normalized_compare = normalize_name(compare_name).lower()
 
-        # Check if one contains the other
-        if org_lower in company_lower or company_lower in org_lower:
-            return 85.0
+        # Exact match after normalization
+        if normalized_org == normalized_compare:
+            best_score = max(best_score, 100.0)
 
-        # Check if all significant words match
-        org_words = {word for word in org_lower.split() if len(word) > 3}
-        company_words = {word for word in company_lower.split() if len(word) > 3}
-        if org_words and company_words:
-            common_words = org_words.intersection(company_words)
-            if len(common_words) >= 2:  # At least 2 significant words match
-                return 80.0
+        # Original exact match
+        elif org_lower == compare_name:
+            best_score = max(best_score, 98.0)
 
-    return 0.0
+        # One contains the other
+        elif (
+            normalized_org in normalized_compare or normalized_compare in normalized_org
+        ):
+            best_score = max(best_score, 85.0)
+
+        # Significant word matching
+        else:
+            # Extract significant words
+            skip_words = {
+                "the",
+                "and",
+                "inc",
+                "llc",
+                "corp",
+                "corporation",
+                "company",
+                "of",
+                "a",
+            }
+
+            org_words = {
+                word
+                for word in normalized_org.split()
+                if len(word) > 2 and word not in skip_words
+            }
+            compare_words = {
+                word
+                for word in normalized_compare.split()
+                if len(word) > 2 and word not in skip_words
+            }
+
+            if org_words and compare_words:
+                common_words = org_words.intersection(compare_words)
+
+                # Multiple significant words match
+                if len(common_words) >= 2:
+                    best_score = max(best_score, 80.0)
+
+                # Single important word matches (longer words weighted higher)
+                elif len(common_words) == 1:
+                    word = list(common_words)[0]
+                    if len(word) >= 5:  # Longer word = more significant
+                        best_score = max(best_score, 70.0)
+                    else:
+                        best_score = max(best_score, 60.0)
+
+    return best_score
 
 
 class CustomerMatcher:
@@ -160,41 +339,40 @@ class CustomerMatcher:
         """
         # Get payer info
         payer_info = donation.get("PayerInfo", {})
-
-        # Search for customer
-        search_results = []
-        search_terms = []
-
-        # Search by aliases for individuals
         aliases = payer_info.get("Aliases", [])
-        for alias in aliases:
-            search_terms.append(alias)
-            try:
-                logger.debug(f"Searching for alias: '{alias}'")
-                results = self.data_source.search_customer(alias)
-                logger.debug(f"Found {len(results)} results for '{alias}'")
-                search_results.extend(results)
-            except QuickBooksError as e:
-                logger.error(f"QuickBooks search failed for '{alias}': {e}")
-                raise
+        org_name = payer_info.get("Organization_Name", "")
 
-        # Search by organization name
-        org_name = payer_info.get("Organization_Name")
-        if org_name:
-            search_terms.append(org_name)
+        # Generate search variations
+        search_variations = generate_search_variations(aliases, org_name)
+        logger.info(f"Generated search variations: {search_variations}")
+
+        # Search for customer using variations
+        search_results = []
+        searched_ids = set()  # Track customer IDs to avoid duplicates
+
+        for search_term in search_variations:
             try:
-                logger.debug(f"Searching for organization: '{org_name}'")
-                results = self.data_source.search_customer(org_name)
-                logger.debug(f"Found {len(results)} results for '{org_name}'")
-                search_results.extend(results)
+                logger.debug(f"Searching for: '{search_term}'")
+                results = self.data_source.search_customer(search_term)
+
+                # Add unique results
+                for customer in results:
+                    customer_id = customer.get("Id")
+                    if customer_id and customer_id not in searched_ids:
+                        search_results.append(customer)
+                        searched_ids.add(customer_id)
+
+                logger.debug(f"Found {len(results)} results for '{search_term}'")
+
             except QuickBooksError as e:
-                logger.error(f"QuickBooks search failed for '{org_name}': {e}")
+                logger.error(f"QuickBooks search failed for '{search_term}': {e}")
                 raise
 
         # If no search results, return new customer
         if not search_results:
             logger.info(
-                f"No QuickBooks customers found for search terms: {search_terms}"
+                "No QuickBooks customers found for search variations: "
+                f"{search_variations}"
             )
             return {
                 "match_status": "new_customer",
