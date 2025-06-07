@@ -149,7 +149,7 @@ def test_batch_1_with_csv_matching():
     print("-" * 80)
 
     try:
-        results, metadata = process_donation_documents(file_paths, csv_path=csv_path)
+        results, metadata, _ = process_donation_documents(file_paths, csv_path=csv_path)
 
         print("\n" + "-" * 80)
         print("MATCHING RESULTS:")

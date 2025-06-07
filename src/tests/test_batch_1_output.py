@@ -81,7 +81,7 @@ def test_batch_1_display_output():
 
     try:
         # Process the documents
-        donations, metadata = process_donation_documents(file_paths)
+        donations, metadata, _ = process_donation_documents(file_paths)
 
         # Create output structure
         output = {"donations": donations, "metadata": metadata}

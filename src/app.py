@@ -516,9 +516,11 @@ def process_files():
             session_id = request.headers.get("X-Session-ID")
 
             # Run extraction, validation, deduplication, and matching
-            processed_donations, extraction_metadata = process_donation_documents(
-                file_paths, session_id=session_id
-            )
+            (
+                processed_donations,
+                extraction_metadata,
+                display_donations,
+            ) = process_donation_documents(file_paths, session_id=session_id)
 
             # Calculate metadata
             processing_metadata = {
@@ -534,7 +536,8 @@ def process_files():
                 upload_id,
                 {
                     "status": "processed",
-                    "donations": processed_donations,
+                    "donations": display_donations,
+                    "raw_donations": processed_donations,
                     "processing_metadata": processing_metadata,
                 },
             )
@@ -549,7 +552,8 @@ def process_files():
                 {
                     "success": True,
                     "data": {
-                        "donations": processed_donations,
+                        "donations": display_donations,  # Use display-ready format
+                        "raw_donations": processed_donations,  # Keep raw for debugging
                         "metadata": processing_metadata,
                     },
                 }

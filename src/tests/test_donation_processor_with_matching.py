@@ -81,7 +81,7 @@ class TestDonationProcessorWithMatching:
         mock_matcher.match_donation_to_customer.return_value = match_result
 
         # Run processor with session ID
-        results, metadata = process_donation_documents(
+        results, metadata, _ = process_donation_documents(
             ["test.pdf"], session_id="test-session"
         )
 
@@ -110,7 +110,7 @@ class TestDonationProcessorWithMatching:
         mock_validator.process_donations.return_value = raw_donations
 
         # Run without session ID
-        results, metadata = process_donation_documents(["test.pdf"])
+        results, metadata, _ = process_donation_documents(["test.pdf"])
 
         # Should not have match data
         assert len(results) == 1
@@ -170,7 +170,7 @@ class TestDonationProcessorRealFiles:
         for path in file_paths:
             assert path.exists(), f"Test file not found: {path}"
 
-        results, metadata = process_donation_documents(file_paths)
+        results, metadata, _ = process_donation_documents(file_paths)
 
         # Verify we got results
         assert len(results) > 0
@@ -195,7 +195,7 @@ class TestDonationProcessorRealFiles:
         for path in file_paths:
             assert path.exists(), f"Test file not found: {path}"
 
-        results, metadata = process_donation_documents(file_paths)
+        results, metadata, _ = process_donation_documents(file_paths)
 
         assert len(results) > 0
         for donation in results:
@@ -213,7 +213,7 @@ class TestDonationProcessorRealFiles:
         for path in file_paths:
             assert path.exists(), f"Test file not found: {path}"
 
-        results, metadata = process_donation_documents(file_paths)
+        results, metadata, _ = process_donation_documents(file_paths)
 
         assert len(results) > 0
         for donation in results:
@@ -236,7 +236,7 @@ class TestDonationProcessorRealFiles:
         for path in file_paths:
             assert path.exists(), f"Test file not found: {path}"
 
-        results, metadata = process_donation_documents(file_paths)
+        results, metadata, _ = process_donation_documents(file_paths)
 
         assert len(results) > 0
         assert metadata["raw_count"] >= len(results)
@@ -303,7 +303,7 @@ class TestDonationProcessorRealFiles:
         mock_matcher.match_donation_to_customer.side_effect = mock_match
 
         # Process with matching
-        results, metadata = process_donation_documents(
+        results, metadata, _ = process_donation_documents(
             file_paths, session_id="test-session"
         )
 
@@ -366,7 +366,7 @@ class TestDonationProcessorRealFiles:
             print(f"  Input files: {len(file_paths)}")
 
             try:
-                results, metadata = process_donation_documents(file_paths)
+                results, metadata, _ = process_donation_documents(file_paths)
                 all_results[batch_name] = results
                 total_donations += len(results)
                 total_raw += metadata["raw_count"]

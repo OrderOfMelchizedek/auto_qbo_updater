@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .customer_matcher import CustomerMatcher
+from .final_display_merger import merge_all_donations_for_display
 from .geminiservice import extract_donations_from_documents
 from .validation import DonationValidator
 
@@ -14,7 +15,7 @@ def process_donation_documents(
     file_paths: List[Union[str, Path]],
     session_id: Optional[str] = None,
     csv_path: Optional[Path] = None,
-) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+) -> Tuple[List[Dict[str, Any]], Dict[str, int], List[Dict[str, Any]]]:
     """
     Process donation documents: extract, validate, deduplicate, and match.
 
@@ -24,8 +25,9 @@ def process_donation_documents(
         csv_path: Optional path to CSV file for testing
 
     Returns:
-        Tuple of (processed_donations, metadata_dict)
+        Tuple of (processed_donations, metadata_dict, display_donations)
         metadata_dict contains: raw_count, valid_count, duplicate_count, matched_count
+        display_donations: List of donations formatted for UI display
     """
     # Extract donations from documents
     raw_donations = extract_donations_from_documents(file_paths)
@@ -139,4 +141,7 @@ def process_donation_documents(
         "matched_count": matched_count,
     }
 
-    return processed_donations, metadata
+    # Create display-ready versions of donations
+    display_donations = merge_all_donations_for_display(processed_donations)
+
+    return processed_donations, metadata, display_donations
