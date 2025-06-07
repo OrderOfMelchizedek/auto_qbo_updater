@@ -55,7 +55,7 @@ class TestDonationProcessor:
 
         # Run the processor
         file_paths = ["test1.pdf", "test2.jpg"]
-        result, metadata = process_donation_documents(file_paths)
+        result, metadata, _ = process_donation_documents(file_paths)
 
         # Verify extraction was called with file paths
         mock_extract.assert_called_once_with(file_paths)
@@ -89,7 +89,7 @@ class TestDonationProcessorIntegration:
             test_files_dir / "test_batch_1" / "2025-05-17-12-48-17.pdf",
         ]
 
-        results, metadata = process_donation_documents(file_paths)
+        results, metadata, _ = process_donation_documents(file_paths)
 
         # Verify we got results
         assert len(results) > 0

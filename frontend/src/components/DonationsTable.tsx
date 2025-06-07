@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Donation } from '../types';
-import { Send, UserPlus, Trash2, Download, FileText, RefreshCw, Edit2, Check, X } from 'lucide-react';
+import { FinalDisplayDonation } from '../types';
+import { Send, UserPlus, Trash2, Download, FileText, RefreshCw, Edit2, Check, X, Search } from 'lucide-react';
 import './DonationsTable.css';
 
 interface DonationsTableProps {
-  donations: Donation[];
-  onUpdate: (index: number, donation: Donation) => void;
+  donations: FinalDisplayDonation[];
+  onUpdate: (index: number, donation: FinalDisplayDonation) => void;
   onDelete: (index: number) => void;
-  onSendToQB: (donation: Donation, index: number) => void;
+  onSendToQB: (donation: FinalDisplayDonation, index: number) => void;
+  onManualMatch: (donation: FinalDisplayDonation, index: number) => void;
+  onNewCustomer: (donation: FinalDisplayDonation, index: number) => void;
   onSendAllToQB: () => void;
   onClearAll: () => void;
   onExportCSV: () => void;
@@ -18,12 +20,14 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
   onUpdate,
   onDelete,
   onSendToQB,
+  onManualMatch,
+  onNewCustomer,
   onSendAllToQB,
   onClearAll,
   onExportCSV
 }) => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editedDonation, setEditedDonation] = useState<Donation | null>(null);
+  const [editedDonation, setEditedDonation] = useState<FinalDisplayDonation | null>(null);
 
   const startEditing = (index: number) => {
     setEditingIndex(index);
@@ -65,19 +69,19 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
     setEditedDonation(updated);
   };
 
-  const renderStatusBadges = (donation: Donation) => {
+  const renderStatusBadges = (donation: FinalDisplayDonation) => {
     const badges = [];
 
     if (donation.status?.matched) {
       badges.push(<span key="matched" className="badge badge-matched">Matched</span>);
     }
-    if (donation.status?.newCustomer) {
+    if (donation.status?.new_customer) {
       badges.push(<span key="new" className="badge badge-new">New Customer</span>);
     }
-    if (donation.status?.sentToQB) {
+    if (donation.status?.sent_to_qb) {
       badges.push(<span key="sent" className="badge badge-sent">Sent to QB</span>);
     }
-    if (donation.status?.addressUpdated) {
+    if (donation.status?.address_updated) {
       badges.push(<span key="updated" className="badge badge-updated">Address Updated</span>);
     }
     if (donation.status?.edited) {
@@ -92,7 +96,7 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
       const currentValue = field.split('.').reduce((obj, key) => obj?.[key], editedDonation as any);
       return (
         <input
-          type={field.includes('Amount') ? 'number' : 'text'}
+          type={field.includes('amount') ? 'number' : 'text'}
           value={currentValue || ''}
           onChange={(e) => updateEditedField(field, e.target.value)}
           className="edit-input"
@@ -102,17 +106,50 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
     return value || '-';
   };
 
-  const handleGenerateReport = () => {
-    const report = donations.map((d, i) =>
-      `Entry ${i + 1}: ${d.PayerInfo?.Organization_Name || 'Individual'} - $${d.PaymentInfo.Amount} (Ref: ${d.PaymentInfo.Payment_Ref})`
-    ).join('\n');
+  const getDisplayName = (donation: FinalDisplayDonation) => {
+    // Show organization name if present, otherwise show full name
+    if (donation.payer_info.qb_organization_name) {
+      return donation.payer_info.qb_organization_name;
+    }
+    return donation.payer_info.customer_ref.full_name || '-';
+  };
 
-    const blob = new Blob([report], { type: 'text/plain' });
+  const getCustomerRef = (donation: FinalDisplayDonation) => {
+    const ref = donation.payer_info.customer_ref;
+    // Format: Salutation FirstName LastName
+    const parts = [];
+    if (ref.salutation) parts.push(ref.salutation);
+    if (ref.first_name) parts.push(ref.first_name);
+    if (ref.last_name) parts.push(ref.last_name);
+    return parts.join(' ') || '-';
+  };
+
+  const handleGenerateReport = () => {
+    const report = donations.map((d, i) => {
+      const name = getDisplayName(d);
+      const amount = d.payment_info.amount;
+      const ref = d.payment_info.payment_ref;
+      const status = [];
+
+      if (d.status.matched) status.push('Matched');
+      if (d.status.new_customer) status.push('New Customer');
+      if (d.status.sent_to_qb) status.push('Sent to QB');
+      if (d.status.address_updated) status.push('Address Updated');
+      if (d.status.edited) status.push('Edited');
+
+      return `Entry ${i + 1}: ${name} - $${amount} (Ref: ${ref}) - Status: ${status.join(', ') || 'None'}`;
+    }).join('\n');
+
+    const reportHeader = `Donation Processing Report\nGenerated: ${new Date().toISOString()}\nTotal Entries: ${donations.length}\n\n`;
+    const fullReport = reportHeader + report;
+
+    const blob = new Blob([fullReport], { type: 'text/plain' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `donation_report_${new Date().toISOString().split('T')[0]}.txt`;
     a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -136,12 +173,12 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
         <table className="donations-table">
           <thead>
             <tr>
+              <th>Customer Ref</th>
+              <th>Full Name</th>
               <th>Payment Ref</th>
               <th>Amount</th>
               <th>Payment Date</th>
-              <th>Payer</th>
-              <th>Organization</th>
-              <th>Address</th>
+              <th>Address Line 1</th>
               <th>City</th>
               <th>State</th>
               <th>ZIP</th>
@@ -153,16 +190,18 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
           <tbody>
             {donations.map((donation, index) => (
               <tr key={index}>
-                <td>{renderEditableCell(donation.PaymentInfo.Payment_Ref, 'PaymentInfo.Payment_Ref', index)}</td>
-                <td>${renderEditableCell(donation.PaymentInfo.Amount, 'PaymentInfo.Amount', index)}</td>
-                <td>{renderEditableCell(donation.PaymentInfo.Payment_Date, 'PaymentInfo.Payment_Date', index)}</td>
-                <td>{donation.PayerInfo?.Aliases?.[0] || '-'}</td>
-                <td>{renderEditableCell(donation.PayerInfo?.Organization_Name, 'PayerInfo.Organization_Name', index)}</td>
-                <td>{renderEditableCell(donation.ContactInfo?.Address_Line_1, 'ContactInfo.Address_Line_1', index)}</td>
-                <td>{renderEditableCell(donation.ContactInfo?.City, 'ContactInfo.City', index)}</td>
-                <td>{renderEditableCell(donation.ContactInfo?.State, 'ContactInfo.State', index)}</td>
-                <td>{renderEditableCell(donation.ContactInfo?.ZIP, 'ContactInfo.ZIP', index)}</td>
-                <td>{renderEditableCell(donation.PaymentInfo.Memo, 'PaymentInfo.Memo', index)}</td>
+                <td>{renderEditableCell(getCustomerRef(donation), 'payer_info.customer_ref', index)}</td>
+                <td>{renderEditableCell(getDisplayName(donation),
+                  donation.payer_info.qb_organization_name ? 'payer_info.qb_organization_name' : 'payer_info.customer_ref.full_name',
+                  index)}</td>
+                <td>{renderEditableCell(donation.payment_info.payment_ref, 'payment_info.payment_ref', index)}</td>
+                <td>${renderEditableCell(donation.payment_info.amount, 'payment_info.amount', index)}</td>
+                <td>{renderEditableCell(donation.payment_info.payment_date, 'payment_info.payment_date', index)}</td>
+                <td>{renderEditableCell(donation.payer_info.qb_address.line1, 'payer_info.qb_address.line1', index)}</td>
+                <td>{renderEditableCell(donation.payer_info.qb_address.city, 'payer_info.qb_address.city', index)}</td>
+                <td>{renderEditableCell(donation.payer_info.qb_address.state, 'payer_info.qb_address.state', index)}</td>
+                <td>{renderEditableCell(donation.payer_info.qb_address.zip, 'payer_info.qb_address.zip', index)}</td>
+                <td>{renderEditableCell(donation.payment_info.memo, 'payment_info.memo', index)}</td>
                 <td>{renderStatusBadges(donation)}</td>
                 <td className="actions-cell">
                   {editingIndex === index ? (
@@ -182,7 +221,10 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
                       <button onClick={() => onSendToQB(donation, index)} className="icon-button" title="Send to QB">
                         <Send size={16} />
                       </button>
-                      <button className="icon-button" title="New Customer">
+                      <button onClick={() => onManualMatch(donation, index)} className="icon-button" title="Manual Match">
+                        <Search size={16} />
+                      </button>
+                      <button onClick={() => onNewCustomer(donation, index)} className="icon-button" title="New Customer">
                         <UserPlus size={16} />
                       </button>
                       <button onClick={() => onDelete(index)} className="icon-button danger" title="Delete">

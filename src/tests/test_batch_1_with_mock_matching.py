@@ -221,7 +221,7 @@ def test_batch_1_with_mock_matching():
 
         # Process with mocked session
         print("\nProcessing donations with mocked QuickBooks session...")
-        results, metadata = process_donation_documents(
+        results, metadata, _ = process_donation_documents(
             file_paths, session_id="mock-session-123"
         )
 
