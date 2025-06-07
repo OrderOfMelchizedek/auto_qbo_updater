@@ -107,8 +107,14 @@ class QuickBooksClient:
         Returns:
             List of matching customers
         """
+        # Escape special characters for QuickBooks query
+        # QuickBooks uses backslash to escape single quotes
+        escaped_term = search_term.replace("'", "\\'")
+
         # Build query - search in DisplayName field
-        query = f"select * from Customer where DisplayName like '%{search_term}%'"
+        query = f"select * from Customer where DisplayName like '%{escaped_term}%'"
+
+        logger.debug(f"QuickBooks query: {query}")
 
         # Make request
         response = self._make_request("GET", "/query", params={"query": query})
