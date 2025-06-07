@@ -512,9 +512,12 @@ def process_files():
         try:
             logger.info(f"Processing {len(file_paths)} files for upload {upload_id}")
 
-            # Run extraction, validation, and deduplication
+            # Get session ID for QuickBooks matching
+            session_id = request.headers.get("X-Session-ID")
+
+            # Run extraction, validation, deduplication, and matching
             processed_donations, extraction_metadata = process_donation_documents(
-                file_paths
+                file_paths, session_id=session_id
             )
 
             # Calculate metadata
@@ -523,6 +526,7 @@ def process_files():
                 "valid_count": extraction_metadata["valid_count"],
                 "raw_count": extraction_metadata["raw_count"],
                 "duplicate_count": extraction_metadata["duplicate_count"],
+                "matched_count": extraction_metadata.get("matched_count", 0),
             }
 
             # Update session with results
