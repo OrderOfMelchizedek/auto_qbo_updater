@@ -57,7 +57,19 @@ Here's a detailed description of each field you'll be extracting from the user-u
 
 ### Payer Information
 
-- **Aliases**: This field represents the payer's name and should be a **list** where multiple versions of their full name can be stored. At least one alias is **REQUIRED if the payer is not an organization**. For example, aliases for "John A. Smith" could include `["John Smith", "J. Smith", "Smith, John", "John A. Smith", "Smith, John A."]`. Obtain this from the check, envelope, or user record.
+- **Aliases**: This field represents the payer's name and should be a **list** where multiple versions of their full name can be stored. At least one alias is **REQUIRED if the payer is not an organization**. **You MUST generate ALL reasonable variations of the name**, including:
+  - Full name as written (e.g., "John A. Smith")
+  - Name without middle initial/name (e.g., "John Smith")
+  - Last name, First name format (e.g., "Smith, John")
+  - Last name, First name with middle (e.g., "Smith, John A.")
+  - First initial + Last name (e.g., "J. Smith")
+  - Last name, First initial (e.g., "Smith, J.")
+  - If middle initial/name exists, include variations with it (e.g., "J. A. Smith", "Smith, J. A.")
+
+  For example, if you see "Jonelle R. Collins" on a check, you MUST generate:
+  `["Jonelle R. Collins", "Jonelle Collins", "Collins, Jonelle", "Collins, Jonelle R.", "J. Collins", "Collins, J.", "J. R. Collins", "Collins, J. R."]`
+
+  This comprehensive list ensures proper matching with existing customer records that may use different name formats. Obtain the base name from the check, envelope, or user record, then generate all variations.
 
 - **Salutation**: This indicates how the payer should be addressed and can be inferred from their details (e.g., "Mr. & Mrs." for John and Jane Smith). It can be one or a combination of titles such as "Mr.", "Ms.", "Mr. & Mrs.", "Dr.", "Rev.", or any other title inferred from the provided materials.
 
