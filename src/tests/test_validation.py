@@ -32,13 +32,28 @@ class TestDonationValidator:
         assert validator.convert_to_proper_case(None) is None
 
     def test_clean_check_number(self, validator):
-        """Test check number cleaning."""
-        assert validator.clean_check_number("001234") == "1234"
-        assert validator.clean_check_number("0000123") == "123"
-        assert validator.clean_check_number("1234") == "1234"
-        assert validator.clean_check_number("000") == "0"
+        """Test check number cleaning with new rules."""
+        # Test cases for check numbers with more than 5 digits
+        assert validator.clean_check_number("0012345") == "12345"  # 7 digits, leading zeros
+        assert validator.clean_check_number("123456") == "123456"  # 6 digits, no leading zeros
+        assert validator.clean_check_number("000000") == "0"      # 6 digits, all zeros
+        assert validator.clean_check_number("000001") == "1"      # 6 digits, leading zeros to single digit
+
+        # Test cases for check numbers with 5 or fewer digits (should remain unchanged)
+        assert validator.clean_check_number("0123") == "0123"    # 4 digits, leading zero
+        assert validator.clean_check_number("1234") == "1234"    # 4 digits, no leading zero
+        assert validator.clean_check_number("00123") == "00123"  # 5 digits, leading zeros
+        assert validator.clean_check_number("12345") == "12345"  # 5 digits, no leading zeros
+        assert validator.clean_check_number("000") == "000"      # 3 digits, all zeros
+        assert validator.clean_check_number("00000") == "00000"  # 5 digits, all zeros
+
+        # Edge cases
         assert validator.clean_check_number("") == ""
         assert validator.clean_check_number(None) is None
+        assert validator.clean_check_number("ABCDE") == "ABCDE" # Non-numeric, 5 chars
+        assert validator.clean_check_number("ABCDEF") == "ABCDEF" # Non-numeric, 6 chars
+        assert validator.clean_check_number("00ABCD") == "00ABCD" # Mixed, 6 chars, leading numeric looking
+        assert validator.clean_check_number("00000A") == "00000A" # 6 chars
 
     def test_normalize_zip_code(self, validator):
         """Test ZIP code normalization."""
