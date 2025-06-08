@@ -46,16 +46,61 @@ def generate_search_variations(aliases: List[str], org_name: str = "") -> List[s
     variations = []
     seen = set()
 
-    # Use the aliases as they are - they already contain variations
-    for alias in aliases:
-        if alias and alias not in seen:
-            variations.append(alias)
-            seen.add(alias)
-
-    # Add organization name if present
+    # Add organization name first if present
     if org_name and org_name not in seen:
         variations.append(org_name)
         seen.add(org_name)
+        return variations  # For organizations, just use the org name
+
+    # Process individual name aliases
+    for alias in aliases:
+        if not alias:
+            continue
+
+        # Add original alias
+        if alias not in seen:
+            variations.append(alias)
+            seen.add(alias)
+
+        # Parse name components
+        parts = alias.split()
+        if len(parts) >= 2:
+            # Generate "Lastname, Firstname" variations
+            first_name = parts[0]
+            last_name = parts[-1]
+            middle_parts = parts[1:-1] if len(parts) > 2 else []
+
+            # "Smith, John" from "John Smith"
+            lastname_firstname = f"{last_name}, {first_name}"
+            if lastname_firstname not in seen:
+                variations.append(lastname_firstname)
+                seen.add(lastname_firstname)
+
+            # "Smith, John A." from "John A. Smith"
+            if middle_parts:
+                full_reversed = f"{last_name}, {' '.join([first_name] + middle_parts)}"
+                if full_reversed not in seen:
+                    variations.append(full_reversed)
+                    seen.add(full_reversed)
+
+            # Just last name for broader search
+            if last_name not in seen and len(last_name) > 2:
+                variations.append(last_name)
+                seen.add(last_name)
+
+            # First initial variations
+            if len(first_name) > 0:
+                # "J. Smith" from "John Smith"
+                initial_last = f"{first_name[0]}. {last_name}"
+                if initial_last not in seen:
+                    variations.append(initial_last)
+                    seen.add(initial_last)
+
+                # "Smith, J." from "John Smith"
+                lastname_initial = f"{last_name}, {first_name[0]}."
+                if lastname_initial not in seen:
+                    variations.append(lastname_initial)
+                    seen.add(lastname_initial)
 
     return variations
 
@@ -333,7 +378,10 @@ class CustomerMatcher:
 
         # Generate search variations
         search_variations = generate_search_variations(aliases, org_name)
-        logger.info(f"Generated search variations: {search_variations}")
+        logger.info(
+            f"Generated {len(search_variations)} search variations from "
+            f"aliases {aliases}: {search_variations}"
+        )
 
         # Search for customer using variations
         searched_ids = set()  # Track customer IDs to avoid duplicates
@@ -342,9 +390,9 @@ class CustomerMatcher:
 
         for search_term in search_variations:
             try:
-                logger.debug(f"Searching for: '{search_term}'")
+                logger.info(f"Searching for: '{search_term}'")
                 results = self.data_source.search_customer(search_term)
-                logger.debug(f"Found {len(results)} results for '{search_term}'")
+                logger.info(f"Found {len(results)} results for '{search_term}'")
 
                 # Score results immediately to potentially stop early
                 for customer in results:
@@ -364,17 +412,17 @@ class CustomerMatcher:
                             best_score = score
                             best_match = customer
 
-                        # If we found a perfect or near-perfect match, stop searching
-                        if score >= 95:
+                        # If we found a good match, stop searching
+                        if score >= 85:
                             logger.info(
-                                f"Found excellent match: "
+                                f"Found good match: "
                                 f"'{customer.get('DisplayName')}' "
                                 f"with score {score}. Stopping search."
                             )
                             break
 
-                # Stop outer loop if we found an excellent match
-                if best_score >= 95:
+                # Stop outer loop if we found a good match
+                if best_score >= 85:
                     break
 
             except QuickBooksError as e:
