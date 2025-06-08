@@ -86,3 +86,31 @@
     padding: 10px 20px;
   }
 }
+
+/* Local Development Mode Styles */
+.qb-connection-button.local-dev {
+  background-color: #6b7280;
+  cursor: default;
+}
+
+.qb-connection-button.local-dev:hover {
+  background-color: #6b7280;
+  transform: none;
+}
+
+.local-dev-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: #fef3c7;
+  color: #92400e;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.local-dev-notice svg {
+  flex-shrink: 0;
+}

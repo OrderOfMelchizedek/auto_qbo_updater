@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Link, CheckCircle, AlertCircle } from 'lucide-react';
+import { Link, CheckCircle, AlertCircle, Database } from 'lucide-react';
 import { authService } from '../services/authService';
+import { checkHealth } from '../services/api';
 import './QuickBooksConnection.css';
 
 interface QuickBooksConnectionProps {
@@ -20,6 +21,7 @@ const QuickBooksConnection: React.FC<QuickBooksConnectionProps> = ({
 }) => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isLocalDevMode, setIsLocalDevMode] = useState(false);
 
   useEffect(() => {
     // Subscribe to auth status changes
@@ -34,12 +36,23 @@ const QuickBooksConnection: React.FC<QuickBooksConnectionProps> = ({
     // Check initial auth status
     authService.checkAuthStatus();
 
+    // Check if we're in local dev mode
+    checkHealth().then(health => {
+      setIsLocalDevMode(health.local_dev_mode);
+      // In local dev mode, simulate connected state
+      if (health.local_dev_mode) {
+        onConnect();
+      }
+    }).catch(err => {
+      console.error('Failed to check health:', err);
+    });
+
     return unsubscribe;
   }, [onConnect]);
 
   // Handle triggered authentication from FileUpload
   useEffect(() => {
-    if (triggerAuth && !isConnected && !isAuthenticating) {
+    if (triggerAuth && !isConnected && !isAuthenticating && !isLocalDevMode) {
       const startAuth = async () => {
         setIsAuthenticating(true);
         setAuthError(null);
@@ -84,6 +97,22 @@ const QuickBooksConnection: React.FC<QuickBooksConnectionProps> = ({
       setAuthError('Failed to disconnect. Please try again.');
     }
   };
+
+  // In local dev mode, show different UI
+  if (isLocalDevMode) {
+    return (
+      <div className="qb-connection-wrapper">
+        <div className="qb-connection-button connected local-dev">
+          <Database size={20} />
+          Using Local CSV Data
+        </div>
+        <div className="local-dev-notice">
+          <AlertCircle size={14} />
+          Local development mode - matching against test CSV file
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="qb-connection-wrapper">
