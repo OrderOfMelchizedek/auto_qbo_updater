@@ -13,13 +13,20 @@ echo "================================"
 cleanup() {
     echo -e "\n${YELLOW}Stopping servers...${NC}"
     if [ ! -z "$BACKEND_PID" ]; then
-        kill $BACKEND_PID 2>/dev/null
+        kill -TERM $BACKEND_PID 2>/dev/null
         echo "Backend stopped"
     fi
     if [ ! -z "$FRONTEND_PID" ]; then
-        kill $FRONTEND_PID 2>/dev/null
+        kill -TERM $FRONTEND_PID 2>/dev/null
         echo "Frontend stopped"
     fi
+
+    # Check for any lingering Celery workers (in case someone used wrong script)
+    if pgrep -f "celery.*worker" > /dev/null; then
+        echo -e "${YELLOW}Note: Celery workers are still running.${NC}"
+        echo "To stop them, run: pkill -f 'celery.*worker'"
+    fi
+
     exit 0
 }
 
