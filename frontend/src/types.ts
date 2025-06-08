@@ -18,6 +18,8 @@ export interface DisplayPayerInfo {
   customer_ref: CustomerRef;
   qb_organization_name: string;
   qb_address: QBAddress;
+  previous_address?: QBAddress | null;
+  address_update_source?: 'extracted' | 'manual' | null;
   qb_email: string;
   qb_phone: string;
 }

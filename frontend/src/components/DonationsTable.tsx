@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FinalDisplayDonation } from '../types';
-import { Send, UserPlus, Trash2, Download, FileText, RefreshCw, Edit2, Check, X, Search } from 'lucide-react';
+import { Send, UserPlus, Trash2, Download, FileText, RefreshCw, Edit2, Check, X, Search, RotateCcw, CheckCircle } from 'lucide-react';
 import './DonationsTable.css';
 
 interface DonationsTableProps {
@@ -41,10 +41,36 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
 
   const saveEditing = () => {
     if (editingIndex !== null && editedDonation) {
-      const updatedDonation = {
+      const originalDonation = donations[editingIndex];
+
+      // Check if address was changed
+      const addressChanged =
+        originalDonation.payer_info.qb_address.line1 !== editedDonation.payer_info.qb_address.line1 ||
+        originalDonation.payer_info.qb_address.city !== editedDonation.payer_info.qb_address.city ||
+        originalDonation.payer_info.qb_address.state !== editedDonation.payer_info.qb_address.state ||
+        originalDonation.payer_info.qb_address.zip !== editedDonation.payer_info.qb_address.zip;
+
+      let updatedDonation = {
         ...editedDonation,
         status: { ...editedDonation.status, edited: true }
       };
+
+      // If address was changed and there's no previous address yet, save the original
+      if (addressChanged && !editedDonation.payer_info.previous_address) {
+        updatedDonation = {
+          ...updatedDonation,
+          payer_info: {
+            ...updatedDonation.payer_info,
+            previous_address: originalDonation.payer_info.qb_address,
+            address_update_source: 'manual' as const
+          },
+          status: {
+            ...updatedDonation.status,
+            address_updated: true
+          }
+        };
+      }
+
       onUpdate(editingIndex, updatedDonation);
       setEditingIndex(null);
       setEditedDonation(null);
@@ -69,6 +95,44 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
     setEditedDonation(updated);
   };
 
+  const handleRevertAddress = (index: number) => {
+    const donation = donations[index];
+    if (donation.payer_info.previous_address) {
+      const updatedDonation = {
+        ...donation,
+        payer_info: {
+          ...donation.payer_info,
+          qb_address: donation.payer_info.previous_address,
+          previous_address: donation.payer_info.qb_address,
+          address_update_source: 'manual' as const
+        },
+        status: {
+          ...donation.status,
+          address_updated: false,
+          edited: true
+        }
+      };
+      onUpdate(index, updatedDonation);
+    }
+  };
+
+  const handleKeepNewAddress = (index: number) => {
+    const donation = donations[index];
+    const updatedDonation = {
+      ...donation,
+      payer_info: {
+        ...donation.payer_info,
+        previous_address: null,
+        address_update_source: null
+      },
+      status: {
+        ...donation.status,
+        address_updated: false
+      }
+    };
+    onUpdate(index, updatedDonation);
+  };
+
   const renderStatusBadges = (donation: FinalDisplayDonation) => {
     const badges = [];
 
@@ -82,7 +146,9 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
       badges.push(<span key="sent" className="badge badge-sent">Sent to QB</span>);
     }
     if (donation.status?.address_updated) {
-      badges.push(<span key="updated" className="badge badge-updated">Address Updated</span>);
+      const source = donation.payer_info.address_update_source;
+      const label = source === 'extracted' ? 'Address Updated (Extracted)' : 'Address Updated';
+      badges.push(<span key="updated" className="badge badge-updated">{label}</span>);
     }
     if (donation.status?.edited) {
       badges.push(<span key="edited" className="badge badge-edited">Edited</span>);
@@ -103,6 +169,57 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
         />
       );
     }
+    return value || '-';
+  };
+
+  const renderAddressCell = (donation: FinalDisplayDonation, field: string, index: number) => {
+    const fieldPath = `payer_info.qb_address.${field}`;
+    const value = donation.payer_info.qb_address[field as keyof typeof donation.payer_info.qb_address];
+
+    if (editingIndex === index && editedDonation) {
+      const currentValue = fieldPath.split('.').reduce((obj, key) => obj?.[key], editedDonation as any);
+      return (
+        <input
+          type="text"
+          value={currentValue || ''}
+          onChange={(e) => updateEditedField(fieldPath, e.target.value)}
+          className="edit-input"
+        />
+      );
+    }
+
+    // Check if this donation has a previous address
+    const hasPreviousAddress = donation.payer_info.previous_address &&
+                               donation.status.address_updated;
+
+    if (hasPreviousAddress && field === 'line1') {
+      const previousValue = donation.payer_info.previous_address![field as keyof typeof donation.payer_info.previous_address];
+      return (
+        <div className="address-with-history">
+          <div className="current-address">{value || '-'}</div>
+          <div className="previous-address">
+            <span className="old-label">Old:</span> {previousValue || '-'}
+          </div>
+          <div className="address-actions">
+            <button
+              onClick={() => handleKeepNewAddress(index)}
+              className="address-action-btn keep"
+              title="Keep new address"
+            >
+              <CheckCircle size={14} /> Keep
+            </button>
+            <button
+              onClick={() => handleRevertAddress(index)}
+              className="address-action-btn revert"
+              title="Revert to old address"
+            >
+              <RotateCcw size={14} /> Revert
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return value || '-';
   };
 
@@ -194,10 +311,10 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
                 <td>{renderEditableCell(donation.payment_info.payment_ref, 'payment_info.payment_ref', index)}</td>
                 <td>${renderEditableCell(donation.payment_info.amount, 'payment_info.amount', index)}</td>
                 <td>{renderEditableCell(donation.payment_info.payment_date, 'payment_info.payment_date', index)}</td>
-                <td>{renderEditableCell(donation.payer_info.qb_address.line1, 'payer_info.qb_address.line1', index)}</td>
-                <td>{renderEditableCell(donation.payer_info.qb_address.city, 'payer_info.qb_address.city', index)}</td>
-                <td>{renderEditableCell(donation.payer_info.qb_address.state, 'payer_info.qb_address.state', index)}</td>
-                <td>{renderEditableCell(donation.payer_info.qb_address.zip, 'payer_info.qb_address.zip', index)}</td>
+                <td>{renderAddressCell(donation, 'line1', index)}</td>
+                <td>{renderAddressCell(donation, 'city', index)}</td>
+                <td>{renderAddressCell(donation, 'state', index)}</td>
+                <td>{renderAddressCell(donation, 'zip', index)}</td>
                 <td>{renderEditableCell(donation.payment_info.memo, 'payment_info.memo', index)}</td>
                 <td>{renderStatusBadges(donation)}</td>
                 <td className="actions-cell">
