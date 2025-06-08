@@ -149,12 +149,18 @@ class QuickBooksClient:
         Returns:
             Formatted customer data matching PRD spec
         """
+        # Build properly formatted full name
+        full_name = self._build_full_name(customer)
+
         # Extract customer reference info
         customer_ref = {
             "id": customer.get("Id", ""),
             "first_name": customer.get("GivenName"),
             "last_name": customer.get("FamilyName"),
-            "full_name": customer.get("DisplayName", ""),
+            "full_name": full_name,  # Use the formatted name instead of DisplayName
+            "display_name": customer.get(
+                "DisplayName", ""
+            ),  # Keep DisplayName for reference
             "company_name": customer.get("CompanyName"),
         }
 
@@ -183,6 +189,117 @@ class QuickBooksClient:
             "qb_email": qb_email,
             "qb_phone": qb_phone,
         }
+
+    def _build_full_name(self, customer: Dict[str, Any]) -> str:
+        """
+        Build a properly formatted full name from QuickBooks customer data.
+
+        Handles:
+        - Individual names with salutations (Mr. John Smith)
+        - Married couples (Mr. & Mrs. John Smith)
+        - Unmarried couples (John Smith and Mary Jones)
+        - Organizations (returns CompanyName)
+
+        Args:
+            customer: QuickBooks customer data
+
+        Returns:
+            Properly formatted full name
+        """
+        # If it's a company/organization, return the company name
+        company_name = customer.get("CompanyName", "").strip()
+        if company_name:
+            return company_name
+
+        # Extract name components
+        title = customer.get("Title", "").strip()
+        given_name = customer.get("GivenName", "").strip()
+        middle_name = customer.get("MiddleName", "").strip()
+        family_name = customer.get("FamilyName", "").strip()
+        suffix = customer.get("Suffix", "").strip()
+        display_name = customer.get("DisplayName", "").strip()
+
+        # Check if this is a couple based on DisplayName patterns
+        is_couple = False
+        partner_info = None
+
+        if display_name:
+            # Common couple patterns in DisplayName
+            couple_patterns = [
+                " & ",  # John & Mary Smith
+                " and ",  # John and Mary Smith
+                ", ",  # Smith, John & Mary
+            ]
+
+            for pattern in couple_patterns:
+                if pattern in display_name:
+                    is_couple = True
+                    # Try to detect if it's same last name or different
+                    if "&" in display_name or " and " in display_name:
+                        # Could be "John & Mary Smith" or "John Smith & Mary Jones"
+                        parts = display_name.replace(" & ", " and ").split(" and ")
+                        if len(parts) == 2:
+                            second_person = parts[1].strip()
+
+                            # Check if second person has their own last name
+                            if " " in second_person:
+                                # Likely different last names
+                                partner_info = second_person
+                            else:
+                                # Same last name, second person is just first name
+                                partner_info = second_person
+                    break
+
+        # Build the full name
+        if is_couple and title in ["Mr.", "Mrs."] and family_name:
+            if partner_info and " " in partner_info:
+                # Different last names
+                name = (
+                    f"{title} {given_name} {middle_name} {family_name} "
+                    f"and {partner_info}"
+                )
+                return name.replace("  ", " ").strip()
+            else:
+                # Same last name
+                return f"Mr. & Mrs. {given_name} {middle_name} {family_name}".replace(
+                    "  ", " "
+                ).strip()
+
+        # Build individual name or unmarried couple
+        name_parts = []
+
+        # Add title if present
+        if title:
+            name_parts.append(title)
+
+        # Add given name
+        if given_name:
+            name_parts.append(given_name)
+
+        # Add middle name
+        if middle_name:
+            name_parts.append(middle_name)
+
+        # Add family name
+        if family_name:
+            name_parts.append(family_name)
+
+        # Add suffix if present
+        if suffix:
+            name_parts.append(suffix)
+
+        # If we have name parts, join them
+        if name_parts:
+            full_name = " ".join(name_parts)
+
+            # If it's a couple but not married (no Mr./Mrs.), add partner
+            if is_couple and partner_info and title not in ["Mr.", "Mrs."]:
+                full_name = f"{full_name} and {partner_info}"
+
+            return full_name
+
+        # Fallback to DisplayName if no name components
+        return display_name
 
     def _format_zip_code(self, zip_code: str) -> str:
         """
