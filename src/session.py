@@ -300,11 +300,6 @@ class RedisSession(SessionBackend):
                 decode_responses=True,
                 max_connections=5,
                 socket_keepalive=True,
-                socket_keepalive_options={
-                    1: 1,  # TCP_KEEPIDLE
-                    2: 3,  # TCP_KEEPINTVL
-                    3: 5,  # TCP_KEEPCNT
-                },
                 ssl_cert_reqs=None,
                 ssl_ca_certs=None,
                 ssl_certfile=None,
@@ -317,11 +312,6 @@ class RedisSession(SessionBackend):
                 decode_responses=True,
                 max_connections=5,
                 socket_keepalive=True,
-                socket_keepalive_options={
-                    1: 1,  # TCP_KEEPIDLE
-                    2: 3,  # TCP_KEEPINTVL
-                    3: 5,  # TCP_KEEPCNT
-                },
             )
 
         self.key_prefix = "donation_upload:"

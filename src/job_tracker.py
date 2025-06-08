@@ -41,11 +41,6 @@ class JobTracker:
                 decode_responses=True,
                 max_connections=3,
                 socket_keepalive=True,
-                socket_keepalive_options={
-                    1: 1,  # TCP_KEEPIDLE
-                    2: 3,  # TCP_KEEPINTVL
-                    3: 5,  # TCP_KEEPCNT
-                },
                 ssl_cert_reqs=None,
                 ssl_ca_certs=None,
                 ssl_certfile=None,
@@ -58,11 +53,6 @@ class JobTracker:
                 decode_responses=True,
                 max_connections=3,
                 socket_keepalive=True,
-                socket_keepalive_options={
-                    1: 1,  # TCP_KEEPIDLE
-                    2: 3,  # TCP_KEEPINTVL
-                    3: 5,  # TCP_KEEPCNT
-                },
             )
 
         self.ttl = 3600  # Job data expires after 1 hour
