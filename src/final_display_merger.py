@@ -64,6 +64,10 @@ def merge_donation_for_display(
 
     # If we have match data, use QuickBooks customer info
     if match_data and match_data.get("match_status") == "matched":
+        logger.info(
+            f"Processing matched customer with match_data keys: "
+            f"{list(match_data.keys())}"
+        )
         customer_ref = match_data.get("customer_ref", {})
 
         # Set customer reference info
@@ -103,14 +107,34 @@ def merge_donation_for_display(
         updates_needed = match_data.get("updates_needed", {})
         if updates_needed.get("address"):
             display_data["status"]["address_updated"] = True
+            logger.info(
+                f"Address update detected for customer: "
+                f"{customer_ref.get('display_name', 'Unknown')}"
+            )
+            logger.info(f"Match data keys: {list(match_data.keys())}")
 
-            # Store the original QuickBooks address as previous address
-            display_data["payer_info"]["previous_address"] = {
-                "line1": qb_address.get("line1", ""),
-                "city": qb_address.get("city", ""),
-                "state": qb_address.get("state", ""),
-                "zip": qb_address.get("zip", ""),
-            }
+            # Check if we have the original QB address stored
+            if "original_qb_address" in match_data:
+                # Use the stored original address as previous address
+                original_addr = match_data["original_qb_address"]
+                display_data["payer_info"]["previous_address"] = {
+                    "line1": original_addr.get("line1", ""),
+                    "city": original_addr.get("city", ""),
+                    "state": original_addr.get("state", ""),
+                    "zip": original_addr.get("zip", ""),
+                }
+                logger.info(
+                    f"Set previous_address from original_qb_address: "
+                    f"{display_data['payer_info']['previous_address']}"
+                )
+            else:
+                # Fallback: qb_address might already be the new address
+                # In this case, we can't determine the previous address
+                display_data["payer_info"]["previous_address"] = None
+                logger.warning(
+                    f"No original_qb_address found in match_data. "
+                    f"Available keys: {list(match_data.keys())}"
+                )
 
             # Use the extracted address as the new address
             display_data["payer_info"]["qb_address"] = {
@@ -167,6 +191,13 @@ def merge_donation_for_display(
     # Add match metadata for debugging/reference
     if match_data is not None:
         display_data["_match_data"] = match_data
+
+    # Log final display data for debugging
+    if display_data["status"]["address_updated"]:
+        logger.info(
+            f"Final display data has address_updated=True, "
+            f"previous_address={display_data['payer_info'].get('previous_address')}"
+        )
 
     return display_data
 
