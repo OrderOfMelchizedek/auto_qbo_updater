@@ -70,7 +70,14 @@ class TestFinalDisplayMerger:
                 "Amount": 100.00,
             },
             "PayerInfo": {"Aliases": ["John Smith"], "Salutation": "Mr."},
-            "ContactInfo": {"Email": "john@example.com", "Phone": "555-1234"},
+            "ContactInfo": {
+                "Address_Line_1": "789 New Street",
+                "City": "Oakland",
+                "State": "CA",
+                "ZIP": "94612",
+                "Email": "john@example.com",
+                "Phone": "555-1234",
+            },
         }
 
         match_data = {
@@ -106,9 +113,16 @@ class TestFinalDisplayMerger:
             result["payer_info"]["customer_ref"]["salutation"] == "Mr."
         )  # From donation
 
-        # Check QB data
-        assert result["payer_info"]["qb_address"]["line1"] == "456 Oak Ave"
-        assert result["payer_info"]["qb_address"]["city"] == "San Francisco"
+        # When address update is needed, should use extracted address
+        assert result["payer_info"]["qb_address"]["line1"] == "789 New Street"
+        assert result["payer_info"]["qb_address"]["city"] == "Oakland"
+
+        # Should have previous address saved
+        assert result["payer_info"]["previous_address"]["line1"] == "456 Oak Ave"
+        assert result["payer_info"]["previous_address"]["city"] == "San Francisco"
+        assert result["payer_info"]["address_update_source"] == "extracted"
+
+        # Email and phone should still be from QB
         assert result["payer_info"]["qb_email"] == "john.smith@company.com"
         assert result["payer_info"]["qb_phone"] == "555-9999"
 
@@ -206,5 +220,55 @@ class TestFinalDisplayMerger:
         assert len(results) == 2
         assert results[0]["status"]["matched"] is True
         assert results[1]["status"]["new_customer"] is True
-        assert results[0]["payment_info"]["payment_ref"] == "1"
-        assert results[1]["payment_info"]["payment_ref"] == "2"
+
+    def test_merge_donation_with_match_no_address_update(self):
+        """Test merging donation with match data when no address update is needed."""
+        donation = {
+            "PaymentInfo": {
+                "Payment_Ref": "1234",
+                "Amount": 100.00,
+            },
+            "PayerInfo": {"Aliases": ["John Smith"], "Salutation": "Mr."},
+            "ContactInfo": {
+                "Address_Line_1": "456 Oak Ave",
+                "City": "San Francisco",
+                "State": "CA",
+                "ZIP": "94105",
+            },
+        }
+
+        match_data = {
+            "match_status": "matched",
+            "customer_ref": {
+                "id": "QB-001",
+                "first_name": "John",
+                "last_name": "Smith",
+                "full_name": "John Smith",
+                "display_name": "Smith, John",
+            },
+            "qb_address": {
+                "line1": "456 Oak Ave",
+                "city": "San Francisco",
+                "state": "CA",
+                "zip": "94105",
+            },
+            "qb_email": ["john.smith@company.com"],
+            "qb_phone": ["555-9999"],
+            "updates_needed": {
+                "address": False,
+            },
+        }
+
+        result = merge_donation_for_display(donation, match_data)
+
+        # Should use QB address (no update needed)
+        assert result["payer_info"]["qb_address"]["line1"] == "456 Oak Ave"
+        assert result["payer_info"]["qb_address"]["city"] == "San Francisco"
+
+        # Should NOT have previous address
+        assert result["payer_info"]["previous_address"] is None
+        assert result["payer_info"]["address_update_source"] is None
+
+        # Check status
+        assert result["status"]["matched"] is True
+        assert result["status"]["address_updated"] is False

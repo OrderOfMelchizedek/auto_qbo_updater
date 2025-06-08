@@ -40,6 +40,8 @@ def merge_donation_for_display(
                 "state": "",
                 "zip": "",
             },
+            "previous_address": None,  # Track previous address for updates
+            "address_update_source": None,  # Track source of address update
             "qb_email": "",
             "qb_phone": "",
         },
@@ -101,6 +103,25 @@ def merge_donation_for_display(
         updates_needed = match_data.get("updates_needed", {})
         if updates_needed.get("address"):
             display_data["status"]["address_updated"] = True
+
+            # Store the original QuickBooks address as previous address
+            display_data["payer_info"]["previous_address"] = {
+                "line1": qb_address.get("line1", ""),
+                "city": qb_address.get("city", ""),
+                "state": qb_address.get("state", ""),
+                "zip": qb_address.get("zip", ""),
+            }
+
+            # Use the extracted address as the new address
+            display_data["payer_info"]["qb_address"] = {
+                "line1": contact_info.get("Address_Line_1", ""),
+                "city": contact_info.get("City", ""),
+                "state": contact_info.get("State", ""),
+                "zip": contact_info.get("ZIP", ""),
+            }
+
+            # Mark the source as extracted
+            display_data["payer_info"]["address_update_source"] = "extracted"
 
     else:
         # No match or new customer - use extracted data
