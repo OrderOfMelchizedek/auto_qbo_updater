@@ -115,13 +115,10 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
   };
 
   const getCustomerRef = (donation: FinalDisplayDonation) => {
+    // Show the QuickBooks DisplayName directly (e.g., "Collins, Jonelle")
+    // This is the exact identifier from QuickBooks
     const ref = donation.payer_info.customer_ref;
-    // Format: Salutation FirstName LastName
-    const parts = [];
-    if (ref.salutation) parts.push(ref.salutation);
-    if (ref.first_name) parts.push(ref.first_name);
-    if (ref.last_name) parts.push(ref.last_name);
-    return parts.join(' ') || '-';
+    return ref.full_name || '-';
   };
 
   const handleGenerateReport = () => {
