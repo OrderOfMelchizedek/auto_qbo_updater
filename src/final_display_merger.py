@@ -31,6 +31,7 @@ def merge_donation_for_display(
                 "first_name": "",
                 "last_name": "",
                 "full_name": "",
+                "display_name": "",
             },
             "qb_organization_name": "",
             "qb_address": {
@@ -69,6 +70,7 @@ def merge_donation_for_display(
             "first_name": customer_ref.get("first_name", ""),
             "last_name": customer_ref.get("last_name", ""),
             "full_name": customer_ref.get("full_name", ""),
+            "display_name": customer_ref.get("display_name", ""),
         }
 
         # Set organization name if present
