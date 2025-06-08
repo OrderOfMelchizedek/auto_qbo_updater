@@ -33,6 +33,11 @@ if ! redis-cli ping > /dev/null 2>&1; then
 fi
 echo "✓ Redis is running"
 
+# Load environment variables from .env file
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
 # Start Celery worker in background
 echo "Starting Celery worker..."
 celery -A src.celery_app worker --loglevel=info &
