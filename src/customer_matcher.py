@@ -509,6 +509,8 @@ class CustomerMatcher:
 
         if address_comparison["should_update"]:
             result["updates_needed"]["address"] = True
+            # Store original QuickBooks address before updating
+            result["original_qb_address"] = qb_customer["qb_address"].copy()
             # Update with extracted address
             result["qb_address"] = extracted_address
 
