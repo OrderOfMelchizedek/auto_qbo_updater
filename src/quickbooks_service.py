@@ -290,13 +290,7 @@ class QuickBooksClient:
 
         # If we have name parts, join them
         if name_parts:
-            full_name = " ".join(name_parts)
-
-            # If it's a couple but not married (no Mr./Mrs.), add partner
-            if is_couple and partner_info and title not in ["Mr.", "Mrs."]:
-                full_name = f"{full_name} and {partner_info}"
-
-            return full_name
+            return " ".join(name_parts)
 
         # Fallback to DisplayName if no name components
         return display_name
