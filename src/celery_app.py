@@ -34,6 +34,12 @@ config = {
     # Task execution settings
     "task_soft_time_limit": 600,  # 10 minutes soft limit
     "task_time_limit": 900,  # 15 minutes hard limit
+    # Connection pool settings
+    "broker_pool_limit": 5,  # Limit broker connections per worker
+    "redis_max_connections": 10,  # Total Redis connection pool size
+    "broker_connection_retry_on_startup": True,
+    "broker_connection_retry": True,
+    "broker_connection_max_retries": 10,
 }
 
 # Handle SSL for Heroku Redis
