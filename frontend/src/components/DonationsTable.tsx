@@ -118,7 +118,7 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
     // Show the QuickBooks DisplayName directly (e.g., "Collins, Jonelle")
     // This is the exact identifier from QuickBooks
     const ref = donation.payer_info.customer_ref;
-    return ref.full_name || '-';
+    return ref.display_name || '-';
   };
 
   const handleGenerateReport = () => {
