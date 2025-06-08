@@ -6,7 +6,7 @@ import os
 import time
 import uuid
 
-from flask import Flask, Response, jsonify, request, stream_with_context
+from flask import Flask, Response, jsonify, make_response, request, stream_with_context
 from flask_cors import CORS
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
@@ -48,6 +48,9 @@ job_tracker = JobTracker(os.getenv("REDIS_URL"))
 app.config["MAX_CONTENT_LENGTH"] = (
     Config.MAX_FILE_SIZE_BYTES * Config.MAX_FILES_PER_UPLOAD
 )
+
+# Disable caching for development
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
 # Configure secure cookies for production
 if os.environ.get("DYNO"):
@@ -655,7 +658,11 @@ def process_files():
 def auth_callback():
     """Serve React app for OAuth callback."""
     if app.static_folder and os.path.exists(app.static_folder):
-        return app.send_static_file("index.html")
+        response = make_response(app.send_static_file("index.html"))
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     else:
         return jsonify({"error": "React app not found"}), 404
 
@@ -678,15 +685,31 @@ def serve_react_app(path):
         # This handles React routes like /auth/callback
         if not path or "." not in path:
             logger.info(f"Serving index.html for path: {path}")
-            return app.send_static_file("index.html")
+            response = make_response(app.send_static_file("index.html"))
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            return response
 
         # Try to serve the exact file if it exists
         try:
-            return app.send_static_file(path)
+            response = make_response(app.send_static_file(path))
+            # Add cache control headers for all static files
+            if path.endswith((".js", ".css")):
+                response.headers[
+                    "Cache-Control"
+                ] = "no-cache, no-store, must-revalidate"
+                response.headers["Pragma"] = "no-cache"
+                response.headers["Expires"] = "0"
+            return response
         except Exception:
             # If file doesn't exist, serve index.html for React routing
             logger.info(f"File not found, serving index.html for path: {path}")
-            return app.send_static_file("index.html")
+            response = make_response(app.send_static_file("index.html"))
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            return response
     else:
         # In development mode
         return jsonify(

@@ -511,8 +511,10 @@ class CustomerMatcher:
             result["updates_needed"]["address"] = True
             # Store original QuickBooks address before updating
             result["original_qb_address"] = qb_customer["qb_address"].copy()
+            logger.info(f"Storing original_qb_address: {result['original_qb_address']}")
             # Update with extracted address
             result["qb_address"] = extracted_address
+            logger.info(f"Updated to new address: {result['qb_address']}")
 
         # Check email updates
         extracted_email = contact_info.get("Email") or ""
