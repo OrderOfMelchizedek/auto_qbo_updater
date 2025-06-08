@@ -32,7 +32,22 @@ class JobTracker:
     def __init__(self, redis_url: Optional[str] = None):
         """Initialize job tracker with Redis connection."""
         self.redis_url = redis_url or "redis://localhost:6379/0"
-        self.redis_client = redis.from_url(self.redis_url, decode_responses=True)
+
+        # Handle SSL for Heroku Redis
+        if self.redis_url.startswith("rediss://"):
+            # Use SSL but disable cert verification for Heroku
+            self.redis_client = redis.from_url(
+                self.redis_url,
+                decode_responses=True,
+                ssl_cert_reqs=None,
+                ssl_ca_certs=None,
+                ssl_certfile=None,
+                ssl_keyfile=None,
+                ssl_check_hostname=False,
+            )
+        else:
+            self.redis_client = redis.from_url(self.redis_url, decode_responses=True)
+
         self.ttl = 3600  # Job data expires after 1 hour
 
     def create_job(self, job_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
