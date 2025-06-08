@@ -74,19 +74,11 @@ class CSVDataSource(CustomerDataSource):
                     "Id": customer_id,
                     "DisplayName": row.get("Customer", "").strip()
                     or row.get("Full Name", "").strip(),
-                    "GivenName": row.get("First Name", "").strip()
-                    if row.get("First Name")
-                    else None,
-                    "FamilyName": row.get("Last Name", "").strip()
-                    if row.get("Last Name")
-                    else None,
-                    "CompanyName": row.get("Company Name", "").strip()
-                    if row.get("Company Name")
-                    else None,
-                    "Title": row.get("Title", "").strip() if row.get("Title") else None,
-                    "Suffix": row.get("Suffix", "").strip()
-                    if row.get("Suffix")
-                    else None,
+                    "GivenName": row.get("First Name", "").strip(),
+                    "FamilyName": row.get("Last Name", "").strip(),
+                    "CompanyName": row.get("Company Name", "").strip(),
+                    "Title": row.get("Title", "").strip(),
+                    "Suffix": row.get("Suffix", "").strip(),
                 }
 
                 # Add billing address if available
@@ -226,16 +218,16 @@ class CSVDataSource(CustomerDataSource):
             Properly formatted full name
         """
         # If it's a company/organization, return the company name
-        company_name = customer.get("CompanyName", "").strip()
+        company_name = (customer.get("CompanyName") or "").strip()
         if company_name:
             return company_name
 
         # Extract name components
-        title = customer.get("Title", "").strip()
-        given_name = customer.get("GivenName", "").strip()
-        family_name = customer.get("FamilyName", "").strip()
-        suffix = customer.get("Suffix", "").strip()
-        display_name = customer.get("DisplayName", "").strip()
+        title = (customer.get("Title") or "").strip()
+        given_name = (customer.get("GivenName") or "").strip()
+        family_name = (customer.get("FamilyName") or "").strip()
+        suffix = (customer.get("Suffix") or "").strip()
+        display_name = (customer.get("DisplayName") or "").strip()
 
         # Check if this is a couple based on DisplayName patterns
         is_couple = False

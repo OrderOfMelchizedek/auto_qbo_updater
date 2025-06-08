@@ -207,17 +207,17 @@ class QuickBooksClient:
             Properly formatted full name
         """
         # If it's a company/organization, return the company name
-        company_name = customer.get("CompanyName", "").strip()
+        company_name = (customer.get("CompanyName") or "").strip()
         if company_name:
             return company_name
 
         # Extract name components
-        title = customer.get("Title", "").strip()
-        given_name = customer.get("GivenName", "").strip()
-        middle_name = customer.get("MiddleName", "").strip()
-        family_name = customer.get("FamilyName", "").strip()
-        suffix = customer.get("Suffix", "").strip()
-        display_name = customer.get("DisplayName", "").strip()
+        title = (customer.get("Title") or "").strip()
+        given_name = (customer.get("GivenName") or "").strip()
+        middle_name = (customer.get("MiddleName") or "").strip()
+        family_name = (customer.get("FamilyName") or "").strip()
+        suffix = (customer.get("Suffix") or "").strip()
+        display_name = (customer.get("DisplayName") or "").strip()
 
         # Check if this is a couple based on DisplayName patterns
         is_couple = False
