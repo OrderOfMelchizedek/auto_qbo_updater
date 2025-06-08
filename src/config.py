@@ -27,29 +27,41 @@ def get_backends() -> Tuple[StorageBackend, SessionBackend]:
     Returns:
         Tuple of (StorageBackend, SessionBackend) instances
     """
-    # Check if we're in production mode (Redis and AWS configured)
+    # Check for Redis availability
     redis_url = os.getenv("REDIS_URL")
+
+    # Check for AWS S3 configuration
     aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
     aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
     aws_bucket = os.getenv("AWS_S3_BUCKET")
 
-    if redis_url and aws_access_key and aws_secret_key and aws_bucket:
-        # Production mode
-        logger.info("Using production backends: S3 storage and Redis session")
+    # Initialize storage backend
+    if aws_access_key and aws_secret_key and aws_bucket:
+        logger.info("Using S3 storage backend")
         try:
             storage: StorageBackend = S3Storage()
-            session: SessionBackend = RedisSession()
-            return storage, session
         except Exception as e:
-            logger.error(f"Failed to initialize production backends: {e}")
-            logger.info("Falling back to local backends")
+            logger.error(f"Failed to initialize S3 storage: {e}")
+            logger.info("Falling back to local storage")
+            storage = LocalStorage()
+    else:
+        logger.info("Using local storage backend")
+        storage = LocalStorage()
 
-    # Development mode
-    logger.info("Using development backends: Local storage and JSON session")
-    dev_storage: StorageBackend = LocalStorage()
-    dev_session: SessionBackend = LocalSession()
+    # Initialize session backend - use Redis if available
+    if redis_url:
+        logger.info("Using Redis session backend")
+        try:
+            session: SessionBackend = RedisSession()
+        except Exception as e:
+            logger.error(f"Failed to initialize Redis session: {e}")
+            logger.info("Falling back to local session")
+            session = LocalSession()
+    else:
+        logger.info("Using local JSON session backend")
+        session = LocalSession()
 
-    return dev_storage, dev_session
+    return storage, session
 
 
 # Global instances

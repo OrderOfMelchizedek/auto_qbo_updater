@@ -292,7 +292,21 @@ class RedisSession(SessionBackend):
         if not redis_url:
             raise ValueError("REDIS_URL environment variable not set")
 
-        self.redis_client = redis.from_url(redis_url, decode_responses=True)
+        # Handle SSL for Heroku Redis
+        if redis_url.startswith("rediss://"):
+            # Use SSL but disable cert verification for Heroku
+            self.redis_client = redis.from_url(
+                redis_url,
+                decode_responses=True,
+                ssl_cert_reqs=None,
+                ssl_ca_certs=None,
+                ssl_certfile=None,
+                ssl_keyfile=None,
+                ssl_check_hostname=False,
+            )
+        else:
+            self.redis_client = redis.from_url(redis_url, decode_responses=True)
+
         self.key_prefix = "donation_upload:"
         self.ttl_seconds = 86400 * 7  # 7 days
 
