@@ -298,6 +298,13 @@ class RedisSession(SessionBackend):
             self.redis_client = redis.from_url(
                 redis_url,
                 decode_responses=True,
+                max_connections=5,
+                socket_keepalive=True,
+                socket_keepalive_options={
+                    1: 1,  # TCP_KEEPIDLE
+                    2: 3,  # TCP_KEEPINTVL
+                    3: 5,  # TCP_KEEPCNT
+                },
                 ssl_cert_reqs=None,
                 ssl_ca_certs=None,
                 ssl_certfile=None,
@@ -305,7 +312,17 @@ class RedisSession(SessionBackend):
                 ssl_check_hostname=False,
             )
         else:
-            self.redis_client = redis.from_url(redis_url, decode_responses=True)
+            self.redis_client = redis.from_url(
+                redis_url,
+                decode_responses=True,
+                max_connections=5,
+                socket_keepalive=True,
+                socket_keepalive_options={
+                    1: 1,  # TCP_KEEPIDLE
+                    2: 3,  # TCP_KEEPINTVL
+                    3: 5,  # TCP_KEEPCNT
+                },
+            )
 
         self.key_prefix = "donation_upload:"
         self.ttl_seconds = 86400 * 7  # 7 days
