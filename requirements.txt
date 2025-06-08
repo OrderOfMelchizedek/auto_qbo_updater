@@ -11,3 +11,4 @@ werkzeug==3.0.1
 intuit-oauth==1.2.4
 python-jose==3.3.0
 cryptography==42.0.5
+celery==5.3.4
