@@ -46,82 +46,16 @@ def generate_search_variations(aliases: List[str], org_name: str = "") -> List[s
     variations = []
     seen = set()
 
-    # Process individual name aliases
+    # Use the aliases as they are - they already contain variations
     for alias in aliases:
-        # Add original
         if alias and alias not in seen:
             variations.append(alias)
             seen.add(alias)
 
-        # Normalize and add
-        normalized = normalize_name(alias)
-        if normalized and normalized not in seen:
-            variations.append(normalized)
-            seen.add(normalized)
-
-        # Split name parts
-        parts = normalized.split()
-
-        if len(parts) >= 2:
-            # Try without middle name/initial
-            if len(parts) >= 3:
-                # First + Last
-                name_no_middle = f"{parts[0]} {parts[-1]}"
-                if name_no_middle not in seen:
-                    variations.append(name_no_middle)
-                    seen.add(name_no_middle)
-
-            # Last name only
-            last_name = parts[-1]
-            if last_name not in seen and len(last_name) > 2:
-                variations.append(last_name)
-                seen.add(last_name)
-
-            # Handle "Last, First" format
-            if "," in alias:
-                # Already handled by normalization
-                pass
-
-    # Process organization name
-    if org_name:
-        # Add original
-        if org_name not in seen:
-            variations.append(org_name)
-            seen.add(org_name)
-
-        # Normalize
-        normalized_org = normalize_name(org_name)
-        if normalized_org and normalized_org not in seen:
-            variations.append(normalized_org)
-            seen.add(normalized_org)
-
-        # Extract significant words (longer than 3 chars)
-        org_words = [word for word in normalized_org.split() if len(word) > 3]
-
-        # Common words to skip
-        skip_words = {"the", "and", "inc", "llc", "corp", "corporation", "company"}
-        org_words = [w for w in org_words if w.lower() not in skip_words]
-
-        # Try significant word combinations
-        if len(org_words) >= 2:
-            # First two significant words
-            two_words = " ".join(org_words[:2])
-            if two_words not in seen:
-                variations.append(two_words)
-                seen.add(two_words)
-
-            # Most significant single word
-            if org_words[0] not in seen and len(org_words[0]) > 4:
-                variations.append(org_words[0])
-                seen.add(org_words[0])
-
-        # Handle special cases like "DAFgiving360"
-        # Split on case changes
-        case_split = re.sub(r"([A-Z]+)([a-z])", r"\1 \2", org_name)
-        case_split = re.sub(r"([a-z])([A-Z])", r"\1 \2", case_split)
-        if case_split != org_name and case_split not in seen:
-            variations.append(case_split)
-            seen.add(case_split)
+    # Add organization name if present
+    if org_name and org_name not in seen:
+        variations.append(org_name)
+        seen.add(org_name)
 
     return variations
 
@@ -347,66 +281,55 @@ class CustomerMatcher:
         logger.info(f"Generated search variations: {search_variations}")
 
         # Search for customer using variations
-        search_results = []
         searched_ids = set()  # Track customer IDs to avoid duplicates
+        best_match = None
+        best_score = 0.0
 
         for search_term in search_variations:
             try:
                 logger.debug(f"Searching for: '{search_term}'")
                 results = self.data_source.search_customer(search_term)
+                logger.debug(f"Found {len(results)} results for '{search_term}'")
 
-                # Add unique results
+                # Score results immediately to potentially stop early
                 for customer in results:
                     customer_id = customer.get("Id")
                     if customer_id and customer_id not in searched_ids:
-                        search_results.append(customer)
                         searched_ids.add(customer_id)
 
-                logger.debug(f"Found {len(results)} results for '{search_term}'")
+                        # Score this customer
+                        score = calculate_match_score(donation, customer)
+                        logger.debug(
+                            f"Customer '{customer.get('DisplayName')}' "
+                            f"(ID: {customer_id}) scored {score}"
+                        )
+
+                        if score > best_score:
+                            best_score = score
+                            best_match = customer
+
+                        # If we found a perfect or near-perfect match, stop searching
+                        if score >= 95:
+                            logger.info(
+                                f"Found excellent match: "
+                                f"'{customer.get('DisplayName')}' "
+                                f"with score {score}. Stopping search."
+                            )
+                            break
+
+                # Stop outer loop if we found an excellent match
+                if best_score >= 95:
+                    break
 
             except QuickBooksError as e:
                 logger.error(f"QuickBooks search failed for '{search_term}': {e}")
                 raise
 
-        # If no search results, return new customer
-        if not search_results:
+        # If no match found, return new customer
+        if not best_match or best_score < 50:
             logger.info(
-                "No QuickBooks customers found for search variations: "
-                f"{search_variations}"
-            )
-            return {
-                "match_status": "new_customer",
-                "customer_ref": None,
-                "qb_address": None,
-                "qb_email": [],
-                "qb_phone": [],
-                "updates_needed": {
-                    "address": False,
-                    "email_added": False,
-                    "phone_added": False,
-                },
-            }
-
-        # Score and find best match
-        best_match = None
-        best_score = 0.0
-
-        logger.debug(f"Scoring {len(search_results)} potential matches")
-        for customer in search_results:
-            score = calculate_match_score(donation, customer)
-            logger.debug(
-                f"Customer '{customer.get('DisplayName')}' "
-                f"(ID: {customer.get('Id')}) scored {score}"
-            )
-            if score > best_score:
-                best_score = score
-                best_match = customer
-
-        # If no good match found
-        if best_score < 50 or not best_match:
-            logger.info(
-                f"No good match found (best score: {best_score}). "
-                "Marking as new customer"
+                f"No good match found (best score: {best_score}) for "
+                f"search variations: {search_variations}"
             )
             return {
                 "match_status": "new_customer",
