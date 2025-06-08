@@ -60,10 +60,19 @@ def process_donations_task(
 
         # Check for CSV path in local dev mode
         csv_path = None
-        if not session_id and os.getenv("LOCAL_DEV_MODE") == "true":
-            csv_path = Path("src/tests/test_files/customer_contact_list.csv")
+        if os.getenv("LOCAL_DEV_MODE") == "true":
+            # Use absolute path to ensure it's found
+            csv_path = (
+                Path(__file__).parent.parent
+                / "src/tests/test_files/customer_contact_list.csv"
+            )
+            logger.info(f"Local dev mode: Checking for CSV at {csv_path}")
             if csv_path.exists():
-                logger.info("Local dev mode: Using CSV for customer matching")
+                logger.info(
+                    f"Local dev mode: Using CSV for customer matching at {csv_path}"
+                )
+            else:
+                logger.error(f"Local dev mode: CSV file not found at {csv_path}")
 
         # Process documents with progress updates
         job_tracker.update_progress(
