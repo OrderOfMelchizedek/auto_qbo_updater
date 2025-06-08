@@ -109,6 +109,10 @@ src/tests/test_files/
 # CSV files (may contain credentials)
 *.csv
 
+# Log files
+logs/
+*.log
+
 # Local storage and session data
 uploaded_documents/
 session_data/
