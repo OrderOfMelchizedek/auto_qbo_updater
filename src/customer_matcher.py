@@ -141,9 +141,34 @@ def calculate_match_score(donation: Dict[str, Any], customer: Dict[str, Any]) ->
             best_score = max(best_score, 98.0)
             continue
 
-        # Check component names
+        # Split both alias and display name into parts for flexible matching
         alias_parts = normalized_alias.split()
+        display_parts = normalized_display.split()
 
+        # Handle "Last, First" format in display name
+        if "," in display_name:
+            # QuickBooks often uses "Last, First" format
+            comma_parts = display_name.split(",")
+            if len(comma_parts) == 2:
+                qb_last = normalize_name(comma_parts[0]).lower()
+                qb_first = normalize_name(comma_parts[1]).lower()
+
+                # Check if alias matches this format
+                if len(alias_parts) >= 2:
+                    # First Last format in alias vs Last, First in QB
+                    if alias_parts[0] == qb_first and alias_parts[-1] == qb_last:
+                        best_score = max(best_score, 95.0)
+                        continue
+
+                    # Handle middle initials/names
+                    if (alias_parts[0] == qb_first or alias_parts[-1] == qb_last) and (
+                        qb_first.startswith(alias_parts[0])
+                        or alias_parts[0].startswith(qb_first)
+                    ):
+                        best_score = max(best_score, 90.0)
+                        continue
+
+        # Check component names if we have them
         if len(alias_parts) >= 2 and given_name and family_name:
             # Exact first and last name match
             if alias_parts[0] == given_name and alias_parts[-1] == family_name:
@@ -160,22 +185,52 @@ def calculate_match_score(donation: Dict[str, Any], customer: Dict[str, Any]) ->
                 best_score = max(best_score, 85.0)
                 continue
 
+        # Check if all parts of alias are in display name (any order)
+        if len(alias_parts) >= 2 and len(display_parts) >= 2:
+            alias_set = set(alias_parts)
+            display_set = set(display_parts)
+
+            # All alias parts found in display
+            if alias_set.issubset(display_set):
+                best_score = max(best_score, 90.0)
+                continue
+
+            # Most alias parts found (allow for middle names/initials)
+            common_parts = alias_set.intersection(display_set)
+            if len(common_parts) >= min(2, len(alias_parts)):
+                best_score = max(best_score, 85.0)
+                continue
+
         # Check if customer name contains the search term
         if normalized_alias in normalized_display:
             best_score = max(best_score, 80.0)
             continue
 
         # Check last name only match
-        if len(alias_parts) >= 2 and family_name and alias_parts[-1] == family_name:
-            best_score = max(best_score, 75.0)
-            continue
+        if len(alias_parts) >= 2:
+            # Check against family name
+            if family_name and alias_parts[-1] == family_name:
+                best_score = max(best_score, 75.0)
+                continue
+
+            # Check against last part of display name
+            if len(display_parts) >= 2 and alias_parts[-1] == display_parts[-1]:
+                best_score = max(best_score, 75.0)
+                continue
 
         # Partial match - any significant word matches
         if len(alias_parts) >= 2:
             for part in alias_parts:
-                if len(part) > 2 and part in normalized_display:
-                    best_score = max(best_score, 60.0)
-                    break
+                if len(part) > 2:
+                    # Check in display name parts
+                    for display_part in display_parts:
+                        if (
+                            part == display_part
+                            or display_part.startswith(part)
+                            or part.startswith(display_part)
+                        ):
+                            best_score = max(best_score, 70.0)
+                            break
 
     # For organizations
     org_name = payer_info.get("Organization_Name", "")
@@ -299,9 +354,10 @@ class CustomerMatcher:
 
                         # Score this customer
                         score = calculate_match_score(donation, customer)
-                        logger.debug(
+                        logger.info(
                             f"Customer '{customer.get('DisplayName')}' "
-                            f"(ID: {customer_id}) scored {score}"
+                            f"(ID: {customer_id}) scored {score} "
+                            f"for search term '{search_term}'"
                         )
 
                         if score > best_score:
