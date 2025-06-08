@@ -43,5 +43,10 @@ export const processDonations = async (uploadId: string): Promise<ProcessRespons
   return response.data;
 };
 
+export const checkHealth = async (): Promise<{ status: string; local_dev_mode: boolean }> => {
+  const response = await api.get<{ status: string; local_dev_mode: boolean }>('/api/health');
+  return response.data;
+};
+
 // Export the api instance for use in other services
 export const apiService = api;

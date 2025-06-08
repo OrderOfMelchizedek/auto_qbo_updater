@@ -3,6 +3,7 @@ import glob
 import logging
 import os
 from contextlib import suppress
+from pathlib import Path
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -107,6 +108,7 @@ def health_check():
             "status": "healthy",
             "storage": type(storage_backend).__name__,
             "session": type(session_backend).__name__,
+            "local_dev_mode": os.getenv("LOCAL_DEV_MODE") == "true",
         }
     )
 
@@ -515,12 +517,23 @@ def process_files():
             # Get session ID for QuickBooks matching
             session_id = request.headers.get("X-Session-ID")
 
+            # In local dev mode without session, use CSV
+            csv_path = None
+            if not session_id and os.getenv("LOCAL_DEV_MODE") == "true":
+                csv_path = Path("src/tests/test_files/customer_contact_list.csv")
+                if csv_path.exists():
+                    logger.info("Local dev mode: Using CSV for customer matching")
+                else:
+                    logger.warning(f"Local dev mode: CSV file not found at {csv_path}")
+
             # Run extraction, validation, deduplication, and matching
             (
                 processed_donations,
                 extraction_metadata,
                 display_donations,
-            ) = process_donation_documents(file_paths, session_id=session_id)
+            ) = process_donation_documents(
+                file_paths, session_id=session_id, csv_path=csv_path
+            )
 
             # Calculate metadata
             processing_metadata = {
