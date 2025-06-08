@@ -1,19 +1,21 @@
 """Flask application with donation processing API endpoints."""
 import glob
+import json
 import logging
 import os
-from contextlib import suppress
-from pathlib import Path
+import time
+import uuid
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request, stream_with_context
 from flask_cors import CORS
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
+from .celery_app import init_celery
 from .config import Config, session_backend, storage_backend
-from .donation_processor import process_donation_documents
+from .job_tracker import JobTracker
 from .quickbooks_auth import qbo_auth
-from .storage import S3Storage
+from .tasks import process_donations_task
 
 # Configure logging
 logging.basicConfig(
@@ -36,6 +38,12 @@ else:
     # In development, use default static folder
     app = Flask(__name__)
     logger.info("Flask initialized for development mode")
+
+# Initialize Celery with Flask app context
+init_celery(app)
+
+# Initialize job tracker
+job_tracker = JobTracker(os.getenv("REDIS_URL"))
 
 app.config["MAX_CONTENT_LENGTH"] = (
     Config.MAX_FILE_SIZE_BYTES * Config.MAX_FILES_PER_UPLOAD
@@ -88,7 +96,9 @@ def hello():
             "version": "1.0.0",
             "endpoints": {
                 "/api/upload": "POST - Upload donation documents",
-                "/api/process": "POST - Process uploaded documents",
+                "/api/process": "POST - Process uploaded documents (async)",
+                "/api/jobs/{job_id}": "GET - Get job status and results",
+                "/api/jobs/{job_id}/stream": "GET - Stream job progress (SSE)",
                 "/api/health": "GET - Health check",
                 "/api/auth/qbo/authorize": "GET - Get OAuth2 authorization URL",
                 "/api/auth/qbo/callback": "GET - Handle OAuth2 callback",
@@ -305,6 +315,103 @@ def qbo_status():
         return jsonify({"success": True, "data": {"authenticated": False}})
 
 
+@app.route("/api/jobs/<job_id>", methods=["GET"])
+def get_job_status(job_id):
+    """
+    Get job status and results.
+
+    Returns:
+        JSON with job status, progress, and results if completed
+    """
+    try:
+        job = job_tracker.get_job(job_id)
+
+        if not job:
+            return jsonify({"success": False, "error": "Job not found"}), 404
+
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "id": job["id"],
+                    "status": job["status"],
+                    "stage": job["stage"],
+                    "progress": job["progress"],
+                    "created_at": job["created_at"],
+                    "updated_at": job["updated_at"],
+                    "result": job.get("result"),
+                    "error": job.get("error"),
+                    "events": job.get("events", []),
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting job status: {e}")
+        return jsonify({"success": False, "error": "Failed to get job status"}), 500
+
+
+@app.route("/api/jobs/<job_id>/stream", methods=["GET"])
+def stream_job_events(job_id):
+    """
+    Stream job progress events using Server-Sent Events.
+
+    Returns:
+        SSE stream of job updates
+    """
+
+    def generate():
+        # First, send current job status
+        job = job_tracker.get_job(job_id)
+        if job:
+            yield f"data: {json.dumps({'type': 'initial', 'job': job})}\n\n"
+
+        # Subscribe to job events
+        pubsub = job_tracker.subscribe_to_job(job_id)
+
+        try:
+            # Send heartbeat immediately
+            yield ": heartbeat\n\n"
+
+            # Listen for events
+            last_heartbeat = time.time()
+
+            while True:
+                # Check for new messages (non-blocking with timeout)
+                message = pubsub.get_message(timeout=1.0)
+
+                if message and message["type"] == "message":
+                    # Send the event data
+                    yield f"data: {message['data']}\n\n"
+
+                    # Check if job is complete
+                    event_data = json.loads(message["data"])
+                    if event_data.get("status") in ["completed", "failed"]:
+                        break
+
+                # Send heartbeat every 30 seconds to keep connection alive
+                current_time = time.time()
+                if current_time - last_heartbeat > 30:
+                    yield ": heartbeat\n\n"
+                    last_heartbeat = current_time
+
+        except GeneratorExit:
+            # Client disconnected
+            pass
+        finally:
+            pubsub.close()
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # Disable Nginx buffering
+            "Connection": "keep-alive",
+        },
+    )
+
+
 @app.route("/api/debug/build", methods=["GET"])
 def debug_build():
     """Debug endpoint to check build directory contents."""
@@ -468,13 +575,13 @@ def upload_files():
 @app.route("/api/process", methods=["POST"])
 def process_files():
     """
-    Process uploaded donation documents.
+    Process uploaded donation documents asynchronously.
 
     Expects JSON with upload_id.
-    Runs Gemini extraction, validation, and deduplication.
+    Queues job for background processing.
 
     Returns:
-        JSON response with processed donations and metadata
+        JSON response with job_id for tracking
     """
     try:
         # Get upload_id from request
@@ -497,104 +604,43 @@ def process_files():
                     "data": {
                         "donations": metadata.get("donations", []),
                         "metadata": metadata.get("processing_metadata", {}),
+                        "status": "completed",
                     },
                 }
             )
 
-        # Get file paths based on storage backend
-        if isinstance(storage_backend, S3Storage):
-            # For S3, download files to temp directory
-            temp_paths = storage_backend.download_batch_to_temp(upload_id)
-            file_paths = [str(p) for p in temp_paths]
-        else:
-            # For local storage, use paths directly
-            file_paths = storage_backend.get_file_paths(upload_id)
+        # Get session ID for QuickBooks matching
+        session_id = request.headers.get("X-Session-ID")
 
-        # Process the documents
-        try:
-            logger.info(f"Processing {len(file_paths)} files for upload {upload_id}")
+        # Generate job ID
+        job_id = str(uuid.uuid4())
 
-            # Get session ID for QuickBooks matching
-            session_id = request.headers.get("X-Session-ID")
+        # Create job entry
+        job_data = {
+            "upload_id": upload_id,
+            "session_id": session_id,
+            "files_count": len(metadata.get("files", [])),
+        }
+        job_tracker.create_job(job_id, job_data)
 
-            # In local dev mode without session, use CSV
-            csv_path = None
-            if not session_id and os.getenv("LOCAL_DEV_MODE") == "true":
-                csv_path = Path("src/tests/test_files/customer_contact_list.csv")
-                if csv_path.exists():
-                    logger.info("Local dev mode: Using CSV for customer matching")
-                else:
-                    logger.warning(f"Local dev mode: CSV file not found at {csv_path}")
+        # Queue the processing task
+        process_donations_task.apply_async(
+            args=[job_id, upload_id, session_id], task_id=job_id
+        )
 
-            # Run extraction, validation, deduplication, and matching
-            (
-                processed_donations,
-                extraction_metadata,
-                display_donations,
-            ) = process_donation_documents(
-                file_paths, session_id=session_id, csv_path=csv_path
-            )
+        logger.info(f"Queued job {job_id} for upload {upload_id}")
 
-            # Calculate metadata
-            processing_metadata = {
-                "files_processed": len(file_paths),
-                "valid_count": extraction_metadata["valid_count"],
-                "raw_count": extraction_metadata["raw_count"],
-                "duplicate_count": extraction_metadata["duplicate_count"],
-                "matched_count": extraction_metadata.get("matched_count", 0),
-            }
-
-            # Update session with results
-            session_backend.update_upload_metadata(
-                upload_id,
-                {
-                    "status": "processed",
-                    "donations": display_donations,
-                    "raw_donations": processed_donations,
-                    "processing_metadata": processing_metadata,
+        # Return job ID for tracking
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "job_id": job_id,
+                    "status": "queued",
+                    "message": "Processing queued",
                 },
-            )
-
-            # Clean up temp files if using S3
-            if isinstance(storage_backend, S3Storage):
-                for temp_path in temp_paths:
-                    with suppress(Exception):
-                        temp_path.unlink()
-
-            return jsonify(
-                {
-                    "success": True,
-                    "data": {
-                        "donations": display_donations,  # Use display-ready format
-                        "raw_donations": processed_donations,  # Keep raw for debugging
-                        "metadata": processing_metadata,
-                    },
-                }
-            )
-
-        except Exception as e:
-            logger.error(f"Processing error: {e}")
-
-            # Clean up temp files if using S3
-            if isinstance(storage_backend, S3Storage) and "temp_paths" in locals():
-                for temp_path in temp_paths:
-                    with suppress(Exception):
-                        temp_path.unlink()
-
-            # Update status
-            session_backend.update_upload_metadata(
-                upload_id, {"status": "failed", "error": str(e)}
-            )
-
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": f"Failed to process documents: {str(e)}",
-                    }
-                ),
-                500,
-            )
+            }
+        )
 
     except Exception as e:
         logger.error(f"Process endpoint error: {e}")

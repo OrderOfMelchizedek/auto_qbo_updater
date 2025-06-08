@@ -1,1 +1,2 @@
 - Any variable not being used should be removed.
+- Make sure to implement full, long-term solutions to issues you encounter. No hacks or workarounds unless the user explicitly asks you for a quick fix.

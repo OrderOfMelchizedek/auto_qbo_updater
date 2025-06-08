@@ -35,12 +35,50 @@ export const uploadFiles = async (files: File[]): Promise<UploadResponse> => {
   return response.data;
 };
 
-export const processDonations = async (uploadId: string): Promise<ProcessResponse> => {
-  const response = await api.post<ProcessResponse>('/api/process', {
+export const processDonations = async (uploadId: string): Promise<{ success: boolean; data: { job_id: string; status: string; message: string } }> => {
+  const response = await api.post<{ success: boolean; data: { job_id: string; status: string; message: string } }>('/api/process', {
     upload_id: uploadId,
   });
 
   return response.data;
+};
+
+export const getJobStatus = async (jobId: string): Promise<{
+  success: boolean;
+  data: {
+    id: string;
+    status: string;
+    stage: string;
+    progress: number;
+    created_at: string;
+    updated_at: string;
+    result?: ProcessResponse['data'];
+    error?: string;
+    events: any[];
+  };
+}> => {
+  const response = await api.get(`/api/jobs/${jobId}`);
+  return response.data;
+};
+
+export const streamJobEvents = (jobId: string, onMessage: (event: any) => void, onError?: (error: any) => void): EventSource => {
+  const eventSource = new EventSource(`${API_BASE_URL}/api/jobs/${jobId}/stream`);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage(data);
+    } catch (error) {
+      console.error('Failed to parse SSE data:', error);
+    }
+  };
+
+  eventSource.onerror = (error) => {
+    console.error('SSE error:', error);
+    if (onError) onError(error);
+  };
+
+  return eventSource;
 };
 
 export const checkHealth = async (): Promise<{ status: string; local_dev_mode: boolean }> => {

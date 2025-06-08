@@ -7,6 +7,7 @@ import { ProcessingStatus } from './components/ProcessingStatus';
 import { uploadFiles, processDonations } from './services/api';
 import { authService } from './services/authService';
 import { FinalDisplayDonation, ProcessingMetadata } from './types';
+import { Loader } from 'lucide-react';
 
 function App() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -37,9 +38,12 @@ function App() {
     checkAuth();
   }, []);
 
+  const [jobId, setJobId] = useState<string | null>(null);
+
   const handleFilesUpload = async (files: File[]) => {
     setError(null);
     setIsProcessing(true);
+    setJobId(null);
 
     try {
       // Upload files
@@ -47,15 +51,30 @@ function App() {
       const newUploadId = uploadResponse.data.upload_id;
       setUploadId(newUploadId);
 
-      // Process documents
+      // Start processing (returns job ID)
       const processResponse = await processDonations(newUploadId);
-      setDonations(processResponse.data.donations);
-      setMetadata(processResponse.data.metadata);
+      if (processResponse.success && processResponse.data.job_id) {
+        setJobId(processResponse.data.job_id);
+      } else {
+        throw new Error('Failed to start processing');
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'An error occurred during processing');
-    } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleProcessingComplete = (result: any) => {
+    setDonations(result.donations);
+    setMetadata(result.metadata);
+    setIsProcessing(false);
+    setJobId(null);
+  };
+
+  const handleProcessingError = (error: string) => {
+    setError(error);
+    setIsProcessing(false);
+    setJobId(null);
   };
 
   const handleDonationUpdate = (index: number, updatedDonation: FinalDisplayDonation) => {
@@ -180,7 +199,19 @@ function App() {
               onAuthRequired={() => setTriggerAuth(true)}
             />
             {error && <div className="error-message">{error}</div>}
-            {isProcessing && <ProcessingStatus />}
+            {isProcessing && jobId && (
+              <ProcessingStatus
+                jobId={jobId}
+                onComplete={handleProcessingComplete}
+                onError={handleProcessingError}
+              />
+            )}
+            {isProcessing && !jobId && (
+              <div className="processing-status">
+                <Loader className="spinner" size={32} />
+                <p>Uploading files...</p>
+              </div>
+            )}
             {metadata && !isProcessing && (
               <div className="processing-results">
                 <h3>Processing Complete</h3>

@@ -15,6 +15,7 @@ def process_donation_documents(
     file_paths: List[Union[str, Path]],
     session_id: Optional[str] = None,
     csv_path: Optional[Path] = None,
+    progress_callback=None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int], List[Dict[str, Any]]]:
     """
     Process donation documents: extract, validate, deduplicate, and match.
