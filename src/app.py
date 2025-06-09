@@ -14,7 +14,9 @@ from werkzeug.utils import secure_filename
 from .celery_app import init_celery
 from .config import Config, session_backend, storage_backend
 from .job_tracker import JobTracker
+from .customer_matcher import CustomerMatcher
 from .quickbooks_auth import qbo_auth
+from .quickbooks_utils import QuickBooksError
 from .tasks import process_donations_task
 
 # Configure logging
@@ -645,12 +647,119 @@ def process_files():
             }
         )
 
+
+@app.route("/api/search_customers", methods=["GET"])
+def search_customers():
+    """Search for customers in QuickBooks."""
+    try:
+        search_term = request.args.get("search_term")
+        if not search_term:
+            return jsonify({"success": False, "error": "Missing search_term"}), 400
+
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            return jsonify({"success": False, "error": "Missing X-Session-ID header"}), 400
+
+        customer_matcher = CustomerMatcher(session_id)
+        customers = customer_matcher.data_source.search_customer(search_term)
+
+        return jsonify({"success": True, "data": customers})
+
+    except QuickBooksError as e:
+        logger.error(f"QuickBooks API error in search_customers: {e}")
+        return jsonify({"success": False, "error": str(e), "details": e.detail}), e.status_code
     except Exception as e:
-        logger.error(f"Process endpoint error: {e}")
-        return (
-            jsonify({"success": False, "error": "An error occurred during processing"}),
-            500,
-        )
+        logger.error(f"Error searching customers: {e}")
+        return jsonify({"success": False, "error": "Failed to search customers"}), 500
+
+
+@app.route("/api/manual_match", methods=["POST"])
+def manual_match():
+    """Manually match a donation to a QuickBooks customer and return updated donation."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "Invalid JSON payload"}), 400
+
+        original_donation = data.get("donation")
+        qb_customer_id = data.get("qb_customer_id")
+
+        if not original_donation or not qb_customer_id:
+            return jsonify({"success": False, "error": "Missing 'donation' or 'qb_customer_id'"}), 400
+
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            return jsonify({"success": False, "error": "Missing X-Session-ID header"}), 400
+
+        customer_matcher = CustomerMatcher(session_id)
+
+        # Fetch the full details of the selected QuickBooks customer
+        qb_customer_detail = customer_matcher.data_source.get_customer(qb_customer_id)
+        if not qb_customer_detail:
+            # This case might be handled by QuickBooksError if get_customer raises it for not found
+            return jsonify({"success": False, "error": f"QuickBooks customer with ID {qb_customer_id} not found"}), 404
+
+        # Format the fetched customer data
+        formatted_qb_customer = customer_matcher.data_source.format_customer_data(qb_customer_detail)
+
+        # Prepare original donation data for merge_customer_data
+        # merge_customer_data expects a dict with "PayerInfo" and "ContactInfo"
+        # Assuming original_donation (FinalDisplayDonation) has 'payer_info' and 'contact_info' keys
+        original_payer_contact_info = {
+            "PayerInfo": original_donation.get("payer_info", {}),
+            "ContactInfo": original_donation.get("contact_info", {})
+        }
+
+        # Merge the data
+        merged_data = customer_matcher.merge_customer_data(original_payer_contact_info, formatted_qb_customer)
+
+        # Update the original_donation object with the merged data
+        # Ensure payer_info exists
+        if "payer_info" not in original_donation:
+            original_donation["payer_info"] = {}
+
+        original_donation["payer_info"]["customer_ref"] = merged_data.get("customer_ref")
+        original_donation["payer_info"]["qb_address"] = merged_data.get("qb_address")
+        original_donation["payer_info"]["qb_email"] = merged_data.get("qb_email")
+        original_donation["payer_info"]["qb_phone"] = merged_data.get("qb_phone")
+
+        # Update name fields if they are part of customer_ref and need to be directly on payer_info
+        # This depends on FinalDisplayDonation structure and what merge_customer_data returns in customer_ref
+        if merged_data.get("customer_ref"):
+            original_donation["payer_info"]["qb_display_name"] = merged_data["customer_ref"].get("display_name")
+            original_donation["payer_info"]["qb_given_name"] = merged_data["customer_ref"].get("given_name")
+            original_donation["payer_info"]["qb_family_name"] = merged_data["customer_ref"].get("family_name")
+            original_donation["payer_info"]["qb_organization_name"] = merged_data["customer_ref"].get("organization_name")
+
+
+        # Update status
+        if "status" not in original_donation:
+            original_donation["status"] = {}
+
+        original_donation["status"]["matched"] = True
+        original_donation["status"]["new_customer"] = False # It's a match to an existing customer
+        original_donation["status"]["sent_to_qb"] = False # Not yet sent, just matched
+
+        # Determine if address was updated by comparing old and new, if necessary
+        # For now, if updates_needed is true, we can assume some edit/update happened.
+        # The 'updates_needed' from merge_customer_data can signify if QBO data differs from original.
+        updates_needed = merged_data.get("updates_needed", False)
+        if updates_needed:
+            original_donation["status"]["edited"] = True # Indicates a change was made or identified
+            # We might need more fine-grained logic for address_updated if original_donation had an address
+            # and it changed. For now, let's assume 'edited' covers this.
+            # original_donation["status"]["address_updated"] = True # If qb_address changed specifically
+
+        return jsonify({"success": True, "data": original_donation})
+
+    except QuickBooksError as e:
+        logger.error(f"QuickBooks API error in manual_match: {e}")
+        return jsonify({"success": False, "error": str(e), "details": e.detail}), e.status_code
+    except Exception as e:
+        logger.error(f"Error in manual_match: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": "Failed to process manual match"}), 500
 
 
 # Specific route for auth callback
