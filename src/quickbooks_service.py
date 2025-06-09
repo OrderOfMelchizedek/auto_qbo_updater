@@ -314,3 +314,69 @@ class QuickBooksClient:
 
         # Ensure it's 5 digits with leading zeros preserved
         return zip_code.strip()
+
+    def create_customer(self, customer_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create a new customer in QuickBooks.
+
+        Args:
+            customer_data: Dictionary containing customer information.
+                           Expected keys: DisplayName, GivenName, FamilyName,
+                           CompanyName, PrimaryEmailAddr, PrimaryPhone, BillAddr.
+
+        Returns:
+            The created customer data from the API response.
+
+        Raises:
+            ValueError: If DisplayName is missing.
+            QuickBooksError: If API request fails.
+        """
+        if not customer_data.get("DisplayName"):
+            raise ValueError("DisplayName is required to create a customer.")
+
+        payload = {
+            "DisplayName": customer_data["DisplayName"],
+            "GivenName": customer_data.get("GivenName"),
+            "FamilyName": customer_data.get("FamilyName"),
+            "CompanyName": customer_data.get("CompanyName"),
+        }
+
+        if customer_data.get("PrimaryEmailAddr"):
+            payload["PrimaryEmailAddr"] = {
+                "Address": customer_data["PrimaryEmailAddr"]
+            }
+
+        if customer_data.get("PrimaryPhone"):
+            payload["PrimaryPhone"] = {
+                "FreeFormNumber": customer_data["PrimaryPhone"]
+            }
+
+        bill_addr = customer_data.get("BillAddr")
+        if bill_addr and isinstance(bill_addr, dict):
+            payload["BillAddr"] = {
+                "Line1": bill_addr.get("Line1"),
+                "City": bill_addr.get("City"),
+                "CountrySubDivisionCode": bill_addr.get("CountrySubDivisionCode"),
+                "PostalCode": bill_addr.get("PostalCode"),
+            }
+
+        # Remove keys with None values to keep payload clean
+        payload = {k: v for k, v in payload.items() if v is not None}
+
+        try:
+            response = self._make_request(
+                "POST", "/customer", json=payload
+            )
+            # QuickBooks API typically returns the created object under a key
+            # like "Customer" in the JSON response.
+            return response.json().get("Customer", response.json())
+        except QuickBooksError as e:
+            logger.error(f"Failed to create customer: {e}")
+            # Re-raise the error to be handled by the caller
+            raise
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error during customer creation: {e}")
+            raise QuickBooksError(f"Network error: {e}")
+        except ValueError as e: # Handles JSON decoding errors
+            logger.error(f"Error decoding JSON response from customer creation: {e}")
+            raise QuickBooksError(f"JSON decode error: {e}")
