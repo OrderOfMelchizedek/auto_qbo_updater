@@ -104,7 +104,7 @@ describe('DonationsTable', () => {
     manualMatchModalProps = null;
     triggerModalOnMatch = null;
     localStorage.clear();
-    localStorage.setItem('session_id', 'test-session-id');
+    localStorage.setItem('qbo_session_id', 'test-session-id');
 
     mockOnUpdate = jest.fn();
     mockOnDelete = jest.fn();

@@ -51,12 +51,13 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
 
     const { donation: currentDonation, index: donationIndex } = selectedDonationForMatch;
 
-    const sessionId = localStorage.getItem('session_id');
-    if (!sessionId) {
-      setErrorModal('Session ID not found. Please login again.');
-      setIsManualMatchModalOpen(false);
-      setSelectedDonationForMatch(null);
-      return;
+    // Build headers - only add session ID if it exists (for production)
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    const sessionId = localStorage.getItem('qbo_session_id');
+    if (sessionId) {
+      headers['X-Session-ID'] = sessionId;
     }
 
     // Store original data before API call
@@ -84,10 +85,7 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
     try {
       const response = await fetch('/api/manual_match', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-ID': sessionId,
-        },
+        headers,
         body: JSON.stringify({
           donation: currentDonation, // Send current donation state
           qb_customer_id: selectedCustomer.Id,
@@ -423,6 +421,13 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
           }}
           donation={selectedDonationForMatch.donation}
           onMatch={handleManualMatchSelect}
+          onNewCustomer={() => {
+            setIsManualMatchModalOpen(false);
+            setSelectedDonationForMatch(null);
+            if (selectedDonationForMatch) {
+              onNewCustomer(selectedDonationForMatch.donation, selectedDonationForMatch.index);
+            }
+          }}
         />
       )}
 

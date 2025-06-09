@@ -4,7 +4,7 @@ import FileUpload from './components/FileUpload';
 import DonationsTable from './components/DonationsTable';
 import QuickBooksConnection from './components/QuickBooksConnection';
 import { ProcessingStatus } from './components/ProcessingStatus';
-import { uploadFiles, processDonations } from './services/api';
+import { uploadFiles, processDonations, checkHealth } from './services/api';
 import { authService } from './services/authService';
 import { FinalDisplayDonation, ProcessingMetadata } from './types';
 import { Loader } from 'lucide-react';
@@ -20,10 +20,26 @@ function App() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [authCheckComplete, setAuthCheckComplete] = useState(false);
   const [triggerAuth, setTriggerAuth] = useState(false);
+  const [isLocalDevMode, setIsLocalDevMode] = useState(false);
 
   useEffect(() => {
-    // Check initial auth status
-    const checkAuth = async () => {
+    // Check if running in local dev mode
+    const checkDevMode = async () => {
+      try {
+        const health = await checkHealth();
+        setIsLocalDevMode(health.local_dev_mode);
+
+        // If in local dev mode, automatically mark as "connected"
+        if (health.local_dev_mode) {
+          setIsConnectedToQB(true);
+          setAuthCheckComplete(true);
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking health:', error);
+      }
+
+      // Only check auth status if not in local dev mode
       try {
         const status = await authService.checkAuthStatus();
         if (status && typeof status.authenticated === 'boolean') {
@@ -35,7 +51,7 @@ function App() {
       setAuthCheckComplete(true);
     };
 
-    checkAuth();
+    checkDevMode();
   }, []);
 
   const [jobId, setJobId] = useState<string | null>(null);
@@ -187,6 +203,7 @@ function App() {
           onDisconnect={() => setIsConnectedToQB(false)}
           triggerAuth={triggerAuth}
           onAuthTriggered={() => setTriggerAuth(false)}
+          isLocalDevMode={isLocalDevMode}
         />
       </header>
 
