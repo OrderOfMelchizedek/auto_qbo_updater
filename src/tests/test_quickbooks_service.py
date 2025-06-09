@@ -303,13 +303,17 @@ class TestQuickBooksClient:
     # Tests for create_customer method
     def test_create_customer_success(self, client, mock_auth):
         """Test successful customer creation via QuickBooksClient."""
-        mock_response_data = {"Customer": {"Id": "123", "DisplayName": "New Test Customer"}}
+        mock_response_data = {
+            "Customer": {"Id": "123", "DisplayName": "New Test Customer"}
+        }
         mock_api_response = MagicMock()
         mock_api_response.status_code = 200
         mock_api_response.json.return_value = mock_response_data
 
         # Patch _make_request for this specific client instance
-        with patch.object(client, "_make_request", return_value=mock_api_response) as mock_make_request:
+        with patch.object(
+            client, "_make_request", return_value=mock_api_response
+        ) as mock_make_request:
             customer_data_input = {
                 "DisplayName": "New Test Customer",
                 "GivenName": "New",
@@ -353,7 +357,9 @@ class TestQuickBooksClient:
 
     def test_create_customer_api_error(self, client, mock_auth):
         """Test create_customer propagates QuickBooksError from _make_request."""
-        with patch.object(client, "_make_request", side_effect=QuickBooksError("API failure")) as mock_make_request:
+        with patch.object(
+            client, "_make_request", side_effect=QuickBooksError("API failure")
+        ) as mock_make_request:
             with pytest.raises(QuickBooksError) as exc_info:
                 client.create_customer(customer_data={"DisplayName": "Error Case"})
             assert "API failure" in str(exc_info.value)
@@ -363,91 +369,64 @@ class TestQuickBooksClient:
         """Test payload construction with only DisplayName."""
         mock_api_response = MagicMock()
         mock_api_response.status_code = 200
-        mock_api_response.json.return_value = {"Customer": {"Id": "1", "DisplayName": "Minimal Customer"}}
+        mock_api_response.json.return_value = {
+            "Customer": {"Id": "1", "DisplayName": "Minimal Customer"}
+        }
 
-        with patch.object(client, "_make_request", return_value=mock_api_response) as mock_make_request:
+        with patch.object(
+            client, "_make_request", return_value=mock_api_response
+        ) as mock_make_request:
             customer_data_input = {"DisplayName": "Minimal Customer"}
             expected_payload = {"DisplayName": "Minimal Customer"}
 
             client.create_customer(customer_data=customer_data_input)
-            mock_make_request.assert_called_once_with("POST", "/customer", json=expected_payload)
+            mock_make_request.assert_called_once_with(
+                "POST", "/customer", json=expected_payload
+            )
 
-    def test_create_customer_payload_construction_optional_fields_none(self, client, mock_auth):
+    def test_create_customer_payload_construction_optional_fields_none(
+        self, client, mock_auth
+    ):
         """Test payload construction when optional fields are None or empty string."""
         mock_api_response = MagicMock()
         mock_api_response.status_code = 200
-        mock_api_response.json.return_value = {"Customer": {"Id": "1", "DisplayName": "Optional None"}}
+        mock_api_response.json.return_value = {
+            "Customer": {"Id": "1", "DisplayName": "Optional None"}
+        }
 
-        with patch.object(client, "_make_request", return_value=mock_api_response) as mock_make_request:
+        with patch.object(
+            client, "_make_request", return_value=mock_api_response
+        ) as mock_make_request:
             customer_data_input = {
                 "DisplayName": "Optional None",
-                "GivenName": None, # Should be excluded from payload
-                "FamilyName": "",   # Should be excluded from payload
-                "PrimaryEmailAddr": None, # Should be excluded
-                "BillAddr": {"Line1": None, "City": ""} # BillAddr itself should be excluded if all sub-fields are None/empty
+                "GivenName": None,  # Should be excluded from payload
+                "FamilyName": "",  # Should be excluded from payload
+                "PrimaryEmailAddr": None,  # Should be excluded
+                "BillAddr": {
+                    "Line1": None,
+                    "City": "",
+                },  # Should be excluded if all sub-fields are None/empty
             }
-            # The create_customer method filters out None values, so the payload would be minimal
-            expected_payload = {
-                "DisplayName": "Optional None",
-            }
-
+            # The create_customer method filters out None values,
+            # so the payload would be minimal
             client.create_customer(customer_data=customer_data_input)
-            # The current implementation of create_customer in quickbooks_service.py
-            # will filter out top-level keys if their value is None.
-            # For nested structures like BillAddr, if BillAddr itself is constructed but all its sub-fields are None,
-            # the current filtering logic `{k: v for k, v in payload.items() if v is not None}`
-            # might still include an empty BillAddr if it was initially an empty dict, or if not all sub-fields were None.
-            # The test reflects that if `customer_data.get("BillAddr")` returns a dict, it will be processed.
-            # If BillAddr sub-fields are None, they are not included in the BillAddr object in payload.
-            # If all sub-fields of BillAddr are None, it results in `payload["BillAddr"] = {}`.
-            # This empty BillAddr would then be filtered out by the final payload cleanup if BillAddr itself was `None`
-            # but not if it was an empty dict that became `{}`. Let's assume the service code handles empty strings becoming None.
-            # The service code does: `payload = {k: v for k, v in payload.items() if v is not None}`
-            # And for BillAddr: `payload["BillAddr"] = { "Line1": bill_addr.get("Line1"), ...}`
-            # If bill_addr.get("Line1") is None, it will be in the dict as None, then filtered by the final cleanup.
-            # The test here assumes the service correctly constructs the minimal payload.
-            # The key is that `PrimaryEmailAddr` (if None) is not turned into `{"Address": None}` and then filtered.
-            # It's simply not added if `customer_data.get("PrimaryEmailAddr")` is falsy.
+            # The key is that `PrimaryEmailAddr` (if None) is not
+            # turned into `{"Address": None}` and then filtered.
+            # It's simply not added if
+            # `customer_data.get("PrimaryEmailAddr")` is falsy.
 
-            # Given the current implementation:
-            # payload["FamilyName"] = "" -> will be included if not filtered by `{k:v for k,v in payload.items() if v is not None}`
-            # The service code actually uses .get() which can return None, and then these are filtered.
-            # An empty string from formData.lastName becomes "" in customer_data.get("FamilyName"),
-            # then payload["FamilyName"] = "" which is NOT None, so it would be included.
-            # This test should align with the actual behavior of the service code.
-            # The service code does:
-            # payload = { "DisplayName": ..., "GivenName": customer_data.get("GivenName"), ... }
-            # ...
-            # payload = {k: v for k, v in payload.items() if v is not None}
-            # So, if customer_data.get("FamilyName") is "", it stays as "" and is included.
-            # This is a good point to refine the service or the test.
-            # For now, assuming service sends "" if provided.
-            # Let's adjust the expected_payload based on the service's current behavior:
-            # If FamilyName is "", it will be in the payload.
-            # If BillAddr is an empty dict because all its sub-fields were None/empty, it will be {}.
-            # This then might be filtered if empty dicts are considered "None-like" by QBO or the service.
-            # The current filter is `if v is not None`. An empty dict `{}` is not `None`.
-            # Let's make this test more precise for the current filtering.
-
-            # Re-evaluating service code:
-            # payload["FamilyName"] = customer_data.get("FamilyName") # if "" -> ""
-            # if customer_data.get("PrimaryEmailAddr") # if None -> this block is skipped
-            # if bill_addr and isinstance(bill_addr, dict): # if {"Line1": None} -> True
-            #   payload["BillAddr"] = { "Line1": bill_addr.get("Line1") } # -> {"Line1": None}
-            # payload = {k: v for k, v in payload.items() if v is not None}
-            # So, "FamilyName": "" remains. BillAddr: {"Line1": None} becomes BillAddr: {} after sub-field filtering.
-            # Then BillAddr:{} remains.
-
-            # Let's assume the frontend sends empty strings for blank optional fields.
+            # Test with empty strings
             customer_data_input_strict = {
                 "DisplayName": "Optional None",
-                "FamilyName": "",   # Empty string
-                "BillAddr": {"City": ""} # Partially empty
+                "FamilyName": "",  # Empty string
+                "BillAddr": {"City": ""},  # Partially empty
             }
             expected_payload_strict = {
                 "DisplayName": "Optional None",
-                "FamilyName": "", # Empty string included
-                "BillAddr": {"City": ""} # Included with empty city
+                "FamilyName": "",  # Empty string included
+                "BillAddr": {"City": ""},  # Included with empty city
             }
             client.create_customer(customer_data=customer_data_input_strict)
-            mock_make_request.assert_called_with("POST", "/customer", json=expected_payload_strict)
+            mock_make_request.assert_called_with(
+                "POST", "/customer", json=expected_payload_strict
+            )
