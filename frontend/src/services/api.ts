@@ -88,3 +88,32 @@ export const checkHealth = async (): Promise<{ status: string; local_dev_mode: b
 
 // Export the api instance for use in other services
 export const apiService = api;
+
+// Interface for the new customer payload
+export interface NewCustomerPayload {
+  DisplayName: string;
+  GivenName?: string;
+  FamilyName?: string;
+  CompanyName?: string;
+  PrimaryEmailAddr?: string; // String, as per backend expectation for app.py
+  PrimaryPhone?: string;   // String, as per backend expectation for app.py
+  BillAddr?: {
+    Line1?: string;
+    City?: string;
+    CountrySubDivisionCode?: string; // This is 'state' in the form
+    PostalCode?: string;           // This is 'zip' in the form
+  };
+}
+
+// Function to add a new customer
+export const addCustomer = async (customerData: NewCustomerPayload): Promise<any> => {
+  try {
+    // No need to manually pass sessionId, the axios interceptor handles it.
+    const response = await api.post<any>('/api/customers', customerData);
+    return response.data; // Should contain { success: true, data: newCustomer }
+  } catch (error: any) {
+    console.error('Error adding customer:', error.response || error.message || error);
+    // Re-throw a more structured error or the original error to be handled by the caller
+    throw error.response?.data || new Error(error.message || 'Failed to add customer due to an unknown error');
+  }
+};

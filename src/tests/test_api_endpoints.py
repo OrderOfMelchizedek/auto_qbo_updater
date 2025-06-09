@@ -140,3 +140,89 @@ class TestAPIEndpoints:
         data = json.loads(response.data)
         assert data["success"] is False
         assert "Upload not found" in data["error"]
+
+    # Tests for /api/customers endpoint
+    @patch("src.app.QuickBooksClient")
+    def test_create_customer_success(self, MockQuickBooksClient, client):
+        """Test successful customer creation."""
+        mock_qb_client_instance = MockQuickBooksClient.return_value
+        mock_created_customer = {"Id": "1", "DisplayName": "Test Customer"}
+        mock_qb_client_instance.create_customer.return_value = mock_created_customer
+
+        customer_data = {
+            "DisplayName": "Test Customer",
+            "GivenName": "Test",
+            "FamilyName": "Customer",
+            "PrimaryEmailAddr": "test@example.com",
+        }
+        headers = {"X-Session-ID": "test-session-id"}
+
+        response = client.post("/api/customers", json=customer_data, headers=headers)
+        data = json.loads(response.data)
+
+        assert response.status_code == 200
+        assert data["success"] is True
+        assert data["data"] == mock_created_customer
+        MockQuickBooksClient.assert_called_once_with(session_id="test-session-id")
+        mock_qb_client_instance.create_customer.assert_called_once_with(
+            customer_data=customer_data
+        )
+
+    def test_create_customer_missing_session_id(self, client):
+        """Test customer creation with missing X-Session-ID."""
+        customer_data = {"DisplayName": "Test Customer"}
+        response = client.post("/api/customers", json=customer_data)
+        data = json.loads(response.data)
+
+        assert response.status_code == 400
+        assert data["success"] is False
+        assert "Missing X-Session-ID header" in data["error"]
+
+    def test_create_customer_missing_request_body(self, client):
+        """Test customer creation with missing request body."""
+        headers = {"X-Session-ID": "test-session-id"}
+        response = client.post("/api/customers", headers=headers) # No json data
+        data = json.loads(response.data)
+
+        assert response.status_code == 400
+        assert data["success"] is False
+        assert "Missing JSON request body" in data["error"]
+
+    @patch("src.app.QuickBooksClient")
+    def test_create_customer_quickbooks_error(self, MockQuickBooksClient, client):
+        """Test customer creation when QuickBooksClient raises QuickBooksError."""
+        mock_qb_client_instance = MockQuickBooksClient.return_value
+        # Import QuickBooksError from the correct module for the test
+        from src.quickbooks_service import QuickBooksError
+        mock_qb_client_instance.create_customer.side_effect = QuickBooksError(
+            "QuickBooks API Error", details={"code": "1000", "message": "API limit reached"}
+        )
+
+        customer_data = {"DisplayName": "Test Customer"}
+        headers = {"X-Session-ID": "test-session-id"}
+
+        response = client.post("/api/customers", json=customer_data, headers=headers)
+        data = json.loads(response.data)
+
+        assert response.status_code == 500
+        assert data["success"] is False
+        assert "QuickBooks API Error" in data["error"]
+        assert data["details"]["code"] == "1000"
+        MockQuickBooksClient.assert_called_once_with(session_id="test-session-id")
+
+    @patch("src.app.QuickBooksClient")
+    def test_create_customer_general_exception(self, MockQuickBooksClient, client):
+        """Test customer creation when a general exception occurs."""
+        mock_qb_client_instance = MockQuickBooksClient.return_value
+        mock_qb_client_instance.create_customer.side_effect = Exception("Something went wrong")
+
+        customer_data = {"DisplayName": "Test Customer"}
+        headers = {"X-Session-ID": "test-session-id"}
+
+        response = client.post("/api/customers", json=customer_data, headers=headers)
+        data = json.loads(response.data)
+
+        assert response.status_code == 500
+        assert data["success"] is False
+        assert "Failed to create customer" in data["error"]
+        MockQuickBooksClient.assert_called_once_with(session_id="test-session-id")

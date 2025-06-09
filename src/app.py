@@ -45,6 +45,9 @@ init_celery(app)
 # Initialize job tracker
 job_tracker = JobTracker(os.getenv("REDIS_URL"))
 
+# Import QuickBooks client and error
+from .quickbooks_service import QuickBooksClient, QuickBooksError
+
 app.config["MAX_CONTENT_LENGTH"] = (
     Config.MAX_FILE_SIZE_BYTES * Config.MAX_FILES_PER_UPLOAD
 )
@@ -651,6 +654,42 @@ def process_files():
             jsonify({"success": False, "error": "An error occurred during processing"}),
             500,
         )
+
+
+@app.route("/api/customers", methods=["POST"])
+def create_customer_endpoint():
+    """
+    Create a new customer in QuickBooks.
+
+    Expects JSON data with customer information.
+    Requires X-Session-ID header for QuickBooks authentication.
+    """
+    try:
+        # Get session ID from header
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            return jsonify({"success": False, "error": "Missing X-Session-ID header"}), 400
+
+        # Get JSON data from request body
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "Missing JSON request body"}), 400
+
+        # Initialize QuickBooks client
+        client = QuickBooksClient(session_id=session_id)
+
+        # Call create_customer method (placeholder for now)
+        # This method will be implemented in quickbooks_service.py
+        new_customer = client.create_customer(customer_data=data)
+
+        return jsonify({"success": True, "data": new_customer})
+
+    except QuickBooksError as qbe:
+        logger.error(f"QuickBooks API error: {qbe}")
+        return jsonify({"success": False, "error": str(qbe), "details": qbe.details}), 500
+    except Exception as e:
+        logger.error(f"Error creating customer: {e}")
+        return jsonify({"success": False, "error": "Failed to create customer"}), 500
 
 
 # Specific route for auth callback

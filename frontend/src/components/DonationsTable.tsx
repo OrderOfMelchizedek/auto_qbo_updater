@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
-import { FinalDisplayDonation } from '../types';
+import React, { useState, useEffect } from 'react';
+import { FinalDisplayDonation } from '../types'; // Assuming this type includes relevant customer fields
 import { Send, UserPlus, Trash2, Download, FileText, RefreshCw, Edit2, Check, X, Search, RotateCcw, CheckCircle } from 'lucide-react';
 import './DonationsTable.css';
+import AddCustomerModal from './AddCustomerModal'; // Import the modal
+import { CustomerFormData } from './AddCustomerModal'; // Import the form data type
+import { addCustomer, NewCustomerPayload } from '../services/api'; // Import API service and type
+// authService might not be needed if sessionId is solely handled by axios interceptor for the call
+// import authService from '../services/authService';
 
 interface DonationsTableProps {
   donations: FinalDisplayDonation[];
@@ -9,7 +14,7 @@ interface DonationsTableProps {
   onDelete: (index: number) => void;
   onSendToQB: (donation: FinalDisplayDonation, index: number) => void;
   onManualMatch: (donation: FinalDisplayDonation, index: number) => void;
-  onNewCustomer: (donation: FinalDisplayDonation, index: number) => void;
+  onNewCustomer: (donation: FinalDisplayDonation, index: number) => void; // This might be replaced or supplemented by the modal's onSubmit
   onSendAllToQB: () => void;
   onClearAll: () => void;
   onExportCSV: () => void;
@@ -28,6 +33,13 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
 }) => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editedDonation, setEditedDonation] = useState<FinalDisplayDonation | null>(null);
+
+  // State for the AddCustomerModal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedDonationForNewCustomer, setSelectedDonationForNewCustomer] = useState<Partial<CustomerFormData> | undefined>(undefined);
+  const [currentDonationIndexForCustomerCreation, setCurrentDonationIndexForCustomerCreation] = useState<number | null>(null);
+  const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false); // For loading state on modal submit
+
 
   const startEditing = (index: number) => {
     setEditingIndex(index);
@@ -266,8 +278,163 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
     window.URL.revokeObjectURL(url);
   };
 
+  // Modal handler functions
+  const handleOpenModal = (donation: FinalDisplayDonation, index: number) => {
+    setCurrentDonationIndexForCustomerCreation(index); // Store the index
+
+    let parsedAddress = {
+      addressLine1: donation.payer_info.qb_address?.line1 || '',
+      city: donation.payer_info.qb_address?.city || '',
+      state: donation.payer_info.qb_address?.state || '',
+      zip: donation.payer_info.qb_address?.zip || '',
+    };
+
+    // If qb_address is not populated, try to use extracted_address if available
+    // This part is speculative, assuming extracted_address exists and needs parsing
+    if (!donation.payer_info.qb_address?.line1 && donation.extracted_data?.address) {
+        const parts = donation.extracted_data.address.split(',').map(part => part.trim());
+        // Basic parsing: Assumes format "Street, City, State ZIP" or "Street, City, State, ZIP"
+        if (parts.length >= 3) {
+            parsedAddress.addressLine1 = parts[0];
+            parsedAddress.city = parts[1];
+            const stateZip = parts[2].split(' ');
+            if (stateZip.length === 2) {
+                parsedAddress.state = stateZip[0];
+                parsedAddress.zip = stateZip[1];
+            } else if (parts.length === 4) { // Street, City, State, ZIP
+                parsedAddress.state = parts[2];
+                parsedAddress.zip = parts[3];
+            } else { // Could be just state or just zip in parts[2]
+                 parsedAddress.state = parts[2]; // Or handle differently
+            }
+        } else if (parts.length === 1) {
+            parsedAddress.addressLine1 = parts[0]; // Only line1 available
+        }
+    }
+
+
+    const initialModalData: Partial<CustomerFormData> = {
+      displayName: donation.payer_info.customer_ref?.display_name || donation.payer_info.qb_organization_name || donation.extracted_data?.customer_name || '',
+      organizationName: donation.payer_info.qb_organization_name || (donation.payer_info.customer_ref?.display_name && !donation.payer_info.customer_ref?.first_name ? donation.payer_info.customer_ref?.display_name : ''),
+      firstName: donation.payer_info.customer_ref?.first_name || '',
+      lastName: donation.payer_info.customer_ref?.last_name || '',
+      email: donation.payer_info.qb_email?.[0] || donation.extracted_data?.email || '', // Assuming qb_email is an array
+      phone: donation.payer_info.qb_phone?.[0] || donation.extracted_data?.phone || '', // Assuming qb_phone is an array
+      ...parsedAddress,
+    };
+    setSelectedDonationForNewCustomer(initialModalData);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedDonationForNewCustomer(undefined);
+    setCurrentDonationIndexForCustomerCreation(null);
+    setIsSubmittingCustomer(false); // Reset loading state
+  };
+
+  const handleAddNewCustomer = async (formData: CustomerFormData) => {
+    if (currentDonationIndexForCustomerCreation === null) {
+      alert('Error: No donation selected for new customer creation.');
+      return;
+    }
+    // const sessionId = authService.getSessionId(); // Not strictly needed if interceptor works
+    // if (!sessionId) {
+    //   alert('Error: No active session. Please login again.');
+    //   return;
+    // }
+
+    setIsSubmittingCustomer(true);
+
+    const payload: NewCustomerPayload = {
+      DisplayName: formData.displayName,
+      GivenName: formData.firstName || undefined, // Ensure empty strings become undefined
+      FamilyName: formData.lastName || undefined,
+      CompanyName: formData.organizationName || undefined,
+      PrimaryEmailAddr: formData.email || undefined,
+      PrimaryPhone: formData.phone || undefined,
+    };
+
+    if (formData.addressLine1 || formData.city || formData.state || formData.zip) {
+      payload.BillAddr = {
+        Line1: formData.addressLine1 || undefined,
+        City: formData.city || undefined,
+        CountrySubDivisionCode: formData.state || undefined,
+        PostalCode: formData.zip || undefined,
+      };
+    }
+
+    try {
+      const response = await addCustomer(payload); // sessionId handled by interceptor
+      console.log('Customer created successfully:', response);
+
+      // Update the local donations state
+      const updatedDonations = [...donations];
+      const targetDonation = updatedDonations[currentDonationIndexForCustomerCreation];
+
+      if (targetDonation && response.success && response.data) {
+        targetDonation.status = {
+          ...targetDonation.status,
+          new_customer_created: true, // Add this new status flag
+          matched: true, // Assuming creating a customer implies matching to it
+          qbo_customer_id: response.data.Id, // Assuming API returns created customer with Id
+        };
+        // Update customer_ref and other relevant fields based on response.data
+        targetDonation.payer_info.customer_ref = {
+            id: response.data.Id,
+            display_name: response.data.DisplayName,
+            full_name: `${response.data.GivenName || ''} ${response.data.FamilyName || ''}`.trim() || response.data.DisplayName,
+            first_name: response.data.GivenName,
+            last_name: response.data.FamilyName,
+        };
+        if (response.data.CompanyName) {
+            targetDonation.payer_info.qb_organization_name = response.data.CompanyName;
+        }
+        if (response.data.BillAddr) {
+            targetDonation.payer_info.qb_address = {
+                line1: response.data.BillAddr.Line1,
+                city: response.data.BillAddr.City,
+                state: response.data.BillAddr.CountrySubDivisionCode,
+                zip: response.data.BillAddr.PostalCode,
+            };
+        }
+         if (response.data.PrimaryEmailAddr) {
+            targetDonation.payer_info.qb_email = [response.data.PrimaryEmailAddr.Address];
+        }
+        if (response.data.PrimaryPhone) {
+            targetDonation.payer_info.qb_phone = [response.data.PrimaryPhone.FreeFormNumber];
+        }
+
+        // Call the onUpdate prop to reflect changes in the parent component's state
+        onUpdate(currentDonationIndexForCustomerCreation, targetDonation);
+      }
+
+      alert(`Customer "${response.data?.DisplayName || payload.DisplayName}" created successfully!`);
+      handleCloseModal();
+
+    } catch (error: any) {
+      console.error('Failed to create customer:', error);
+      const errorMessage = error?.error || error?.message || 'An unknown error occurred.';
+      alert(`Error creating customer: ${errorMessage}`);
+      // Optionally, do not close the modal on error:
+      // setIsSubmittingCustomer(false);
+      // For now, we close it as per original plan
+      handleCloseModal(); // Or decide to keep it open: setIsSubmittingCustomer(false);
+    } finally {
+      setIsSubmittingCustomer(false);
+    }
+  };
+
+
   return (
     <div className="donations-table-container">
+      <AddCustomerModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onSubmit={handleAddNewCustomer}
+        initialData={selectedDonationForNewCustomer}
+        // Consider adding isSubmitting={isSubmittingCustomer} to AddCustomerModal props for button loading state
+      />
       <div className="table-actions">
         <button onClick={onSendAllToQB} className="action-button primary">
           <Send size={16} /> Send all to QB
@@ -335,12 +502,20 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
                       <button onClick={() => onSendToQB(donation, index)} className="icon-button" title="Send to QB">
                         <Send size={16} />
                       </button>
-                      <button onClick={() => onManualMatch(donation, index)} className="icon-button" title="Manual Match">
+                      {/* Conditionally render "Add New Customer" button */}
+                      {(!donation.status.matched && !donation.status.sent_to_qb && !donation.status.new_customer_created) && (
+                        <button onClick={() => handleOpenModal(donation, index)} className="icon-button" title="Add New Customer in QB">
+                          <UserPlus size={16} />
+                        </button>
+                      )}
+                       <button onClick={() => onManualMatch(donation, index)} className="icon-button" title="Manual Match Existing QB Customer">
                         <Search size={16} />
                       </button>
-                      <button onClick={() => onNewCustomer(donation, index)} className="icon-button" title="New Customer">
+                      {/* Original onNewCustomer button - might be removed or repurposed if modal is primary
+                      <button onClick={() => onNewCustomer(donation, index)} className="icon-button" title="Old New Customer Flow">
                         <UserPlus size={16} />
                       </button>
+                      */}
                       <button onClick={() => onDelete(index)} className="icon-button danger" title="Delete">
                         <Trash2 size={16} />
                       </button>
