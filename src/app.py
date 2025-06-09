@@ -954,7 +954,7 @@ def create_customer_endpoint():
     except QuickBooksError as qbe:
         logger.error(f"QuickBooks API error: {qbe}")
         return (
-            jsonify({"success": False, "error": str(qbe), "details": qbe.details}),
+            jsonify({"success": False, "error": str(qbe), "details": qbe.detail}),
             500,
         )
     except Exception as e:
