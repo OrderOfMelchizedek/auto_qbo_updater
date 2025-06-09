@@ -40,7 +40,7 @@ fi
 
 # Start Celery worker in background
 echo "Starting Celery worker..."
-celery -A src.celery_app worker --loglevel=info &
+celery -A src.celery_app worker --loglevel=info > celery-worker.log 2>&1 &
 CELERY_PID=$!
 echo "✓ Celery worker started (PID: $CELERY_PID)"
 
@@ -69,6 +69,44 @@ echo ""
 echo "To stop all services, press Ctrl+C"
 echo "================================"
 
-# Wait for Ctrl+C
-trap "echo 'Stopping all services...'; kill $CELERY_PID $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit" INT
+# Function to cleanup all processes
+cleanup() {
+    echo ""
+    echo "Stopping all services..."
+
+    # Kill the main processes
+    if [ ! -z "$CELERY_PID" ]; then
+        echo "Stopping Celery worker (PID: $CELERY_PID)..."
+        kill -TERM $CELERY_PID 2>/dev/null
+        # Also kill any child processes
+        pkill -P $CELERY_PID 2>/dev/null
+    fi
+
+    if [ ! -z "$BACKEND_PID" ]; then
+        echo "Stopping Flask backend (PID: $BACKEND_PID)..."
+        kill -TERM $BACKEND_PID 2>/dev/null
+    fi
+
+    if [ ! -z "$FRONTEND_PID" ]; then
+        echo "Stopping React frontend (PID: $FRONTEND_PID)..."
+        kill -TERM $FRONTEND_PID 2>/dev/null
+    fi
+
+    # Give processes time to shut down gracefully
+    sleep 2
+
+    # Force kill any remaining Celery workers
+    if pgrep -f "celery.*worker" > /dev/null; then
+        echo "Force stopping remaining Celery workers..."
+        pkill -9 -f "celery.*worker"
+    fi
+
+    echo "All services stopped."
+    exit 0
+}
+
+# Set trap for multiple signals
+trap cleanup INT TERM EXIT
+
+# Wait for processes
 wait

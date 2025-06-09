@@ -40,11 +40,11 @@ class DonationValidator:
 
     @staticmethod
     def clean_check_number(check_num: Optional[str]) -> Optional[str]:
-        """Remove leading zeros from check numbers only if the check number has more than 5 digits and is numeric."""
+        """Remove leading zeros from check numbers if > 5 digits and numeric."""
         if not check_num:
             return check_num
 
-        # Only strip leading zeros if the check number has more than 5 digits and is numeric
+        # Only strip leading zeros if check number > 5 digits and is numeric
         if len(check_num) > 5 and check_num.isdigit():
             cleaned = check_num.lstrip("0")
             # If all zeros (after stripping), return single zero
