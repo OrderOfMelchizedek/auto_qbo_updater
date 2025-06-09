@@ -212,8 +212,6 @@ function App() {
           <div className="upload-section">
             <FileUpload
               onFilesUpload={handleFilesUpload}
-              isConnectedToQB={isConnectedToQB}
-              onAuthRequired={() => setTriggerAuth(true)}
             />
             {error && <div className="error-message">{error}</div>}
             {isProcessing && jobId && (
