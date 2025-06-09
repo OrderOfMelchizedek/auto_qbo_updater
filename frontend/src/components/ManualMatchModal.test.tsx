@@ -11,7 +11,7 @@ global.fetch = jest.fn();
 const localStorageMock = (() => {
   let store: { [key: string]: string } = {};
   return {
-    getItem: (key: string)_ => store[key] || null,
+    getItem: (key: string) => store[key] || null,
     setItem: (key: string, value: string) => {
       store[key] = value.toString();
     },
@@ -54,7 +54,7 @@ describe('ManualMatchModal', () => {
   beforeEach(() => {
     (fetch as jest.Mock).mockClear();
     localStorageMock.clear();
-    localStorageMock.setItem('session_id', 'test-session-id');
+    localStorageMock.setItem('qbo_session_id', 'test-session-id');
   });
 
   test('renders when isOpen is true', () => {

@@ -6,14 +6,9 @@ import requests
 
 from .config import Config
 from .quickbooks_auth import QuickBooksAuth
+from .quickbooks_utils import QuickBooksError
 
 logger = logging.getLogger(__name__)
-
-
-class QuickBooksError(Exception):
-    """QuickBooks API error."""
-
-    pass
 
 
 class QuickBooksClient:
@@ -32,11 +27,11 @@ class QuickBooksClient:
         # Get auth status to retrieve company ID
         auth_status = self.auth.get_auth_status(session_id)
         if not auth_status.get("authenticated"):
-            raise QuickBooksError("Session not authenticated")
+            raise QuickBooksError("Session not authenticated", status_code=401)
 
         company_id = auth_status.get("realm_id")
         if not company_id:
-            raise QuickBooksError("No company ID found in session")
+            raise QuickBooksError("No company ID found in session", status_code=400)
 
         # Set base URL based on environment
         if Config.QBO_ENVIRONMENT == "production":
@@ -64,7 +59,7 @@ class QuickBooksClient:
         # Get access token
         access_token = self.auth.get_valid_access_token(self.session_id)
         if not access_token:
-            raise QuickBooksError("No access token found")
+            raise QuickBooksError("No access token found", status_code=401)
 
         # Set headers
         headers = kwargs.get("headers", {})
@@ -87,12 +82,19 @@ class QuickBooksClient:
                 headers["Authorization"] = f"Bearer {access_token}"
                 response = requests.request(method, url, **kwargs)
             except Exception:
-                raise QuickBooksError("Token refresh failed")
+                raise QuickBooksError("Token refresh failed", status_code=401)
 
         # Check for errors
         if response.status_code >= 400:
+            try:
+                error_detail = response.json()
+            except Exception:
+                error_detail = {"raw_response": response.text}
+
             raise QuickBooksError(
-                f"API request failed ({response.status_code}): {response.text}"
+                f"API request failed ({response.status_code}): {response.text}",
+                status_code=response.status_code,
+                detail=error_detail,
             )
 
         return response
