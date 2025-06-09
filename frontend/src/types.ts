@@ -1,5 +1,6 @@
 // Types for the Final Display format per PRD
 export interface CustomerRef {
+  id?: string;
   salutation: string;
   first_name: string;
   last_name: string;
@@ -39,6 +40,8 @@ export interface DonationStatus {
   sent_to_qb: boolean;
   address_updated: boolean;
   edited: boolean;
+  new_customer_created?: boolean;
+  qbo_customer_id?: string;
 }
 
 export interface FinalDisplayDonation {
@@ -46,7 +49,14 @@ export interface FinalDisplayDonation {
   payment_info: DisplayPaymentInfo;
   status: DonationStatus;
   _id?: string;
+  id?: string;
   _match_data?: any;
+  extracted_data?: {
+    customer_name?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+  };
 }
 
 // Legacy types for backward compatibility

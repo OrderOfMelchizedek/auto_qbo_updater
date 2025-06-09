@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './AddCustomerModal.css';
 
-interface CustomerFormData {
+export interface CustomerFormData {
   displayName: string;
   firstName?: string;
   lastName?: string;

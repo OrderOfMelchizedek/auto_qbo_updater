@@ -292,7 +292,7 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
     // If qb_address is not populated, try to use extracted_address if available
     // This part is speculative, assuming extracted_address exists and needs parsing
     if (!donation.payer_info.qb_address?.line1 && donation.extracted_data?.address) {
-        const parts = donation.extracted_data.address.split(',').map(part => part.trim());
+        const parts = donation.extracted_data.address.split(',').map((part: string) => part.trim());
         // Basic parsing: Assumes format "Street, City, State ZIP" or "Street, City, State, ZIP"
         if (parts.length >= 3) {
             parsedAddress.addressLine1 = parts[0];
@@ -318,8 +318,8 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
       organizationName: donation.payer_info.qb_organization_name || (donation.payer_info.customer_ref?.display_name && !donation.payer_info.customer_ref?.first_name ? donation.payer_info.customer_ref?.display_name : ''),
       firstName: donation.payer_info.customer_ref?.first_name || '',
       lastName: donation.payer_info.customer_ref?.last_name || '',
-      email: donation.payer_info.qb_email?.[0] || donation.extracted_data?.email || '', // Assuming qb_email is an array
-      phone: donation.payer_info.qb_phone?.[0] || donation.extracted_data?.phone || '', // Assuming qb_phone is an array
+      email: donation.payer_info.qb_email || donation.extracted_data?.email || '',
+      phone: donation.payer_info.qb_phone || donation.extracted_data?.phone || '',
       ...parsedAddress,
     };
     setSelectedDonationForNewCustomer(initialModalData);
@@ -384,8 +384,9 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
             id: response.data.Id,
             display_name: response.data.DisplayName,
             full_name: `${response.data.GivenName || ''} ${response.data.FamilyName || ''}`.trim() || response.data.DisplayName,
-            first_name: response.data.GivenName,
-            last_name: response.data.FamilyName,
+            first_name: response.data.GivenName || '',
+            last_name: response.data.FamilyName || '',
+            salutation: '',
         };
         if (response.data.CompanyName) {
             targetDonation.payer_info.qb_organization_name = response.data.CompanyName;
@@ -399,10 +400,10 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
             };
         }
          if (response.data.PrimaryEmailAddr) {
-            targetDonation.payer_info.qb_email = [response.data.PrimaryEmailAddr.Address];
+            targetDonation.payer_info.qb_email = response.data.PrimaryEmailAddr.Address;
         }
         if (response.data.PrimaryPhone) {
-            targetDonation.payer_info.qb_phone = [response.data.PrimaryPhone.FreeFormNumber];
+            targetDonation.payer_info.qb_phone = response.data.PrimaryPhone.FreeFormNumber;
         }
 
         // Call the onUpdate prop to reflect changes in the parent component's state
