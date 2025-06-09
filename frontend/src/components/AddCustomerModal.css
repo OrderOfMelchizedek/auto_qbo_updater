@@ -1,0 +1,104 @@
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000; /* Ensure modal is on top */
+}
+
+.modal-content {
+  background-color: white;
+  padding: 25px;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  min-width: 450px;
+  max-width: 600px;
+  max-height: 90vh; /* Limit height and allow scrolling if content is too long */
+  overflow-y: auto; /* Add scroll for overflowing content */
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 1.5em;
+  color: #333;
+  text-align: center;
+}
+
+.modal-content form div:not(.modal-actions) { /* Exclude modal-actions from this rule */
+  margin-bottom: 15px;
+}
+
+.modal-content label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: bold;
+  color: #555;
+}
+
+.modal-content input[type="text"],
+.modal-content input[type="email"],
+.modal-content input[type="tel"] {
+  width: calc(100% - 20px); /* Adjust width to account for padding */
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1em;
+}
+
+.modal-content input[type="text"]:focus,
+.modal-content input[type="email"]:focus,
+.modal-content input[type="tel"]:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+  outline: none;
+}
+
+.modal-content .error-message {
+  color: #D8000C; /* Error red color */
+  background-color: #FFD2D2; /* Light red background */
+  border: 1px solid #D8000C;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.modal-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end; /* Align buttons to the right */
+  gap: 10px; /* Add space between buttons */
+}
+
+.modal-content button {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 4px;
+  font-size: 1em;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.modal-content button.button-primary {
+  background-color: #007bff; /* Primary button color (e.g., blue) */
+  color: white;
+}
+
+.modal-content button.button-primary:hover {
+  background-color: #0056b3;
+}
+
+.modal-content button.button-secondary {
+  background-color: #6c757d; /* Secondary button color (e.g., gray) */
+  color: white;
+}
+
+.modal-content button.button-secondary:hover {
+  background-color: #545b62;
+}

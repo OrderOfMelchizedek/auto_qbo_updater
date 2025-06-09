@@ -28,6 +28,11 @@ class CustomerDataSource(ABC):
         """Format customer data to standard structure."""
         pass
 
+    @abstractmethod
+    def create_customer(self, customer_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new customer."""
+        pass
+
 
 class QuickBooksDataSource(CustomerDataSource):
     """Production data source that uses real QuickBooks API."""
@@ -47,6 +52,10 @@ class QuickBooksDataSource(CustomerDataSource):
     def format_customer_data(self, customer: Dict[str, Any]) -> Dict[str, Any]:
         """Format using QuickBooks format."""
         return self.qb_client.format_customer_data(customer)
+
+    def create_customer(self, customer_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create customer using QuickBooks API."""
+        return self.qb_client.create_customer(customer_data)
 
 
 class CSVDataSource(CustomerDataSource):
@@ -308,6 +317,95 @@ class CSVDataSource(CustomerDataSource):
             zip_code = zip_code.split("-")[0]
 
         return zip_code.strip()
+
+    def create_customer(self, customer_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new customer in the CSV file."""
+        # Generate a new ID
+        max_id = 0
+        for customer_id in self.customers.keys():
+            if customer_id.startswith("CSV-"):
+                try:
+                    num = int(customer_id.split("-")[1])
+                    max_id = max(max_id, num)
+                except ValueError:
+                    pass
+
+        new_id = f"CSV-{max_id + 1:03d}"
+
+        # Build the new customer record
+        new_customer = {
+            "Id": new_id,
+            "DisplayName": customer_data.get("DisplayName", ""),
+            "GivenName": customer_data.get("GivenName", ""),
+            "FamilyName": customer_data.get("FamilyName", ""),
+            "CompanyName": customer_data.get("CompanyName", ""),
+        }
+
+        # Add email if provided
+        if customer_data.get("PrimaryEmailAddr"):
+            new_customer["PrimaryEmailAddr"] = {
+                "Address": customer_data["PrimaryEmailAddr"]
+            }
+
+        # Add phone if provided
+        if customer_data.get("PrimaryPhone"):
+            new_customer["PrimaryPhone"] = {
+                "FreeFormNumber": customer_data["PrimaryPhone"]
+            }
+
+        # Add billing address if provided
+        if customer_data.get("BillAddr"):
+            new_customer["BillAddr"] = customer_data["BillAddr"]
+
+        # Add to in-memory storage
+        self.customers[new_id] = new_customer
+
+        # Append to CSV file
+        self._append_to_csv(new_customer)
+
+        logger.info(
+            f"Created new customer in CSV: {new_customer['DisplayName']} (ID: {new_id})"
+        )
+        return new_customer
+
+    def _append_to_csv(self, customer: Dict[str, Any]) -> None:
+        """Append a new customer to the CSV file."""
+        # Get existing headers from the CSV file
+        with open(self.csv_path, "r", encoding="utf-8") as rf:
+            reader = csv.DictReader(rf)
+            fieldnames = reader.fieldnames
+
+        if not fieldnames:
+            raise ValueError("Could not read CSV headers")
+
+        # Build CSV row from customer data, only including fields that exist in the CSV
+        row = {}
+
+        # Map our data to the CSV columns that exist
+        field_mapping = {
+            "Customer": customer.get("DisplayName", ""),
+            "Full Name": customer.get("DisplayName", ""),
+            "First Name": customer.get("GivenName", ""),
+            "Last Name": customer.get("FamilyName", ""),
+            "Company Name": customer.get("CompanyName", ""),
+            "Billing Street": customer.get("BillAddr", {}).get("Line1", ""),
+            "Billing City": customer.get("BillAddr", {}).get("City", ""),
+            "Billing State": customer.get("BillAddr", {}).get(
+                "CountrySubDivisionCode", ""
+            ),
+            "Billing ZIP": customer.get("BillAddr", {}).get("PostalCode", ""),
+            "Email": customer.get("PrimaryEmailAddr", {}).get("Address", ""),
+            "Phone": customer.get("PrimaryPhone", {}).get("FreeFormNumber", ""),
+        }
+
+        # Only include fields that exist in the CSV
+        for field in fieldnames:
+            row[field] = field_mapping.get(field, "")
+
+        # Append to CSV
+        with open(self.csv_path, "a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writerow(row)
 
 
 def create_customer_data_source(
