@@ -22,6 +22,17 @@ export interface DisplayPayerInfo {
   address_update_source?: 'extracted' | 'manual' | null;
   qb_email: string;
   qb_phone: string;
+  original_qb_match_data?: QuickBooksMatchData | null; // Added for revert functionality
+}
+
+// New interface for storing original QuickBooks match data
+export interface QuickBooksMatchData {
+  customer_ref: CustomerRef;
+  qb_address: QBAddress; // Using existing QBAddress type
+  qb_email: string[]; // Storing potentially multiple emails from QB
+  qb_phone: string[]; // Storing potentially multiple phones from QB
+  qb_organization_name: string | null;
+  qb_display_name: string | null;
 }
 
 export interface DisplayPaymentInfo {
@@ -38,6 +49,14 @@ export interface DonationStatus {
   new_customer: boolean;
   sent_to_qb: boolean;
   address_updated: boolean;
+  edited: boolean;
+  original_match_status?: OriginalMatchStatus | null; // Added for revert functionality
+}
+
+// New interface for storing original status before a manual match
+export interface OriginalMatchStatus {
+  matched: boolean;
+  new_customer: boolean;
   edited: boolean;
 }
 

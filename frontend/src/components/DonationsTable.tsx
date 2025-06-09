@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { FinalDisplayDonation } from '../types';
-import { Send, UserPlus, Trash2, Download, FileText, RefreshCw, Edit2, Check, X, Search, RotateCcw, CheckCircle } from 'lucide-react';
+import { FinalDisplayDonation, QuickBooksMatchData, OriginalMatchStatus, CustomerRef, QBAddress } from '../types'; // Import necessary types
+import { Send, UserPlus, Trash2, Download, FileText, RefreshCw, Edit2, Check, X, Search, RotateCcw, CheckCircle, AlertCircle } from 'lucide-react';
+import ManualMatchModal from './ManualMatchModal';
 import './DonationsTable.css';
 
 interface DonationsTableProps {
@@ -28,6 +29,150 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
 }) => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editedDonation, setEditedDonation] = useState<FinalDisplayDonation | null>(null);
+  const [errorModal, setErrorModal] = useState<string | null>(null);
+
+
+  const [isManualMatchModalOpen, setIsManualMatchModalOpen] = useState(false);
+  const [selectedDonationForMatch, setSelectedDonationForMatch] = useState<{ donation: FinalDisplayDonation, index: number } | null>(null);
+
+  interface Customer { // Assuming this structure from ManualMatchModal
+    Id: string;
+    DisplayName: string;
+    PrimaryEmailAddr?: { Address: string };
+  }
+
+  const handleOpenManualMatchModal = (donation: FinalDisplayDonation, index: number) => {
+    setSelectedDonationForMatch({ donation, index });
+    setIsManualMatchModalOpen(true);
+  };
+
+  const handleManualMatchSelect = async (selectedCustomer: Customer) => {
+    if (!selectedDonationForMatch) return;
+
+    const { donation: currentDonation, index: donationIndex } = selectedDonationForMatch;
+
+    const sessionId = localStorage.getItem('session_id');
+    if (!sessionId) {
+      setErrorModal('Session ID not found. Please login again.');
+      setIsManualMatchModalOpen(false);
+      setSelectedDonationForMatch(null);
+      return;
+    }
+
+    // Store original data before API call
+    const originalPayerInfo = currentDonation.payer_info;
+    const originalStatusInfo = currentDonation.status;
+
+    const originalMatchDataToStore: QuickBooksMatchData = {
+      customer_ref: originalPayerInfo.customer_ref,
+      qb_address: originalPayerInfo.qb_address,
+      // Ensure email/phone are arrays for QuickBooksMatchData type
+      qb_email: originalPayerInfo.qb_email ? [originalPayerInfo.qb_email] : [],
+      qb_phone: originalPayerInfo.qb_phone ? [originalPayerInfo.qb_phone] : [],
+      qb_organization_name: originalPayerInfo.qb_organization_name || null,
+      // qb_display_name is typically part of customer_ref, but API might populate it directly too.
+      // For backup, prefer specific fields if they existed, or derive from customer_ref.
+      qb_display_name: (originalPayerInfo as any).qb_display_name || originalPayerInfo.customer_ref.display_name || null,
+    };
+
+    const originalStatusToStore: OriginalMatchStatus = {
+      matched: originalStatusInfo.matched,
+      new_customer: originalStatusInfo.new_customer,
+      edited: originalStatusInfo.edited,
+    };
+
+    try {
+      const response = await fetch('/api/manual_match', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId,
+        },
+        body: JSON.stringify({
+          donation: currentDonation, // Send current donation state
+          qb_customer_id: selectedCustomer.Id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `API Error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (result.success && result.data) {
+        const updatedDonationFromApi: FinalDisplayDonation = result.data;
+
+        // Combine API result with the locally stored original data
+        const finalDonationForTableUpdate: FinalDisplayDonation = {
+          ...updatedDonationFromApi,
+          payer_info: {
+            ...updatedDonationFromApi.payer_info,
+            original_qb_match_data: originalMatchDataToStore,
+          },
+          status: {
+            ...updatedDonationFromApi.status,
+            original_match_status: originalStatusToStore,
+          },
+        };
+        onUpdate(donationIndex, finalDonationForTableUpdate);
+      } else {
+        throw new Error(result.error || 'Manual match API call failed');
+      }
+    } catch (error) {
+      console.error('Failed to manually match donation:', error);
+      setErrorModal(`Error during manual match: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsManualMatchModalOpen(false);
+      setSelectedDonationForMatch(null);
+    }
+  };
+
+  const handleRevertManualMatch = (index: number) => {
+    const donationToRevert = donations[index];
+    const { original_qb_match_data } = donationToRevert.payer_info;
+    const { original_match_status } = donationToRevert.status;
+
+    if (original_qb_match_data && original_match_status) {
+      const revertedDonation: FinalDisplayDonation = {
+        ...donationToRevert,
+        payer_info: {
+          // Important: Spread other payer_info fields that are not part of original_qb_match_data
+          // and should be preserved or explicitly reset if needed.
+          // For now, we assume original_qb_match_data contains all relevant fields to revert to.
+          // This means fields like 'previous_address' or 'address_update_source' might need specific handling
+          // if they are not part of original_qb_match_data and should not be wiped out by this spread.
+          // A safer approach is to selectively apply reverted fields.
+          ...donationToRevert.payer_info, // Keep existing payer_info as base
+
+          customer_ref: original_qb_match_data.customer_ref,
+          qb_address: original_qb_match_data.qb_address,
+          qb_email: original_qb_match_data.qb_email[0] || '', // Assuming string for DisplayPayerInfo
+          qb_phone: original_qb_match_data.qb_phone[0] || '', // Assuming string for DisplayPayerInfo
+          qb_organization_name: original_qb_match_data.qb_organization_name || '',
+          // Restore qb_display_name if it was stored/used this way
+          // This depends on how your API sets it. If it's always from customer_ref, this might not be needed.
+          // For safety, let's assume original_qb_match_data.qb_display_name holds the value for payer_info.qb_display_name
+          ...( (original_qb_match_data as any).qb_display_name && { qb_display_name: (original_qb_match_data as any).qb_display_name }),
+
+
+          original_qb_match_data: null, // Clear the stored original data
+        },
+        status: {
+          ...donationToRevert.status, // Keep existing status as base
+          matched: original_match_status.matched,
+          new_customer: original_match_status.new_customer,
+          // edited: original_match_status.edited, // Or set to true, as per instruction
+          edited: true, // Per instruction for revert action
+          original_match_status: null, // Clear the stored original status
+        },
+      };
+      onUpdate(index, revertedDonation);
+    } else {
+      console.warn("No original match data found to revert for donation at index:", index);
+      setErrorModal("Cannot revert: Original match data not found.");
+    }
+  };
 
   const startEditing = (index: number) => {
     setEditingIndex(index);
@@ -268,6 +413,19 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
 
   return (
     <div className="donations-table-container">
+      {/* Render the ManualMatchModal */}
+      {selectedDonationForMatch && (
+        <ManualMatchModal
+          isOpen={isManualMatchModalOpen}
+          onClose={() => {
+            setIsManualMatchModalOpen(false);
+            setSelectedDonationForMatch(null);
+          }}
+          donation={selectedDonationForMatch.donation}
+          onMatch={handleManualMatchSelect}
+        />
+      )}
+
       <div className="table-actions">
         <button onClick={onSendAllToQB} className="action-button primary">
           <Send size={16} /> Send all to QB
@@ -335,9 +493,14 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
                       <button onClick={() => onSendToQB(donation, index)} className="icon-button" title="Send to QB">
                         <Send size={16} />
                       </button>
-                      <button onClick={() => onManualMatch(donation, index)} className="icon-button" title="Manual Match">
+                      <button onClick={() => handleOpenManualMatchModal(donation, index)} className="icon-button" title="Manual Match">
                         <Search size={16} />
                       </button>
+                       {donation.payer_info.original_qb_match_data && donation.status.original_match_status && (
+                        <button onClick={() => handleRevertManualMatch(index)} className="icon-button" title="Revert Manual Match">
+                          <RotateCcw size={16} /> {/* Using RotateCcw, ensure it's distinct enough or use another */}
+                        </button>
+                      )}
                       <button onClick={() => onNewCustomer(donation, index)} className="icon-button" title="New Customer">
                         <UserPlus size={16} />
                       </button>
@@ -352,6 +515,16 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
           </tbody>
         </table>
       </div>
+      {errorModal && (
+        <div className="error-modal-overlay">
+          <div className="error-modal-content">
+            <AlertCircle size={48} color="red" />
+            <h3>Error</h3>
+            <p>{errorModal}</p>
+            <button onClick={() => setErrorModal(null)}>Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
