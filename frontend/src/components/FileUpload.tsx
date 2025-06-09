@@ -5,11 +5,9 @@ import './FileUpload.css';
 
 interface FileUploadProps {
   onFilesUpload: (files: File[]) => void;
-  isConnectedToQB?: boolean;
-  onAuthRequired?: () => void;
 }
 
-const FileUpload: React.FC<FileUploadProps> = ({ onFilesUpload, isConnectedToQB, onAuthRequired }) => {
+const FileUpload: React.FC<FileUploadProps> = ({ onFilesUpload }) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -33,12 +31,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesUpload, isConnectedToQB,
   };
 
   const handleUpload = () => {
-    // Check if user is authenticated before processing
-    if (!isConnectedToQB && onAuthRequired) {
-      onAuthRequired();
-      return;
-    }
-
     if (selectedFiles.length > 0) {
       onFilesUpload(selectedFiles);
     }
