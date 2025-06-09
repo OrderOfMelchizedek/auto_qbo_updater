@@ -10,6 +10,7 @@ interface QuickBooksConnectionProps {
   onDisconnect?: () => void;
   triggerAuth?: boolean;
   onAuthTriggered?: () => void;
+  isLocalDevMode?: boolean;
 }
 
 const QuickBooksConnection: React.FC<QuickBooksConnectionProps> = ({
@@ -17,13 +18,18 @@ const QuickBooksConnection: React.FC<QuickBooksConnectionProps> = ({
   onConnect,
   onDisconnect,
   triggerAuth,
-  onAuthTriggered
+  onAuthTriggered,
+  isLocalDevMode = false
 }) => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isLocalDevMode, setIsLocalDevMode] = useState(false);
 
   useEffect(() => {
+    // Skip auth subscriptions in local dev mode
+    if (isLocalDevMode) {
+      return;
+    }
+
     // Subscribe to auth status changes
     const unsubscribe = authService.onAuthStatusChange((status) => {
       if (status.authenticated) {
@@ -36,19 +42,8 @@ const QuickBooksConnection: React.FC<QuickBooksConnectionProps> = ({
     // Check initial auth status
     authService.checkAuthStatus();
 
-    // Check if we're in local dev mode
-    checkHealth().then(health => {
-      setIsLocalDevMode(health.local_dev_mode);
-      // In local dev mode, simulate connected state
-      if (health.local_dev_mode) {
-        onConnect();
-      }
-    }).catch(err => {
-      console.error('Failed to check health:', err);
-    });
-
     return unsubscribe;
-  }, [onConnect]);
+  }, [onConnect, isLocalDevMode]);
 
   // Handle triggered authentication from FileUpload
   useEffect(() => {

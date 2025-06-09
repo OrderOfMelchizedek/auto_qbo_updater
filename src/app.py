@@ -5,6 +5,7 @@ import logging
 import os
 import time
 import uuid
+from pathlib import Path
 
 from flask import Flask, Response, jsonify, make_response, request, stream_with_context
 from flask_cors import CORS
@@ -13,9 +14,10 @@ from werkzeug.utils import secure_filename
 
 from .celery_app import init_celery
 from .config import Config, session_backend, storage_backend
+from .customer_matcher import CustomerMatcher
 from .job_tracker import JobTracker
 from .quickbooks_auth import qbo_auth
-from .quickbooks_service import QuickBooksError
+from .quickbooks_utils import QuickBooksError
 from .tasks import process_donations_task
 
 # Configure logging
@@ -118,14 +120,32 @@ def hello():
 @app.route("/api/health", methods=["GET"])
 def health_check():
     """Health check endpoint."""
-    return jsonify(
-        {
-            "status": "healthy",
-            "storage": type(storage_backend).__name__,
-            "session": type(session_backend).__name__,
-            "local_dev_mode": os.getenv("LOCAL_DEV_MODE") == "true",
-        }
-    )
+    health_info = {
+        "status": "healthy",
+        "storage": type(storage_backend).__name__,
+        "session": type(session_backend).__name__,
+        "local_dev_mode": os.getenv("LOCAL_DEV_MODE") == "true",
+    }
+
+    # Test CSV loading in local dev mode
+    if os.getenv("LOCAL_DEV_MODE") == "true":
+        try:
+            csv_path = (
+                Path(__file__).parent.parent
+                / "src/tests/test_files/customer_contact_list.csv"
+            )
+            health_info["csv_exists"] = csv_path.exists()
+            health_info["csv_path"] = str(csv_path)
+
+            if csv_path.exists():
+                # Try to count lines
+                with open(csv_path, "r") as f:
+                    line_count = sum(1 for line in f)
+                health_info["csv_lines"] = line_count
+        except Exception as e:
+            health_info["csv_error"] = str(e)
+
+    return jsonify(health_info)
 
 
 # QuickBooks OAuth2 endpoints
@@ -648,9 +668,229 @@ def process_files():
         )
 
     except Exception as e:
-        logger.error(f"Process endpoint error: {e}")
+        logger.error(f"Error processing files: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/search_customers", methods=["GET"])
+def search_customers():
+    """Search for customers in QuickBooks."""
+    try:
+        logger.info(f"Search customers endpoint called with args: {request.args}")
+        logger.info(f"Headers: {dict(request.headers)}")
+
+        search_term = request.args.get("search_term")
+        if not search_term:
+            return jsonify({"success": False, "error": "Missing search_term"}), 400
+
+        logger.info(f"Search term: {search_term}")
+
+        # Check for local dev mode
+        if os.getenv("LOCAL_DEV_MODE") == "true":
+            csv_path = (
+                Path(__file__).parent.parent
+                / "src/tests/test_files/customer_contact_list.csv"
+            )
+            logger.info(f"Local dev mode: Using CSV at {csv_path}")
+
+            if not csv_path.exists():
+                logger.error(f"CSV file not found at {csv_path}")
+                return (
+                    jsonify(
+                        {"success": False, "error": "Customer data file not found"}
+                    ),
+                    500,
+                )
+
+            try:
+                customer_matcher = CustomerMatcher(csv_path=csv_path)
+                logger.info("CustomerMatcher created successfully")
+            except Exception as e:
+                logger.error(f"Failed to create CustomerMatcher: {e}", exc_info=True)
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "error": f"Failed to initialize customer data: {str(e)}",
+                        }
+                    ),
+                    500,
+                )
+        else:
+            session_id = request.headers.get("X-Session-ID")
+            if not session_id:
+                return (
+                    jsonify({"success": False, "error": "Missing X-Session-ID header"}),
+                    400,
+                )
+            customer_matcher = CustomerMatcher(session_id=session_id)
+
+        try:
+            customers = customer_matcher.data_source.search_customer(search_term)
+            logger.info(f"Found {len(customers)} customers")
+        except Exception as e:
+            logger.error(f"Failed to search customers: {e}", exc_info=True)
+            return jsonify({"success": False, "error": f"Search failed: {str(e)}"}), 500
+
+        return jsonify({"success": True, "data": customers})
+
+    except QuickBooksError as e:
+        logger.error(f"QuickBooks API error in search_customers: {e}")
         return (
-            jsonify({"success": False, "error": "An error occurred during processing"}),
+            jsonify({"success": False, "error": str(e), "details": e.detail}),
+            e.status_code,
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in search_customers: {e}", exc_info=True)
+        return jsonify({"success": False, "error": f"Server error: {str(e)}"}), 500
+
+
+@app.route("/api/manual_match", methods=["POST"])
+def manual_match():
+    """Manually match a donation to a QuickBooks customer.
+
+    Returns updated donation with QuickBooks customer information.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "Invalid JSON payload"}), 400
+
+        original_donation = data.get("donation")
+        qb_customer_id = data.get("qb_customer_id")
+
+        if not original_donation or not qb_customer_id:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Missing 'donation' or 'qb_customer_id'",
+                    }
+                ),
+                400,
+            )
+
+        # Check for local dev mode
+        if os.getenv("LOCAL_DEV_MODE") == "true":
+            csv_path = (
+                Path(__file__).parent.parent
+                / "src/tests/test_files/customer_contact_list.csv"
+            )
+            logger.info(f"Local dev mode: Using CSV at {csv_path}")
+            customer_matcher = CustomerMatcher(csv_path=csv_path)
+        else:
+            session_id = request.headers.get("X-Session-ID")
+            if not session_id:
+                return (
+                    jsonify({"success": False, "error": "Missing X-Session-ID header"}),
+                    400,
+                )
+            customer_matcher = CustomerMatcher(session_id=session_id)
+
+        # Fetch the full details of the selected QuickBooks customer
+        qb_customer_detail = customer_matcher.data_source.get_customer(qb_customer_id)
+        if not qb_customer_detail:
+            # This case might be handled by QuickBooksError
+            # if get_customer raises it for not found
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": (
+                            f"QuickBooks customer with ID {qb_customer_id} " "not found"
+                        ),
+                    }
+                ),
+                404,
+            )
+
+        # Format the fetched customer data
+        formatted_qb_customer = customer_matcher.data_source.format_customer_data(
+            qb_customer_detail
+        )
+
+        # Prepare original donation data for merge_customer_data
+        # merge_customer_data expects a dict with "PayerInfo" and "ContactInfo"
+        # Assuming original_donation (FinalDisplayDonation) has
+        # 'payer_info' and 'contact_info' keys
+        original_payer_contact_info = {
+            "PayerInfo": original_donation.get("payer_info", {}),
+            "ContactInfo": original_donation.get("contact_info", {}),
+        }
+
+        # Merge the data
+        merged_data = customer_matcher.merge_customer_data(
+            original_payer_contact_info, formatted_qb_customer
+        )
+
+        # Update the original_donation object with the merged data
+        # Ensure payer_info exists
+        if "payer_info" not in original_donation:
+            original_donation["payer_info"] = {}
+
+        original_donation["payer_info"]["customer_ref"] = merged_data.get(
+            "customer_ref"
+        )
+        original_donation["payer_info"]["qb_address"] = merged_data.get("qb_address")
+        original_donation["payer_info"]["qb_email"] = merged_data.get("qb_email")
+        original_donation["payer_info"]["qb_phone"] = merged_data.get("qb_phone")
+
+        # Update name fields if they are part of customer_ref
+        # and need to be directly on payer_info
+        # This depends on FinalDisplayDonation structure and
+        # what merge_customer_data returns in customer_ref
+        if merged_data.get("customer_ref"):
+            original_donation["payer_info"]["qb_display_name"] = merged_data[
+                "customer_ref"
+            ].get("display_name")
+            original_donation["payer_info"]["qb_given_name"] = merged_data[
+                "customer_ref"
+            ].get("given_name")
+            original_donation["payer_info"]["qb_family_name"] = merged_data[
+                "customer_ref"
+            ].get("family_name")
+            original_donation["payer_info"]["qb_organization_name"] = merged_data[
+                "customer_ref"
+            ].get("organization_name")
+
+        # Update status
+        if "status" not in original_donation:
+            original_donation["status"] = {}
+
+        original_donation["status"]["matched"] = True
+        original_donation["status"][
+            "new_customer"
+        ] = False  # It's a match to an existing customer
+        original_donation["status"]["sent_to_qb"] = False  # Not yet sent, just matched
+
+        # Determine if address was updated by comparing old and new, if necessary
+        # For now, if updates_needed is true, we can assume some edit/update happened.
+        # The 'updates_needed' from merge_customer_data can
+        # signify if QBO data differs from original.
+        updates_needed = merged_data.get("updates_needed", False)
+        if updates_needed:
+            original_donation["status"]["edited"] = True  # Indicates a change was made
+            # We might need more fine-grained logic for address_updated
+            # if original_donation had an address
+            # and it changed. For now, let's assume 'edited' covers this.
+            # original_donation["status"]["address_updated"] = True
+            # If qb_address changed specifically
+
+        return jsonify({"success": True, "data": original_donation})
+
+    except QuickBooksError as e:
+        logger.error(f"QuickBooks API error in manual_match: {e}")
+        return (
+            jsonify({"success": False, "error": str(e), "details": e.detail}),
+            e.status_code,
+        )
+    except Exception as e:
+        logger.error(f"Error in manual_match: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        return (
+            jsonify({"success": False, "error": "Failed to process manual match"}),
             500,
         )
 
@@ -804,6 +1044,23 @@ def request_entity_too_large(e):
         ),
         413,
     )
+
+
+@app.errorhandler(404)
+def not_found(e):
+    """Handle 404 errors."""
+    if request.path.startswith("/api/"):
+        return jsonify({"success": False, "error": "Endpoint not found"}), 404
+    return e
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    """Handle 500 errors."""
+    logger.error(f"Internal server error: {e}")
+    if request.path.startswith("/api/"):
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+    return e
 
 
 if __name__ == "__main__":
