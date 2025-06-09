@@ -15,6 +15,7 @@ from .celery_app import init_celery
 from .config import Config, session_backend, storage_backend
 from .job_tracker import JobTracker
 from .quickbooks_auth import qbo_auth
+from .quickbooks_service import QuickBooksError
 from .tasks import process_donations_task
 
 # Configure logging
@@ -45,8 +46,6 @@ init_celery(app)
 # Initialize job tracker
 job_tracker = JobTracker(os.getenv("REDIS_URL"))
 
-# Import QuickBooks client and error
-from .quickbooks_service import QuickBooksClient, QuickBooksError
 
 app.config["MAX_CONTENT_LENGTH"] = (
     Config.MAX_FILE_SIZE_BYTES * Config.MAX_FILES_PER_UPLOAD
@@ -662,31 +661,62 @@ def create_customer_endpoint():
     Create a new customer in QuickBooks.
 
     Expects JSON data with customer information.
-    Requires X-Session-ID header for QuickBooks authentication.
+    Requires X-Session-ID header for QuickBooks authentication (in production).
     """
     try:
-        # Get session ID from header
-        session_id = request.headers.get("X-Session-ID")
-        if not session_id:
-            return jsonify({"success": False, "error": "Missing X-Session-ID header"}), 400
-
         # Get JSON data from request body
         data = request.get_json()
         if not data:
-            return jsonify({"success": False, "error": "Missing JSON request body"}), 400
+            return (
+                jsonify({"success": False, "error": "Missing JSON request body"}),
+                400,
+            )
 
-        # Initialize QuickBooks client
-        client = QuickBooksClient(session_id=session_id)
+        # Import the customer data source factory
+        from .customer_data_source import create_customer_data_source
 
-        # Call create_customer method (placeholder for now)
-        # This method will be implemented in quickbooks_service.py
-        new_customer = client.create_customer(customer_data=data)
+        # Check if we're in local dev mode
+        if os.getenv("LOCAL_DEV_MODE") == "true":
+            # In local dev mode, use CSV data source
+            from pathlib import Path
+
+            csv_path = (
+                Path(__file__).parent.parent
+                / "src/tests/test_files/customer_contact_list.csv"
+            )
+            if not csv_path.exists():
+                return (
+                    jsonify(
+                        {"success": False, "error": f"CSV file not found at {csv_path}"}
+                    ),
+                    500,
+                )
+
+            logger.info(f"Local dev mode: Creating customer in CSV file at {csv_path}")
+            data_source = create_customer_data_source(csv_path=csv_path)
+        else:
+            # Production mode - require session ID
+            session_id = request.headers.get("X-Session-ID")
+            if not session_id:
+                return (
+                    jsonify({"success": False, "error": "Missing X-Session-ID header"}),
+                    400,
+                )
+
+            logger.info("Production mode: Creating customer via QuickBooks API")
+            data_source = create_customer_data_source(session_id=session_id)
+
+        # Create the customer using the appropriate data source
+        new_customer = data_source.create_customer(customer_data=data)
 
         return jsonify({"success": True, "data": new_customer})
 
     except QuickBooksError as qbe:
         logger.error(f"QuickBooks API error: {qbe}")
-        return jsonify({"success": False, "error": str(qbe), "details": qbe.details}), 500
+        return (
+            jsonify({"success": False, "error": str(qbe), "details": qbe.details}),
+            500,
+        )
     except Exception as e:
         logger.error(f"Error creating customer: {e}")
         return jsonify({"success": False, "error": "Failed to create customer"}), 500

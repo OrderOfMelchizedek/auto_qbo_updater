@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 class QuickBooksError(Exception):
     """QuickBooks API error."""
 
-    pass
+    def __init__(self, message, details=None):
+        """Initialize QuickBooks error with message and optional details."""
+        super().__init__(message)
+        self.details = details
 
 
 class QuickBooksClient:
@@ -342,14 +345,10 @@ class QuickBooksClient:
         }
 
         if customer_data.get("PrimaryEmailAddr"):
-            payload["PrimaryEmailAddr"] = {
-                "Address": customer_data["PrimaryEmailAddr"]
-            }
+            payload["PrimaryEmailAddr"] = {"Address": customer_data["PrimaryEmailAddr"]}
 
         if customer_data.get("PrimaryPhone"):
-            payload["PrimaryPhone"] = {
-                "FreeFormNumber": customer_data["PrimaryPhone"]
-            }
+            payload["PrimaryPhone"] = {"FreeFormNumber": customer_data["PrimaryPhone"]}
 
         bill_addr = customer_data.get("BillAddr")
         if bill_addr and isinstance(bill_addr, dict):
@@ -364,9 +363,7 @@ class QuickBooksClient:
         payload = {k: v for k, v in payload.items() if v is not None}
 
         try:
-            response = self._make_request(
-                "POST", "/customer", json=payload
-            )
+            response = self._make_request("POST", "/customer", json=payload)
             # QuickBooks API typically returns the created object under a key
             # like "Customer" in the JSON response.
             return response.json().get("Customer", response.json())
@@ -377,6 +374,6 @@ class QuickBooksClient:
         except requests.exceptions.RequestException as e:
             logger.error(f"Network error during customer creation: {e}")
             raise QuickBooksError(f"Network error: {e}")
-        except ValueError as e: # Handles JSON decoding errors
+        except ValueError as e:  # Handles JSON decoding errors
             logger.error(f"Error decoding JSON response from customer creation: {e}")
             raise QuickBooksError(f"JSON decode error: {e}")

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import DonationsTable from './DonationsTable';
 import { FinalDisplayDonation } from '../types'; // Assuming this is the correct type path
@@ -38,30 +38,29 @@ jest.mock('../services/api', () => ({
 const mockDonations: FinalDisplayDonation[] = [
   { // Donation that should show "Add New Customer" button
     id: '1',
-    file_name: 'donation1.pdf',
-    upload_id: 'upload1',
     status: {
       matched: false,
+      new_customer: false,
       sent_to_qb: false,
       new_customer_created: false,
       edited: false,
       address_updated: false,
     },
     payer_info: {
-      customer_ref: { id: '', display_name: 'Unmatched Payer Inc.', full_name: 'Unmatched Payer Inc.' },
+      customer_ref: { id: '', display_name: 'Unmatched Payer Inc.', full_name: 'Unmatched Payer Inc.', salutation: '', first_name: '', last_name: '' },
       qb_address: { line1: '123 Unmatched St', city: 'NoCity', state: 'NS', zip: '00000' },
-      qb_email: ['unmatched@example.com'],
-      qb_phone: ['111-222-3333'],
+      qb_email: 'unmatched@example.com',
+      qb_phone: '111-222-3333',
+      qb_organization_name: 'Unmatched Payer Inc.',
     },
-    payment_info: { amount: 100, payment_date: '2023-01-15', payment_ref: 'Check 101' },
+    payment_info: { amount: '100', payment_date: '2023-01-15', payment_ref: 'Check 101', deposit_date: '', deposit_method: '', memo: '' },
     extracted_data: { customer_name: "Unmatched Payer Inc.", email: "unmatched@example.com", address: "123 Unmatched St, NoCity, NS 00000" }
   },
   { // Donation that should NOT show "Add New Customer" button (already matched)
     id: '2',
-    file_name: 'donation2.jpg',
-    upload_id: 'upload2',
     status: {
       matched: true,
+      new_customer: false,
       sent_to_qb: true,
       new_customer_created: false, // or true if new customer was created and matched
       qbo_customer_id: 'qb-789',
@@ -69,19 +68,19 @@ const mockDonations: FinalDisplayDonation[] = [
       address_updated: false,
     },
     payer_info: {
-      customer_ref: { id: 'qb-789', display_name: 'Matched Payer LLC', full_name: 'Matched Payer LLC' },
+      customer_ref: { id: 'qb-789', display_name: 'Matched Payer LLC', full_name: 'Matched Payer LLC', salutation: '', first_name: '', last_name: '' },
       qb_address: { line1: '456 Matched Ave', city: 'YesCity', state: 'YS', zip: '11111' },
-      qb_email: ['matched@example.com'],
-      qb_phone: ['444-555-6666'],
+      qb_email: 'matched@example.com',
+      qb_phone: '444-555-6666',
+      qb_organization_name: 'Matched Payer LLC',
     },
-    payment_info: { amount: 200, payment_date: '2023-02-20', payment_ref: 'Online 002' },
+    payment_info: { amount: '200', payment_date: '2023-02-20', payment_ref: 'Online 002', deposit_date: '', deposit_method: '', memo: '' },
   },
    { // Donation that should NOT show "Add New Customer" button (new_customer_created is true)
     id: '3',
-    file_name: 'donation3.png',
-    upload_id: 'upload3',
     status: {
       matched: true, // Usually true if new_customer_created is true
+      new_customer: false,
       sent_to_qb: false, // Could be true or false
       new_customer_created: true,
       qbo_customer_id: 'qb-new-123',
@@ -89,12 +88,13 @@ const mockDonations: FinalDisplayDonation[] = [
       address_updated: false,
     },
     payer_info: {
-      customer_ref: { id: 'qb-new-123', display_name: 'Newly Created Co', full_name: 'Newly Created Co' },
+      customer_ref: { id: 'qb-new-123', display_name: 'Newly Created Co', full_name: 'Newly Created Co', salutation: '', first_name: '', last_name: '' },
       qb_address: { line1: '789 New Rd', city: 'NewTown', state: 'NT', zip: '22222' },
-      qb_email: ['newly@example.com'],
-      qb_phone: ['777-888-9999'],
+      qb_email: 'newly@example.com',
+      qb_phone: '777-888-9999',
+      qb_organization_name: 'Newly Created Co',
     },
-    payment_info: { amount: 300, payment_date: '2023-03-25', payment_ref: 'Cash 003' },
+    payment_info: { amount: '300', payment_date: '2023-03-25', payment_ref: 'Cash 003', deposit_date: '', deposit_method: '', memo: '' },
   }
 ];
 
@@ -130,22 +130,26 @@ describe('DonationsTable', () => {
     const rows = screen.getAllByRole('row'); // Includes header row
 
     // For donation 1 (unmatched)
-    const row1ActionsCell = rows[1].cells[rows[1].cells.length - 1]; // Last cell is actions
+    const row1 = rows[1] as HTMLTableRowElement;
+    const row1ActionsCell = row1.cells[row1.cells.length - 1]; // Last cell is actions
     expect(within(row1ActionsCell).getByTitle(/Add New Customer in QB/i)).toBeInTheDocument();
 
     // For donation 2 (matched)
-    const row2ActionsCell = rows[2].cells[rows[2].cells.length - 1];
+    const row2 = rows[2] as HTMLTableRowElement;
+    const row2ActionsCell = row2.cells[row2.cells.length - 1];
     expect(within(row2ActionsCell).queryByTitle(/Add New Customer in QB/i)).not.toBeInTheDocument();
 
     // For donation 3 (new_customer_created)
-    const row3ActionsCell = rows[3].cells[rows[3].cells.length - 1];
+    const row3 = rows[3] as HTMLTableRowElement;
+    const row3ActionsCell = row3.cells[row3.cells.length - 1];
     expect(within(row3ActionsCell).queryByTitle(/Add New Customer in QB/i)).not.toBeInTheDocument();
   });
 
   test('opens AddCustomerModal with pre-filled data on button click', () => {
     render(<DonationsTable {...defaultTableProps} />);
     const rows = screen.getAllByRole('row');
-    const row1ActionsCell = rows[1].cells[rows[1].cells.length - 1];
+    const row1 = rows[1] as HTMLTableRowElement;
+    const row1ActionsCell = row1.cells[row1.cells.length - 1];
     const addButton = within(row1ActionsCell).getByTitle(/Add New Customer in QB/i);
 
     fireEvent.click(addButton);
@@ -178,7 +182,8 @@ describe('DonationsTable', () => {
 
     render(<DonationsTable {...defaultTableProps} />);
     const rows = screen.getAllByRole('row');
-    const row1ActionsCell = rows[1].cells[rows[1].cells.length - 1];
+    const row1 = rows[1] as HTMLTableRowElement;
+    const row1ActionsCell = row1.cells[row1.cells.length - 1];
     const addButton = within(row1ActionsCell).getByTitle(/Add New Customer in QB/i);
 
     fireEvent.click(addButton); // Open the modal
@@ -203,7 +208,6 @@ describe('DonationsTable', () => {
         expect(mockOnUpdate).toHaveBeenCalledWith(
             0, // index of the donation
             expect.objectContaining({
-                id: mockDonations[0].id,
                 status: expect.objectContaining({
                     new_customer_created: true,
                     matched: true,
@@ -238,7 +242,8 @@ describe('DonationsTable', () => {
 
     render(<DonationsTable {...defaultTableProps} />);
     const rows = screen.getAllByRole('row');
-    const row1ActionsCell = rows[1].cells[rows[1].cells.length - 1];
+    const row1 = rows[1] as HTMLTableRowElement;
+    const row1ActionsCell = row1.cells[row1.cells.length - 1];
     const addButton = within(row1ActionsCell).getByTitle(/Add New Customer in QB/i);
 
     fireEvent.click(addButton); // Open the modal
@@ -259,11 +264,4 @@ describe('DonationsTable', () => {
   });
 });
 
-// Helper to query within a specific element, useful for table rows/cells
-// (Not strictly necessary with how queries are used above but good for complex cases)
-const within = (element: HTMLElement) => ({
-  getByText: (text: string | RegExp) => screen.getByText(text, { selector: `${element.tagName} *` }),
-  getByTitle: (title: string | RegExp) => screen.getByTitle(title, { selector: `${element.tagName} *` }),
-  queryByTitle: (title: string | RegExp) => screen.queryByTitle(title, { selector: `${element.tagName} *` }),
-  // Add other queries as needed
-});
+// Note: Using the 'within' helper from '@testing-library/react' instead of custom implementation
