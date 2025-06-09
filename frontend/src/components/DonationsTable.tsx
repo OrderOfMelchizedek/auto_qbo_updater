@@ -414,13 +414,9 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
     const reportHeader = `Donation Processing Report\nGenerated: ${new Date().toISOString()}\nTotal Entries: ${donations.length}\n\n`;
     const fullReport = reportHeader + report;
 
-    const blob = new Blob([fullReport], { type: 'text/plain' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `donation_report_${new Date().toISOString().split('T')[0]}.txt`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    // Open the report in a modal instead of downloading directly
+    setReportModalContent(fullReport);
+    setIsReportModalOpen(true);
   };
 
   // Handlers for AddCustomerModal
@@ -429,12 +425,6 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
 
     // Parse address for pre-population
     const addressLine = donation.payer_info.qb_address?.line1 || donation.extracted_data?.address || '';
-    const parsedAddress = {
-      billAddrLine1: addressLine,
-      billAddrCity: donation.payer_info.qb_address?.city || '',
-      billAddrState: donation.payer_info.qb_address?.state || '',
-      billAddrZip: donation.payer_info.qb_address?.zip || '',
-    };
 
     const initialModalData: Partial<CustomerFormData> = {
       displayName: donation.payer_info.customer_ref?.display_name || donation.payer_info.qb_organization_name || donation.extracted_data?.customer_name || '',
@@ -443,7 +433,10 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
       lastName: donation.payer_info.customer_ref?.last_name || '',
       email: donation.payer_info.qb_email || donation.extracted_data?.email || '',
       phone: donation.payer_info.qb_phone || donation.extracted_data?.phone || '',
-      ...parsedAddress,
+      addressLine1: addressLine,
+      city: donation.payer_info.qb_address?.city || '',
+      state: donation.payer_info.qb_address?.state || '',
+      zip: donation.payer_info.qb_address?.zip || '',
     };
     setSelectedDonationForNewCustomer(initialModalData);
     setIsModalOpen(true);
@@ -473,12 +466,12 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
       PrimaryPhone: formData.phone || undefined,
     };
 
-    if (formData.billAddrLine1 || formData.billAddrCity || formData.billAddrState || formData.billAddrZip) {
+    if (formData.addressLine1 || formData.city || formData.state || formData.zip) {
       payload.BillAddr = {
-        Line1: formData.billAddrLine1 || undefined,
-        City: formData.billAddrCity || undefined,
-        CountrySubDivisionCode: formData.billAddrState || undefined,
-        PostalCode: formData.billAddrZip || undefined,
+        Line1: formData.addressLine1 || undefined,
+        City: formData.city || undefined,
+        CountrySubDivisionCode: formData.state || undefined,
+        PostalCode: formData.zip || undefined,
       };
     }
 
@@ -553,11 +546,16 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
       />
 
       {/* Render the ReportModal */}
-      <ReportModal
-        isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
-        content={reportModalContent}
-      />
+      {isReportModalOpen && (
+        <ReportModal
+          reportText={reportModalContent}
+          onClose={() => setIsReportModalOpen(false)}
+          onSave={(editedText) => {
+            setReportModalContent(editedText);
+            setIsReportModalOpen(false);
+          }}
+        />
+      )}
 
       <div className="table-actions">
         <button onClick={onSendAllToQB} className="action-button primary">
