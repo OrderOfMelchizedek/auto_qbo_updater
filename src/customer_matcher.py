@@ -359,7 +359,9 @@ class CustomerMatcher:
             session_id: Session ID for QuickBooks auth (production)
             csv_path: Path to CSV file for testing
         """
-        self.data_source = create_customer_data_source(session_id, csv_path)
+        self.data_source = create_customer_data_source(
+            session_id=session_id, csv_path=csv_path
+        )
 
     def match_donation_to_customer(self, donation: Dict[str, Any]) -> Dict[str, Any]:
         """

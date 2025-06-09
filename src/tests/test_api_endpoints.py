@@ -1,12 +1,13 @@
 """Tests for API endpoints."""
 import json
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from werkzeug.datastructures import FileStorage
 
 from src.app import app
+from src.quickbooks_utils import QuickBooksError  # Import QuickBooksError
 
 
 class TestAPIEndpoints:
@@ -142,12 +143,13 @@ class TestAPIEndpoints:
         assert "Upload not found" in data["error"]
 
     # Tests for /api/customers endpoint
-    @patch("src.app.QuickBooksClient")
-    def test_create_customer_success(self, MockQuickBooksClient, client):
+    @patch("src.app.create_customer_data_source")
+    def test_create_customer_success(self, mock_create_data_source, client):
         """Test successful customer creation."""
-        mock_qb_client_instance = MockQuickBooksClient.return_value
+        mock_data_source = Mock()
+        mock_create_data_source.return_value = mock_data_source
         mock_created_customer = {"Id": "1", "DisplayName": "Test Customer"}
-        mock_qb_client_instance.create_customer.return_value = mock_created_customer
+        mock_data_source.create_customer.return_value = mock_created_customer
 
         customer_data = {
             "DisplayName": "Test Customer",
@@ -163,8 +165,8 @@ class TestAPIEndpoints:
         assert response.status_code == 200
         assert data["success"] is True
         assert data["data"] == mock_created_customer
-        MockQuickBooksClient.assert_called_once_with(session_id="test-session-id")
-        mock_qb_client_instance.create_customer.assert_called_once_with(
+        mock_create_data_source.assert_called_once_with(session_id="test-session-id")
+        mock_data_source.create_customer.assert_called_once_with(
             customer_data=customer_data
         )
 
@@ -181,21 +183,25 @@ class TestAPIEndpoints:
     def test_create_customer_missing_request_body(self, client):
         """Test customer creation with missing request body."""
         headers = {"X-Session-ID": "test-session-id"}
-        response = client.post("/api/customers", headers=headers) # No json data
+        response = client.post("/api/customers", headers=headers)  # No json data
         data = json.loads(response.data)
 
         assert response.status_code == 400
         assert data["success"] is False
         assert "Missing JSON request body" in data["error"]
 
-    @patch("src.app.QuickBooksClient")
-    def test_create_customer_quickbooks_error(self, MockQuickBooksClient, client):
+    @patch("src.app.create_customer_data_source")
+    def test_create_customer_quickbooks_error(self, mock_create_data_source, client):
         """Test customer creation when QuickBooksClient raises QuickBooksError."""
-        mock_qb_client_instance = MockQuickBooksClient.return_value
+        mock_data_source = Mock()
+        mock_create_data_source.return_value = mock_data_source
         # Import QuickBooksError from the correct module for the test
-        from src.quickbooks_service import QuickBooksError
-        mock_qb_client_instance.create_customer.side_effect = QuickBooksError(
-            "QuickBooks API Error", details={"code": "1000", "message": "API limit reached"}
+        from src.quickbooks_utils import QuickBooksError
+
+        mock_data_source.create_customer.side_effect = QuickBooksError(
+            "QuickBooks API Error",
+            status_code=500,
+            detail={"code": "1000", "message": "API limit reached"},
         )
 
         customer_data = {"DisplayName": "Test Customer"}
@@ -208,13 +214,14 @@ class TestAPIEndpoints:
         assert data["success"] is False
         assert "QuickBooks API Error" in data["error"]
         assert data["details"]["code"] == "1000"
-        MockQuickBooksClient.assert_called_once_with(session_id="test-session-id")
+        mock_create_data_source.assert_called_once_with(session_id="test-session-id")
 
-    @patch("src.app.QuickBooksClient")
-    def test_create_customer_general_exception(self, MockQuickBooksClient, client):
+    @patch("src.app.create_customer_data_source")
+    def test_create_customer_general_exception(self, mock_create_data_source, client):
         """Test customer creation when a general exception occurs."""
-        mock_qb_client_instance = MockQuickBooksClient.return_value
-        mock_qb_client_instance.create_customer.side_effect = Exception("Something went wrong")
+        mock_data_source = Mock()
+        mock_create_data_source.return_value = mock_data_source
+        mock_data_source.create_customer.side_effect = Exception("Something went wrong")
 
         customer_data = {"DisplayName": "Test Customer"}
         headers = {"X-Session-ID": "test-session-id"}
@@ -225,4 +232,199 @@ class TestAPIEndpoints:
         assert response.status_code == 500
         assert data["success"] is False
         assert "Failed to create customer" in data["error"]
-        MockQuickBooksClient.assert_called_once_with(session_id="test-session-id")
+        mock_create_data_source.assert_called_once_with(session_id="test-session-id")
+
+    # Tests for /api/search_customers
+    @patch("src.app.CustomerMatcher")
+    def test_search_customers_success(self, MockCustomerMatcher, client):
+        """Test successful customer search."""
+        mock_matcher_instance = MockCustomerMatcher.return_value
+        mock_customers = [{"Id": "1", "DisplayName": "Test Customer"}]
+        mock_matcher_instance.data_source.search_customer.return_value = mock_customers
+
+        response = client.get(
+            "/api/search_customers?search_term=Test",
+            headers={"X-Session-ID": "test_session_id"},
+        )
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert data["data"] == mock_customers
+        mock_matcher_instance.data_source.search_customer.assert_called_once_with(
+            "Test"
+        )
+
+    @patch("src.app.CustomerMatcher")
+    def test_search_customers_quickbooks_error(self, MockCustomerMatcher, client):
+        """Test customer search when QuickBooksError is raised."""
+        mock_matcher_instance = MockCustomerMatcher.return_value
+        mock_matcher_instance.data_source.search_customer.side_effect = QuickBooksError(
+            "QB API Error", 500, {"detail": "Some QB detail"}
+        )
+
+        response = client.get(
+            "/api/search_customers?search_term=ErrorCase",
+            headers={"X-Session-ID": "test_session_id"},
+        )
+
+        assert response.status_code == 500  # As defined in app.py for QuickBooksError
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "QB API Error" in data["error"]
+        assert data["details"] == {"detail": "Some QB detail"}
+
+    def test_search_customers_missing_search_term(self, client):
+        """Test customer search with missing search_term."""
+        response = client.get(
+            "/api/search_customers", headers={"X-Session-ID": "test_session_id"}
+        )
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "Missing search_term" in data["error"]
+
+    def test_search_customers_missing_session_id(self, client):
+        """Test customer search with missing X-Session-ID."""
+        response = client.get("/api/search_customers?search_term=Test")
+        assert response.status_code == 400  # As defined in app.py
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "Missing X-Session-ID header" in data["error"]
+
+    # Tests for /api/manual_match
+    @patch("src.app.CustomerMatcher")
+    def test_manual_match_success(self, MockCustomerMatcher, client):
+        """Test successful manual match."""
+        mock_matcher_instance = MockCustomerMatcher.return_value
+        mock_qb_customer_detail = {"Id": "1", "DisplayName": "QB Customer"}
+        mock_formatted_customer = {"DisplayName": "Formatted QB Customer", "Id": "1"}
+        mock_merged_data = {
+            "customer_ref": {"display_name": "Matched Customer", "id": "1"},
+            "qb_address": {"line1": "123 Main St"},
+            "qb_email": "test@example.com",
+            "qb_phone": "123-456-7890",
+            "updates_needed": True,
+        }
+
+        mock_matcher_instance.data_source.get_customer.return_value = (
+            mock_qb_customer_detail
+        )
+        mock_matcher_instance.data_source.format_customer_data.return_value = (
+            mock_formatted_customer
+        )
+        mock_matcher_instance.merge_customer_data.return_value = mock_merged_data
+
+        sample_donation = {
+            "payer_info": {"name": "Original Donor"},
+            "payment_info": {"amount": 100},
+            "status": {"matched": False},
+        }
+        request_payload = {
+            "donation": sample_donation,
+            "qb_customer_id": "1",
+        }
+
+        response = client.post(
+            "/api/manual_match",
+            json=request_payload,
+            headers={"X-Session-ID": "test_session_id"},
+        )
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+
+        updated_donation = data["data"]
+        assert (
+            updated_donation["payer_info"]["customer_ref"]
+            == mock_merged_data["customer_ref"]
+        )
+        assert (
+            updated_donation["payer_info"]["qb_address"]
+            == mock_merged_data["qb_address"]
+        )
+        assert updated_donation["status"]["matched"] is True
+        assert (
+            updated_donation["status"]["edited"] is True
+        )  # Because updates_needed was true
+
+        mock_matcher_instance.data_source.get_customer.assert_called_once_with("1")
+        # The input to format_customer_data is the output of get_customer
+        mock_matcher_instance.data_source.format_customer_data.assert_called_once_with(
+            mock_qb_customer_detail
+        )
+        # The input to merge_customer_data needs to be checked
+        # carefully based on app.py logic
+        expected_original_payer_contact_info = {
+            "PayerInfo": sample_donation.get("payer_info", {}),
+            "ContactInfo": sample_donation.get(
+                "contact_info", {}
+            ),  # Will be {} in this test case
+        }
+        mock_matcher_instance.merge_customer_data.assert_called_once_with(
+            expected_original_payer_contact_info, mock_formatted_customer
+        )
+
+    @patch("src.app.CustomerMatcher")
+    def test_manual_match_get_customer_raises_quickbooks_error(
+        self, MockCustomerMatcher, client
+    ):
+        """Test manual match when get_customer raises QuickBooksError."""
+        mock_matcher_instance = MockCustomerMatcher.return_value
+        mock_matcher_instance.data_source.get_customer.side_effect = QuickBooksError(
+            "Customer not found", 404, {"detail": "ID invalid"}
+        )
+
+        request_payload = {
+            "donation": {"payer_info": {}, "payment_info": {}, "status": {}},
+            "qb_customer_id": "nonexistent_id",
+        }
+        response = client.post(
+            "/api/manual_match",
+            json=request_payload,
+            headers={"X-Session-ID": "test_session_id"},
+        )
+
+        assert response.status_code == 404  # Or the code set by QuickBooksError
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "Customer not found" in data["error"]
+
+    def test_manual_match_invalid_payload(self, client):
+        """Test manual match with invalid request payload."""
+        # Missing qb_customer_id
+        response_missing_id = client.post(
+            "/api/manual_match",
+            json={"donation": {}},  # qb_customer_id is missing
+            headers={"X-Session-ID": "test_session_id"},
+        )
+        assert response_missing_id.status_code == 400
+        data_missing_id = json.loads(response_missing_id.data)
+        assert data_missing_id["success"] is False
+        assert "Missing 'donation' or 'qb_customer_id'" in data_missing_id["error"]
+
+        # Missing donation
+        response_missing_donation = client.post(
+            "/api/manual_match",
+            json={"qb_customer_id": "1"},  # donation is missing
+            headers={"X-Session-ID": "test_session_id"},
+        )
+        assert response_missing_donation.status_code == 400
+        data_missing_donation = json.loads(response_missing_donation.data)
+        assert data_missing_donation["success"] is False
+        assert (
+            "Missing 'donation' or 'qb_customer_id'" in data_missing_donation["error"]
+        )
+
+    def test_manual_match_missing_session_id(self, client):
+        """Test manual match with missing X-Session-ID."""
+        request_payload = {
+            "donation": {"payer_info": {}, "payment_info": {}, "status": {}},
+            "qb_customer_id": "1",
+        }
+        response = client.post("/api/manual_match", json=request_payload)
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "Missing X-Session-ID header" in data["error"]
