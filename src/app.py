@@ -1125,20 +1125,22 @@ def create_sales_receipt():
         description = f"{payment_ref}_{last_name}_{payment_date}_{amount}"
 
         # Build sales receipt data
-        # Include payment ref in private note
-        memo = donation["payment_info"]["memo"] or ""
-        if memo:
-            private_note = f"Ref: {payment_ref} - {memo}"
-        else:
-            private_note = f"Ref: {payment_ref}"
-
         sales_receipt_data = {
             "CustomerRef": {"value": donation["status"].get("qbo_customer_id")},
             "TxnDate": payment_date,
             "DocNumber": sales_receipt_number,
-            "PrivateNote": private_note,
+            "PrivateNote": donation["payment_info"]["memo"],
             "DepositToAccountRef": {"value": deposit_account_id},
         }
+
+        # Set payment method based on deposit method
+        deposit_method = donation["payment_info"].get("deposit_method", "").lower()
+        if "check" in deposit_method:
+            # For QuickBooks, we use PaymentMethodRef with name
+            sales_receipt_data["PaymentMethodRef"] = {"name": "Check"}
+
+        # For sales receipts, the reference number goes in PaymentRefNum field
+        sales_receipt_data["PaymentRefNum"] = payment_ref
 
         # Build line item
         if item_id:
