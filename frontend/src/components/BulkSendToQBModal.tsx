@@ -41,10 +41,8 @@ const BulkSendToQBModal: React.FC<BulkSendToQBModalProps> = ({
 
   // Account and item states
   const [depositAccounts, setDepositAccounts] = useState<Account[]>([]);
-  const [incomeAccounts, setIncomeAccounts] = useState<Account[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [selectedDepositAccount, setSelectedDepositAccount] = useState<string>('');
-  const [selectedIncomeAccount, setSelectedIncomeAccount] = useState<string>('');
   const [selectedItem, setSelectedItem] = useState<string>('');
   const [accountsLoading, setAccountsLoading] = useState(false);
 
@@ -80,14 +78,6 @@ const BulkSendToQBModal: React.FC<BulkSendToQBModalProps> = ({
           setSelectedDepositAccount(depositAccts[0].Id);
         }
 
-        // Filter income accounts
-        const incomeAccts = accounts.filter(acc => acc.AccountType === 'Income');
-        setIncomeAccounts(incomeAccts);
-
-        // Set first income account as default
-        if (incomeAccts.length > 0) {
-          setSelectedIncomeAccount(incomeAccts[0].Id);
-        }
       }
 
       // Fetch items/products
@@ -104,14 +94,19 @@ const BulkSendToQBModal: React.FC<BulkSendToQBModalProps> = ({
   };
 
   const handleSend = async () => {
+    if (!selectedItem) {
+      setError('Please select a Product/Service');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
       await onSend(
         selectedDepositAccount,
-        selectedItem ? null : selectedIncomeAccount,
-        selectedItem || null
+        null,  // No income account needed when using items
+        selectedItem
       );
       onClose();
     } catch (error: any) {
@@ -184,13 +179,12 @@ const BulkSendToQBModal: React.FC<BulkSendToQBModalProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label>Product/Service</label>
+                  <label>Product/Service (Required)</label>
                   <select
                     value={selectedItem}
                     onChange={(e) => setSelectedItem(e.target.value)}
-                    disabled={!!selectedIncomeAccount && !selectedItem}
                   >
-                    <option value="">-- None --</option>
+                    <option value="">-- Select a Product/Service --</option>
                     {items.map((item) => (
                       <option key={item.Id} value={item.Id}>
                         {item.FullyQualifiedName}
@@ -198,28 +192,9 @@ const BulkSendToQBModal: React.FC<BulkSendToQBModalProps> = ({
                     ))}
                   </select>
                 </div>
-
-                <div className="form-group">
-                  <label>Income Account</label>
-                  <select
-                    value={selectedIncomeAccount}
-                    onChange={(e) => setSelectedIncomeAccount(e.target.value)}
-                    disabled={!!selectedItem}
-                  >
-                    {incomeAccounts.map((account) => (
-                      <option key={account.Id} value={account.Id}>
-                        {account.FullyQualifiedName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
             )}
 
-            <p className="help-text">
-              Select either a Product/Service OR an Income Account. If you select a Product/Service,
-              it will use its associated income account.
-            </p>
           </div>
         </div>
 
