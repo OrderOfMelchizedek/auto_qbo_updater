@@ -1164,6 +1164,11 @@ def create_sales_receipt():
 
         sales_receipt_data["Line"] = [line_item]
 
+        # Log the payload for debugging
+        logger.info(
+            f"Sales receipt payload: {json.dumps(sales_receipt_data, indent=2)}"
+        )
+
         # Create the sales receipt
         sales_receipt = qb_client.create_sales_receipt(sales_receipt_data)
 

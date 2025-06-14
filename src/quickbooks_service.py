@@ -1,4 +1,5 @@
 """QuickBooks API service for customer operations."""
+import json
 import logging
 from typing import Any, Dict, List
 
@@ -488,6 +489,11 @@ class QuickBooksClient:
 
         # Remove keys with None values
         payload = {k: v for k, v in payload.items() if v is not None}
+
+        # Log the final payload being sent to QuickBooks
+        logger.info(
+            f"Final QuickBooks sales receipt payload: {json.dumps(payload, indent=2)}"
+        )
 
         try:
             response = self._make_request("POST", "/salesreceipt", json=payload)
