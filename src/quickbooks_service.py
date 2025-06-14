@@ -430,6 +430,32 @@ class QuickBooksClient:
             logger.error(f"Error fetching items: {e}")
             raise QuickBooksError(f"Failed to fetch items: {e}")
 
+    def list_payment_methods(self) -> List[Dict[str, Any]]:
+        """
+        List all payment methods from QuickBooks.
+
+        Returns:
+            List of payment method dictionaries
+
+        Raises:
+            QuickBooksError: If API request fails
+        """
+        try:
+            # Query all active payment methods
+            query = "SELECT * FROM PaymentMethod WHERE Active = true"
+            response = self._make_request("GET", "/query", params={"query": query})
+            data = response.json()
+
+            # Extract payment methods from QueryResponse
+            payment_methods = data.get("QueryResponse", {}).get("PaymentMethod", [])
+            return payment_methods
+
+        except QuickBooksError:
+            raise
+        except Exception as e:
+            logger.error(f"Error fetching payment methods: {e}")
+            raise QuickBooksError(f"Failed to fetch payment methods: {e}")
+
     def create_sales_receipt(
         self, sales_receipt_data: Dict[str, Any]
     ) -> Dict[str, Any]:
