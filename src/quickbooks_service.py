@@ -446,6 +446,7 @@ class QuickBooksClient:
                 - TxnDate: Transaction date (defaults to today)
                 - PaymentMethodRef: Payment method reference
                 - DocNumber: Document number (sales receipt number)
+                - PaymentRefNum: Payment reference number (e.g., check number)
                 - PrivateNote: Private note/memo
 
         Returns:
@@ -482,6 +483,9 @@ class QuickBooksClient:
 
         if sales_receipt_data.get("PrivateNote"):
             payload["PrivateNote"] = sales_receipt_data["PrivateNote"]
+
+        if sales_receipt_data.get("PaymentRefNum"):
+            payload["PaymentRefNum"] = sales_receipt_data["PaymentRefNum"]
 
         # Remove keys with None values
         payload = {k: v for k, v in payload.items() if v is not None}
