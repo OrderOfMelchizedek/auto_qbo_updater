@@ -1035,8 +1035,7 @@ def create_sales_receipt():
     Expects JSON data with:
     - donation: The donation data
     - deposit_account_id: ID of the account to deposit to
-    - income_account_id: ID of the income account (if not using item)
-    - item_id: ID of the item/product (if not using income account)
+    - item_id: ID of the item/product (required for sales receipts)
 
     Requires X-Session-ID header for QuickBooks authentication (in production).
     """
@@ -1051,7 +1050,6 @@ def create_sales_receipt():
 
         donation = data.get("donation")
         deposit_account_id = data.get("deposit_account_id")
-        income_account_id = data.get("income_account_id")
         item_id = data.get("item_id")
 
         if not donation:
@@ -1066,12 +1064,12 @@ def create_sales_receipt():
                 400,
             )
 
-        if not item_id and not income_account_id:
+        if not item_id:
             return (
                 jsonify(
                     {
                         "success": False,
-                        "error": "Must provide either item_id or income_account_id",
+                        "error": "Must provide item_id for sales receipts",
                     }
                 ),
                 400,
@@ -1128,21 +1126,20 @@ def create_sales_receipt():
                 "SalesItemLineDetail": {"ItemRef": {"value": item_id}},
             }
         else:
-            # Using income account directly
-            # For sales receipts, we need to use a service item or create a generic one
-            # QuickBooks requires SalesItemLineDetail for sales receipts
-            line_item = {
-                "Amount": float(donation["payment_info"]["amount"]),
-                "DetailType": "SalesItemLineDetail",
-                "SalesItemLineDetail": {
-                    "ItemRef": {
-                        "value": "1",  # This should be a generic service item ID
-                        "name": "Donation",
-                    },
-                    "AccountRef": {"value": income_account_id},
-                },
-                "Description": donation["payment_info"]["memo"] or "Donation",
-            }
+            # QuickBooks sales receipts require an item, not just an income account
+            # Return error if no item is provided
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": (
+                            "Sales receipts require an item. Please select a "
+                            "product or service item, not just an income account."
+                        ),
+                    }
+                ),
+                400,
+            )
 
         sales_receipt_data["Line"] = [line_item]
 
