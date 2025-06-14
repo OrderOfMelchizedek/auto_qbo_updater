@@ -275,7 +275,6 @@ function App() {
         const salesReceiptData = {
           donation,
           deposit_account_id: depositAccountId,
-          income_account_id: incomeAccountId,
           item_id: itemId,
         };
 
