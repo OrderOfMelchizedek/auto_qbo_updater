@@ -1136,9 +1136,31 @@ def create_sales_receipt():
             "DepositToAccountRef": {"value": deposit_account_id},
         }
 
-        # Set payment method based on deposit method
-        deposit_method = donation["payment_info"].get("deposit_method", "").lower()
-        if "check" in deposit_method:
+        # Set payment method based on deposit method or payment method
+        deposit_method = donation["payment_info"].get("deposit_method")
+
+        # Also check raw donation data if available
+        raw_payment_method = ""
+        if "_match_data" in donation:
+            # Try to get from match data's raw donation
+            raw_donation = donation.get("_match_data", {})
+            if isinstance(raw_donation, dict) and "PaymentInfo" in raw_donation:
+                raw_payment_method = raw_donation.get("PaymentInfo", {}).get(
+                    "Payment_Method", ""
+                )
+
+        # Log for debugging
+        logger.info(
+            f"Payment method detection - deposit_method: {deposit_method}, "
+            f"raw_payment_method: {raw_payment_method}"
+        )
+
+        # Check both deposit_method and payment_method fields
+        is_check = (deposit_method and "check" in deposit_method.lower()) or (
+            raw_payment_method and "check" in raw_payment_method.lower()
+        )
+
+        if is_check:
             # Query available payment methods to find "Check"
             try:
                 payment_methods = qb_client.list_payment_methods()
@@ -1160,9 +1182,18 @@ def create_sales_receipt():
                     )
                 else:
                     logger.warning("Check payment method not found in QuickBooks")
+                    # Try using "Check" as the value directly as a fallback
+                    sales_receipt_data["PaymentMethodRef"] = {
+                        "value": "1"
+                    }  # Default Check ID
+                    logger.info("Using default Check payment method ID: 1")
             except Exception as e:
                 logger.error(f"Error fetching payment methods: {e}")
-                # Continue without setting payment method
+                # Try using "Check" as the value directly as a fallback
+                sales_receipt_data["PaymentMethodRef"] = {
+                    "value": "1"
+                }  # Default Check ID
+                logger.info("Using default Check payment method ID: 1 due to error")
 
         # For sales receipts, the reference number goes in PaymentRefNum field
         sales_receipt_data["PaymentRefNum"] = payment_ref
