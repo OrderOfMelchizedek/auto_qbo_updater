@@ -446,7 +446,6 @@ class QuickBooksClient:
                 - TxnDate: Transaction date (defaults to today)
                 - PaymentMethodRef: Payment method reference
                 - DocNumber: Document number (sales receipt number)
-                - RefNumber: Reference number (e.g., check number)
                 - PrivateNote: Private note/memo
 
         Returns:
@@ -480,9 +479,6 @@ class QuickBooksClient:
 
         if sales_receipt_data.get("DocNumber"):
             payload["DocNumber"] = sales_receipt_data["DocNumber"]
-
-        if sales_receipt_data.get("RefNumber"):
-            payload["RefNumber"] = sales_receipt_data["RefNumber"]
 
         if sales_receipt_data.get("PrivateNote"):
             payload["PrivateNote"] = sales_receipt_data["PrivateNote"]
