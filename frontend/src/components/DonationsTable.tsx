@@ -396,25 +396,55 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
   };
 
   const handleGenerateReport = () => {
-    const report = donations.map((d, i) => {
+    // Calculate total amount
+    const totalAmount = donations.reduce((sum, d) => {
+      const amount = parseFloat(d.payment_info.amount) || 0;
+      return sum + amount;
+    }, 0);
+
+    // Format date as MM/DD/YYYY
+    const today = new Date();
+    const dateStr = `${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}/${today.getFullYear()}`;
+
+    // Generate report entries
+    const entries = donations.map((d, i) => {
       const name = getDisplayName(d);
-      const amount = d.payment_info.amount;
-      const ref = d.payment_info.payment_ref;
-      const status = [];
+      const address = d.payer_info.qb_address;
+      const amount = parseFloat(d.payment_info.amount) || 0;
+      const paymentDate = d.payment_info.payment_date || '';
+      const checkNo = d.payment_info.payment_ref || '';
+      const memo = d.payment_info.memo || '';
 
-      if (d.status.matched) status.push('Matched');
-      if (d.status.new_customer) status.push('New Customer');
-      if (d.status.sent_to_qb) status.push('Sent to QB');
-      if (d.status.address_updated) status.push('Address Updated');
-      if (d.status.edited) status.push('Edited');
+      let entry = `${i + 1}. ${name}\n`;
 
-      return `Entry ${i + 1}: ${name} - $${amount} (Ref: ${ref}) - Status: ${status.join(', ') || 'None'}`;
+      // Add address if available
+      if (address.line1) {
+        entry += `   ${address.line1}\n`;
+      }
+      if (address.city || address.state || address.zip) {
+        entry += `   ${address.city}${address.city && address.state ? ', ' : ''}${address.state} ${address.zip}\n`.trim() + '\n';
+      }
+
+      // Add amount and date
+      entry += `   $${amount.toFixed(2)} on ${paymentDate}\n`;
+
+      // Add check number
+      if (checkNo) {
+        entry += `   Check No. ${checkNo}\n`;
+      }
+
+      // Add memo if present
+      if (memo) {
+        entry += `   Memo: ${memo}\n`;
+      }
+
+      return entry.trim();
     }).join('\n');
 
-    const reportHeader = `Donation Processing Report\nGenerated: ${new Date().toISOString()}\nTotal Entries: ${donations.length}\n\n`;
-    const fullReport = reportHeader + report;
+    // Create full report
+    const fullReport = `**Deposit Report: ${dateStr}**\nBelow is a list of deposits totaling $${totalAmount.toFixed(2)}:\n${entries}\nTotal Deposits: $${totalAmount.toFixed(2)}`;
 
-    // Open the report in a modal instead of downloading directly
+    // Open the report in a modal
     setReportModalContent(fullReport);
     setIsReportModalOpen(true);
   };
@@ -551,7 +581,22 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
           reportText={reportModalContent}
           onClose={() => setIsReportModalOpen(false)}
           onSave={(editedText) => {
-            setReportModalContent(editedText);
+            // Create a blob and download the file
+            const blob = new Blob([editedText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+
+            // Format filename with today's date
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            a.download = `fom_deposit_report_${dateStr}.txt`;
+
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
             setIsReportModalOpen(false);
           }}
         />

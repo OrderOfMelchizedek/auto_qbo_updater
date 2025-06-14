@@ -1,7 +1,9 @@
 import axios, { AxiosInstance } from 'axios';
 import { UploadResponse, ProcessResponse } from '../types';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// In development, use relative URLs to leverage the proxy
+// In production, use the environment variable or default to empty string (same origin)
+const API_BASE_URL = process.env.REACT_APP_API_URL || '';
 
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,

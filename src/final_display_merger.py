@@ -103,6 +103,10 @@ def merge_donation_for_display(
         # Set status flags
         display_data["status"]["matched"] = True
 
+        # Include QuickBooks customer ID if available
+        if match_data.get("qb_customer_id"):
+            display_data["status"]["qbo_customer_id"] = match_data["qb_customer_id"]
+
         # Check if address was updated
         updates_needed = match_data.get("updates_needed", {})
         if updates_needed.get("address"):

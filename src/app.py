@@ -5,6 +5,7 @@ import logging
 import os
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, make_response, request, stream_with_context
@@ -862,6 +863,9 @@ def manual_match():
             "new_customer"
         ] = False  # It's a match to an existing customer
         original_donation["status"]["sent_to_qb"] = False  # Not yet sent, just matched
+        original_donation["status"][
+            "qbo_customer_id"
+        ] = qb_customer_id  # Store the customer ID
 
         # Determine if address was updated by comparing old and new, if necessary
         # For now, if updates_needed is true, we can assume some edit/update happened.
@@ -891,6 +895,272 @@ def manual_match():
         logger.error(traceback.format_exc())
         return (
             jsonify({"success": False, "error": "Failed to process manual match"}),
+            500,
+        )
+
+
+@app.route("/api/accounts", methods=["GET"])
+def get_accounts():
+    """
+    Get all accounts from QuickBooks.
+
+    Requires X-Session-ID header for QuickBooks authentication (in production).
+    Returns list of accounts with their types and names.
+    """
+    try:
+        # Check if we're in local dev mode
+        if os.getenv("LOCAL_DEV_MODE") == "true":
+            # In local dev mode, return mock accounts
+            mock_accounts = [
+                {
+                    "Id": "1",
+                    "Name": "Undeposited Funds",
+                    "FullyQualifiedName": "Undeposited Funds",
+                    "AccountType": "Other Current Asset",
+                    "AccountSubType": "UndepositedFunds",
+                },
+                {
+                    "Id": "2",
+                    "Name": "Checking",
+                    "FullyQualifiedName": "Checking",
+                    "AccountType": "Bank",
+                    "AccountSubType": "Checking",
+                },
+                {
+                    "Id": "3",
+                    "Name": "Donations",
+                    "FullyQualifiedName": "Donations",
+                    "AccountType": "Income",
+                    "AccountSubType": "NonProfitIncome",
+                },
+                {
+                    "Id": "4",
+                    "Name": "Sales",
+                    "FullyQualifiedName": "Sales",
+                    "AccountType": "Income",
+                    "AccountSubType": "SalesOfProductIncome",
+                },
+            ]
+            return jsonify({"success": True, "data": {"accounts": mock_accounts}})
+
+        # Production mode - require session ID
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            return (
+                jsonify({"success": False, "error": "Missing X-Session-ID header"}),
+                400,
+            )
+
+        # Create QuickBooks client and fetch accounts
+        from .quickbooks_service import QuickBooksClient
+
+        qb_client = QuickBooksClient(session_id)
+        accounts = qb_client.list_accounts()
+
+        return jsonify({"success": True, "data": {"accounts": accounts}})
+
+    except QuickBooksError as qbe:
+        logger.error(f"QuickBooks API error fetching accounts: {qbe}")
+        return (
+            jsonify({"success": False, "error": str(qbe), "details": qbe.detail}),
+            qbe.status_code,
+        )
+    except Exception as e:
+        logger.error(f"Error fetching accounts: {e}")
+        return jsonify({"success": False, "error": "Failed to fetch accounts"}), 500
+
+
+@app.route("/api/items", methods=["GET"])
+def get_items():
+    """
+    Get all items (products/services) from QuickBooks.
+
+    Requires X-Session-ID header for QuickBooks authentication (in production).
+    Returns list of items with their names and associated income accounts.
+    """
+    try:
+        # Check if we're in local dev mode
+        if os.getenv("LOCAL_DEV_MODE") == "true":
+            # In local dev mode, return mock items
+            mock_items = [
+                {
+                    "Id": "1",
+                    "Name": "General Donation",
+                    "FullyQualifiedName": "General Donation",
+                    "Type": "Service",
+                    "IncomeAccountRef": {"value": "3", "name": "Donations"},
+                },
+                {
+                    "Id": "2",
+                    "Name": "Event Sponsorship",
+                    "FullyQualifiedName": "Event Sponsorship",
+                    "Type": "Service",
+                    "IncomeAccountRef": {"value": "3", "name": "Donations"},
+                },
+            ]
+            return jsonify({"success": True, "data": {"items": mock_items}})
+
+        # Production mode - require session ID
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            return (
+                jsonify({"success": False, "error": "Missing X-Session-ID header"}),
+                400,
+            )
+
+        # Create QuickBooks client and fetch items
+        from .quickbooks_service import QuickBooksClient
+
+        qb_client = QuickBooksClient(session_id)
+        items = qb_client.list_items()
+
+        return jsonify({"success": True, "data": {"items": items}})
+
+    except QuickBooksError as qbe:
+        logger.error(f"QuickBooks API error fetching items: {qbe}")
+        return (
+            jsonify({"success": False, "error": str(qbe), "details": qbe.detail}),
+            qbe.status_code,
+        )
+    except Exception as e:
+        logger.error(f"Error fetching items: {e}")
+        return jsonify({"success": False, "error": "Failed to fetch items"}), 500
+
+
+@app.route("/api/sales_receipts", methods=["POST"])
+def create_sales_receipt():
+    """
+    Create a sales receipt in QuickBooks.
+
+    Expects JSON data with:
+    - donation: The donation data
+    - deposit_account_id: ID of the account to deposit to
+    - income_account_id: ID of the income account (if not using item)
+    - item_id: ID of the item/product (if not using income account)
+
+    Requires X-Session-ID header for QuickBooks authentication (in production).
+    """
+    try:
+        # Get JSON data from request
+        data = request.get_json()
+        if not data:
+            return (
+                jsonify({"success": False, "error": "Missing JSON request body"}),
+                400,
+            )
+
+        donation = data.get("donation")
+        deposit_account_id = data.get("deposit_account_id")
+        income_account_id = data.get("income_account_id")
+        item_id = data.get("item_id")
+
+        if not donation:
+            return (
+                jsonify({"success": False, "error": "Missing donation data"}),
+                400,
+            )
+
+        if not deposit_account_id:
+            return (
+                jsonify({"success": False, "error": "Missing deposit_account_id"}),
+                400,
+            )
+
+        if not item_id and not income_account_id:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Must provide either item_id or income_account_id",
+                    }
+                ),
+                400,
+            )
+
+        # Check if we're in local dev mode
+        if os.getenv("LOCAL_DEV_MODE") == "true":
+            # In local dev mode, simulate success
+            logger.info("Local dev mode: Simulating sales receipt creation")
+            mock_receipt = {
+                "Id": f"mock-{datetime.now().timestamp()}",
+                "TxnDate": donation["payment_info"]["payment_date"],
+                "DocNumber": donation["payment_info"]["payment_ref"],
+                "TotalAmt": float(donation["payment_info"]["amount"]),
+                "CustomerRef": {
+                    "value": donation["status"].get("qbo_customer_id", "1"),
+                    "name": donation["payer_info"]["customer_ref"]["display_name"],
+                },
+                "DepositToAccountRef": {
+                    "value": deposit_account_id,
+                    "name": "Undeposited Funds",
+                },
+            }
+            return jsonify({"success": True, "data": {"sales_receipt": mock_receipt}})
+
+        # Production mode - require session ID
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            return (
+                jsonify({"success": False, "error": "Missing X-Session-ID header"}),
+                400,
+            )
+
+        # Create QuickBooks client
+        from .quickbooks_service import QuickBooksClient
+
+        qb_client = QuickBooksClient(session_id)
+
+        # Build sales receipt data
+        sales_receipt_data = {
+            "CustomerRef": {"value": donation["status"].get("qbo_customer_id")},
+            "TxnDate": donation["payment_info"]["payment_date"],
+            "DocNumber": donation["payment_info"]["payment_ref"],
+            "PrivateNote": donation["payment_info"]["memo"],
+            "DepositToAccountRef": {"value": deposit_account_id},
+        }
+
+        # Build line item
+        if item_id:
+            # Using item/product
+            line_item = {
+                "Amount": float(donation["payment_info"]["amount"]),
+                "DetailType": "SalesItemLineDetail",
+                "SalesItemLineDetail": {"ItemRef": {"value": item_id}},
+            }
+        else:
+            # Using income account directly
+            # For sales receipts, we need to use a service item or create a generic one
+            # QuickBooks requires SalesItemLineDetail for sales receipts
+            line_item = {
+                "Amount": float(donation["payment_info"]["amount"]),
+                "DetailType": "SalesItemLineDetail",
+                "SalesItemLineDetail": {
+                    "ItemRef": {
+                        "value": "1",  # This should be a generic service item ID
+                        "name": "Donation",
+                    },
+                    "AccountRef": {"value": income_account_id},
+                },
+                "Description": donation["payment_info"]["memo"] or "Donation",
+            }
+
+        sales_receipt_data["Line"] = [line_item]
+
+        # Create the sales receipt
+        sales_receipt = qb_client.create_sales_receipt(sales_receipt_data)
+
+        return jsonify({"success": True, "data": {"sales_receipt": sales_receipt}})
+
+    except QuickBooksError as qbe:
+        logger.error(f"QuickBooks API error creating sales receipt: {qbe}")
+        return (
+            jsonify({"success": False, "error": str(qbe), "details": qbe.detail}),
+            qbe.status_code,
+        )
+    except Exception as e:
+        logger.error(f"Error creating sales receipt: {e}")
+        return (
+            jsonify({"success": False, "error": "Failed to create sales receipt"}),
             500,
         )
 
