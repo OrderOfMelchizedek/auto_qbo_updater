@@ -50,7 +50,9 @@ def merge_donation_for_display(
             "amount": payment_info.get("Amount", ""),
             "payment_date": payment_info.get("Payment_Date", ""),
             "deposit_date": payment_info.get("Deposit_Date", ""),
-            "deposit_method": payment_info.get("Deposit_Method", ""),
+            "deposit_method": payment_info.get(
+                "Deposit_Method", payment_info.get("Payment_Method", "")
+            ),
             "memo": payment_info.get("Memo", ""),
         },
         "status": {
