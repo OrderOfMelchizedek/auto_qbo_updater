@@ -484,6 +484,9 @@ class CustomerMatcher:
         result = {
             "match_status": "matched",
             "customer_ref": qb_customer["customer_ref"],
+            "qb_customer_id": qb_customer["customer_ref"].get(
+                "id"
+            ),  # Include customer ID
             "qb_address": qb_customer["qb_address"].copy(),
             "qb_email": qb_customer["qb_email"].copy(),
             "qb_phone": qb_customer["qb_phone"].copy(),

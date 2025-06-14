@@ -62,11 +62,32 @@ const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
       } else {
         throw new Error(response.data.error || 'Failed to fetch customers');
       }
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
+    } catch (err: any) {
+      console.error('Error fetching customers:', err);
+      if (err.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        console.error('Response data:', err.response.data);
+        console.error('Response status:', err.response.status);
+        console.error('Response headers:', err.response.headers);
+
+        if (err.response.status === 404) {
+          setError('API endpoint not found. Please check the server is running.');
+        } else if (err.response.status === 401) {
+          setError('Authentication required. Please reconnect to QuickBooks.');
+        } else if (typeof err.response.data === 'string' && err.response.data.includes('<!DOCTYPE')) {
+          setError('Server returned an HTML error page. Please check the server logs.');
+        } else {
+          setError(err.response.data?.error || err.message || 'Failed to fetch customers');
+        }
+      } else if (err.request) {
+        // The request was made but no response was received
+        console.error('No response received:', err.request);
+        setError('No response from server. Please check if the server is running.');
       } else {
-        setError('An unknown error occurred.');
+        // Something happened in setting up the request that triggered an Error
+        console.error('Error setting up request:', err.message);
+        setError(err.message || 'An unknown error occurred.');
       }
       setSearchResults([]);
     } finally {

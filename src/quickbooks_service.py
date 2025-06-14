@@ -376,3 +376,122 @@ class QuickBooksClient:
         except ValueError as e:  # Handles JSON decoding errors
             logger.error(f"Error decoding JSON response from customer creation: {e}")
             raise QuickBooksError(f"JSON decode error: {e}")
+
+    def list_accounts(self) -> List[Dict[str, Any]]:
+        """
+        List all accounts from QuickBooks.
+
+        Returns:
+            List of account dictionaries
+
+        Raises:
+            QuickBooksError: If API request fails
+        """
+        try:
+            # Query all active accounts
+            query = "SELECT * FROM Account WHERE Active = true"
+            response = self._make_request("GET", "/query", params={"query": query})
+            data = response.json()
+
+            # Extract accounts from QueryResponse
+            accounts = data.get("QueryResponse", {}).get("Account", [])
+            return accounts
+
+        except QuickBooksError:
+            raise
+        except Exception as e:
+            logger.error(f"Error fetching accounts: {e}")
+            raise QuickBooksError(f"Failed to fetch accounts: {e}")
+
+    def list_items(self) -> List[Dict[str, Any]]:
+        """
+        List all items (products/services) from QuickBooks.
+
+        Returns:
+            List of item dictionaries
+
+        Raises:
+            QuickBooksError: If API request fails
+        """
+        try:
+            # Query all active items
+            query = "SELECT * FROM Item WHERE Active = true"
+            response = self._make_request("GET", "/query", params={"query": query})
+            data = response.json()
+
+            # Extract items from QueryResponse
+            items = data.get("QueryResponse", {}).get("Item", [])
+            return items
+
+        except QuickBooksError:
+            raise
+        except Exception as e:
+            logger.error(f"Error fetching items: {e}")
+            raise QuickBooksError(f"Failed to fetch items: {e}")
+
+    def create_sales_receipt(
+        self, sales_receipt_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Create a sales receipt in QuickBooks.
+
+        Args:
+            sales_receipt_data: Dictionary containing sales receipt information.
+                Required keys:
+                - CustomerRef: {"value": "customer_id"}
+                - Line: List of line items with ItemRef or AccountRef
+                - DepositToAccountRef: {"value": "account_id"}
+                Optional keys:
+                - TxnDate: Transaction date (defaults to today)
+                - PaymentMethodRef: Payment method reference
+                - DocNumber: Document number (check number)
+                - PrivateNote: Private note/memo
+
+        Returns:
+            The created sales receipt data from the API response.
+
+        Raises:
+            ValueError: If required fields are missing.
+            QuickBooksError: If API request fails.
+        """
+        # Validate required fields
+        if not sales_receipt_data.get("CustomerRef"):
+            raise ValueError("CustomerRef is required to create a sales receipt.")
+        if not sales_receipt_data.get("Line"):
+            raise ValueError("At least one Line item is required.")
+        if not sales_receipt_data.get("DepositToAccountRef"):
+            raise ValueError("DepositToAccountRef is required.")
+
+        # Build the sales receipt payload
+        payload = {
+            "CustomerRef": sales_receipt_data["CustomerRef"],
+            "Line": sales_receipt_data["Line"],
+            "DepositToAccountRef": sales_receipt_data["DepositToAccountRef"],
+        }
+
+        # Add optional fields if provided
+        if sales_receipt_data.get("TxnDate"):
+            payload["TxnDate"] = sales_receipt_data["TxnDate"]
+
+        if sales_receipt_data.get("PaymentMethodRef"):
+            payload["PaymentMethodRef"] = sales_receipt_data["PaymentMethodRef"]
+
+        if sales_receipt_data.get("DocNumber"):
+            payload["DocNumber"] = sales_receipt_data["DocNumber"]
+
+        if sales_receipt_data.get("PrivateNote"):
+            payload["PrivateNote"] = sales_receipt_data["PrivateNote"]
+
+        # Remove keys with None values
+        payload = {k: v for k, v in payload.items() if v is not None}
+
+        try:
+            response = self._make_request("POST", "/salesreceipt", json=payload)
+            # QuickBooks API returns the created object under "SalesReceipt" key
+            return response.json().get("SalesReceipt", response.json())
+        except QuickBooksError as e:
+            logger.error(f"Failed to create sales receipt: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error creating sales receipt: {e}")
+            raise QuickBooksError(f"Failed to create sales receipt: {e}")

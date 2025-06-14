@@ -3,9 +3,14 @@ import './App.css';
 import FileUpload from './components/FileUpload';
 import DonationsTable from './components/DonationsTable';
 import QuickBooksConnection from './components/QuickBooksConnection';
+import SendToQBModal from './components/SendToQBModal';
+import BulkSendToQBModal from './components/BulkSendToQBModal';
+import ManualMatchModal from './components/ManualMatchModal';
+import AddCustomerModal from './components/AddCustomerModal';
 import { ProcessingStatus } from './components/ProcessingStatus';
 import { uploadFiles, processDonations, checkHealth } from './services/api';
 import { authService } from './services/authService';
+import { apiService } from './services/api';
 import { FinalDisplayDonation, ProcessingMetadata } from './types';
 import { Loader } from 'lucide-react';
 
@@ -21,6 +26,22 @@ function App() {
   const [authCheckComplete, setAuthCheckComplete] = useState(false);
   const [triggerAuth, setTriggerAuth] = useState(false);
   const [isLocalDevMode, setIsLocalDevMode] = useState(false);
+  const [sendToQBModal, setSendToQBModal] = useState<{ isOpen: boolean; donation: FinalDisplayDonation | null; index: number }>({
+    isOpen: false,
+    donation: null,
+    index: -1
+  });
+  const [bulkSendToQBModal, setBulkSendToQBModal] = useState(false);
+  const [manualMatchModal, setManualMatchModal] = useState<{ isOpen: boolean; donation: FinalDisplayDonation | null; index: number }>({
+    isOpen: false,
+    donation: null,
+    index: -1
+  });
+  const [addCustomerModal, setAddCustomerModal] = useState<{ isOpen: boolean; donation: FinalDisplayDonation | null; index: number }>({
+    isOpen: false,
+    donation: null,
+    index: -1
+  });
 
   useEffect(() => {
     // Check if running in local dev mode
@@ -105,36 +126,190 @@ function App() {
   };
 
   const handleSendToQB = async (donation: FinalDisplayDonation, index: number) => {
-    // TODO: Implement QuickBooks integration to create sales receipt
-    console.log('Sending to QuickBooks:', donation);
-    // Update status badge
-    const updatedDonation = {
-      ...donation,
-      status: { ...donation.status, sent_to_qb: true }
-    };
-    handleDonationUpdate(index, updatedDonation);
+    // Open the Send to QB modal
+    setSendToQBModal({
+      isOpen: true,
+      donation,
+      index
+    });
+  };
+
+  const handleSendToQBConfirm = async (salesReceiptData: any) => {
+    try {
+      // Create the sales receipt
+      const response = await apiService.post('/api/sales_receipts', salesReceiptData);
+
+      if (response.data.success) {
+        // Update the donation status
+        const { donation, index } = sendToQBModal;
+        if (donation && index >= 0) {
+          const updatedDonation = {
+            ...donation,
+            status: { ...donation.status, sent_to_qb: true }
+          };
+          handleDonationUpdate(index, updatedDonation);
+        }
+
+        // Close the modal
+        setSendToQBModal({ isOpen: false, donation: null, index: -1 });
+      } else {
+        throw new Error(response.data.error || 'Failed to create sales receipt');
+      }
+    } catch (error: any) {
+      console.error('Error sending to QuickBooks:', error);
+      throw error;
+    }
   };
 
   const handleManualMatch = async (donation: FinalDisplayDonation, index: number) => {
-    // TODO: Implement manual matching dialog/modal
-    console.log('Manual match for:', donation);
-    alert('Manual matching feature coming soon!');
+    // Open the manual match modal
+    setManualMatchModal({
+      isOpen: true,
+      donation,
+      index
+    });
+  };
+
+  const handleManualMatchConfirm = async (customer: any) => {
+    try {
+      const { donation, index } = manualMatchModal;
+      if (!donation || index < 0) return;
+
+      // Call the manual match API
+      const response = await apiService.post('/api/manual_match', {
+        donation,
+        qb_customer_id: customer.Id
+      });
+
+      if (response.data.success) {
+        // Update the donation with the matched data
+        handleDonationUpdate(index, response.data.data);
+
+        // Close the modal
+        setManualMatchModal({ isOpen: false, donation: null, index: -1 });
+      } else {
+        throw new Error(response.data.error || 'Failed to match customer');
+      }
+    } catch (error: any) {
+      console.error('Error during manual match:', error);
+      alert(`Error: ${error.message}`);
+    }
   };
 
   const handleNewCustomer = async (donation: FinalDisplayDonation, index: number) => {
-    // TODO: Implement new customer creation in QuickBooks
-    console.log('Creating new customer for:', donation);
-    alert('New customer creation feature coming soon!');
+    // Open the add customer modal
+    setAddCustomerModal({
+      isOpen: true,
+      donation,
+      index
+    });
+  };
+
+  const handleAddCustomerConfirm = async (customerData: any) => {
+    try {
+      const { donation, index } = addCustomerModal;
+      if (!donation || index < 0) return;
+
+      // The AddCustomerModal already handles the API call and returns the new customer
+      // We just need to update the donation with the new customer info
+      const updatedDonation = {
+        ...donation,
+        payer_info: {
+          ...donation.payer_info,
+          customer_ref: {
+            ...donation.payer_info.customer_ref,
+            id: customerData.Id,
+            display_name: customerData.DisplayName
+          }
+        },
+        status: {
+          ...donation.status,
+          matched: true,
+          new_customer: false,
+          new_customer_created: true,
+          qbo_customer_id: customerData.Id
+        }
+      };
+
+      handleDonationUpdate(index, updatedDonation);
+
+      // Close the modal
+      setAddCustomerModal({ isOpen: false, donation: null, index: -1 });
+    } catch (error: any) {
+      console.error('Error creating customer:', error);
+      // Error is already handled in AddCustomerModal
+    }
   };
 
   const handleSendAllToQB = async () => {
-    // TODO: Implement bulk QuickBooks integration
-    console.log('Sending all to QuickBooks');
-    const updatedDonations = donations.map(d => ({
-      ...d,
-      status: { ...d.status, sent_to_qb: true }
-    }));
+    // Open the bulk send modal
+    setBulkSendToQBModal(true);
+  };
+
+  const handleBulkSendToQBConfirm = async (
+    depositAccountId: string,
+    incomeAccountId: string | null,
+    itemId: string | null
+  ) => {
+    // Filter donations that haven't been sent yet
+    const donationsToSend = donations.filter(d => !d.status.sent_to_qb);
+
+    if (donationsToSend.length === 0) {
+      throw new Error('No donations to send');
+    }
+
+    // Send each donation
+    const errors: string[] = [];
+    let successCount = 0;
+    const updatedDonations = [...donations]; // Create a copy to batch updates
+
+    for (let i = 0; i < donations.length; i++) {
+      const donation = donations[i];
+
+      // Skip if already sent
+      if (donation.status.sent_to_qb) {
+        continue;
+      }
+
+      try {
+        const salesReceiptData = {
+          donation,
+          deposit_account_id: depositAccountId,
+          income_account_id: incomeAccountId,
+          item_id: itemId,
+        };
+
+        const response = await apiService.post('/api/sales_receipts', salesReceiptData);
+
+        if (response.data.success) {
+          // Update the donation status in our copy
+          updatedDonations[i] = {
+            ...donation,
+            status: { ...donation.status, sent_to_qb: true }
+          };
+          successCount++;
+        } else {
+          errors.push(`${donation.payer_info.customer_ref.display_name}: ${response.data.error}`);
+        }
+      } catch (error: any) {
+        const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
+        errors.push(`${donation.payer_info.customer_ref.display_name}: ${errorMsg}`);
+      }
+    }
+
+    // Update all donations at once
     setDonations(updatedDonations);
+
+    // Close the modal
+    setBulkSendToQBModal(false);
+
+    // Show summary
+    if (errors.length > 0) {
+      const errorMessage = `Sent ${successCount} donations successfully.\n\nErrors:\n${errors.join('\n')}`;
+      alert(errorMessage);
+    } else {
+      console.log(`Successfully sent ${successCount} donations to QuickBooks`);
+    }
   };
 
   const handleClearAll = () => {
@@ -263,6 +438,79 @@ function App() {
           </div>
         )}
       </main>
+
+      <SendToQBModal
+        isOpen={sendToQBModal.isOpen}
+        onClose={() => setSendToQBModal({ isOpen: false, donation: null, index: -1 })}
+        donation={sendToQBModal.donation}
+        onSend={handleSendToQBConfirm}
+      />
+
+      <BulkSendToQBModal
+        isOpen={bulkSendToQBModal}
+        onClose={() => setBulkSendToQBModal(false)}
+        donations={donations}
+        onSend={handleBulkSendToQBConfirm}
+      />
+
+      <ManualMatchModal
+        isOpen={manualMatchModal.isOpen}
+        onClose={() => setManualMatchModal({ isOpen: false, donation: null, index: -1 })}
+        donation={manualMatchModal.donation}
+        onMatch={handleManualMatchConfirm}
+        onNewCustomer={() => {
+          // Close manual match and open add customer modal
+          setManualMatchModal({ isOpen: false, donation: null, index: -1 });
+          if (manualMatchModal.donation && manualMatchModal.index >= 0) {
+            handleNewCustomer(manualMatchModal.donation, manualMatchModal.index);
+          }
+        }}
+      />
+
+      <AddCustomerModal
+        isOpen={addCustomerModal.isOpen}
+        onClose={() => setAddCustomerModal({ isOpen: false, donation: null, index: -1 })}
+        onSubmit={async (customerData) => {
+          try {
+            // Call the API to create the customer
+            const response = await apiService.post('/api/customers', {
+              DisplayName: customerData.displayName,
+              GivenName: customerData.firstName,
+              FamilyName: customerData.lastName,
+              CompanyName: customerData.organizationName,
+              PrimaryEmailAddr: customerData.email,
+              PrimaryPhone: customerData.phone,
+              BillAddr: {
+                Line1: customerData.addressLine1,
+                City: customerData.city,
+                CountrySubDivisionCode: customerData.state,
+                PostalCode: customerData.zip
+              }
+            });
+
+            if (response.data.success) {
+              handleAddCustomerConfirm(response.data.data);
+            } else {
+              throw new Error(response.data.error || 'Failed to create customer');
+            }
+          } catch (error: any) {
+            console.error('Error creating customer:', error);
+            throw error;
+          }
+        }}
+        initialData={addCustomerModal.donation ? {
+          displayName: addCustomerModal.donation.payer_info.customer_ref.display_name || '',
+          firstName: addCustomerModal.donation.payer_info.customer_ref.first_name || '',
+          lastName: addCustomerModal.donation.payer_info.customer_ref.last_name || '',
+          organizationName: addCustomerModal.donation.payer_info.qb_organization_name || '',
+          email: addCustomerModal.donation.payer_info.qb_email || '',
+          phone: addCustomerModal.donation.payer_info.qb_phone || '',
+          addressLine1: addCustomerModal.donation.payer_info.qb_address.line1 || '',
+          city: addCustomerModal.donation.payer_info.qb_address.city || '',
+          state: addCustomerModal.donation.payer_info.qb_address.state || '',
+          zip: addCustomerModal.donation.payer_info.qb_address.zip || ''
+        } : undefined}
+      />
     </div>
   );
 }

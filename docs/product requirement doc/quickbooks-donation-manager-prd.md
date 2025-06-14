@@ -206,8 +206,18 @@ Nonprofit organizations face significant operational challenges in processing do
   - Generate Report. This generates a text-based report summarizing every entry in the table.
   - Export to .csv. This exports all the data as a .csv file (all fields, not just the ones displayed in the UI table)
 
-I'll create a plain-text diagram of this QBO (QuickBooks Online) integration process flow:
+17. Next, I need to create the functionality for sending each entry to QuickBooks. In this case, each entry will be sent to QuickBooks in the form of a sales receipt. So, it needs to take all the information from the data structures populating the display table and map them to the various fields of the sales receipt.
 
+So, when the user presses 'Send to QuickBooks,' a modal should pop up. This modal should display all the information included in that entry's data, such as name, address, city, state, ZIP, memo, etc., and all of these fields should be editable so that if the user edits anything in the modal, the edited information is what gets sent to QuickBooks, and QuickBooks should be updated accordingly (be sure to flag the entry as edited in the data table afterward). For example, if the user changes the address and then sends it to QuickBooks, that address should be updated in QuickBooks.
+
+In addition to the customer demographic and payment data, it the 'Send to Quickbooks' modal should also include two accounts: a debit account and a credit account. Since this is a sales receipt (which is how we record donations), the default debit account will be the undeposited funds account and the default revenue account will be the first revenue account pulled from the user's quickbooks. It should be presented as a dropdown, allowing the user to change it if needed according to the same mechanism used for changing the customer in the manual matching modal. This mechanism should be applied to all such dropdowns where the account information is recorded.
+
+There should also be a dropdown for choosing a product/service. If this is selected, then the revenue account to be credited should be greyed out (because product/service is already mapped to the appropriate revenue account in quickbooks). And vice-versa--if the revenue account dropdown is populated, then the product/service dropdown should be greyed out.
+
+This is how the 'Send to Quickbooks' modal should operate. Additionally, there should be bulk actions such as "Send all to quickbooks"; the modal for this item won't contain the address/demogrpahic information for each individual entry but it will allow the user to specify the debit (undeposited funds by default) and credit accounts (first revenue account by default) or product/service account to be applied to every entry.
+
+### Process Diagram
+I'll create a plain-text diagram of this QBO (QuickBooks Online) integration process flow:
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         QBO INTEGRATION PROCESS FLOW                         │
