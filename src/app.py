@@ -1125,12 +1125,18 @@ def create_sales_receipt():
         description = f"{payment_ref}_{last_name}_{payment_date}_{amount}"
 
         # Build sales receipt data
+        # Include payment ref in private note
+        memo = donation["payment_info"]["memo"] or ""
+        if memo:
+            private_note = f"Ref: {payment_ref} - {memo}"
+        else:
+            private_note = f"Ref: {payment_ref}"
+
         sales_receipt_data = {
             "CustomerRef": {"value": donation["status"].get("qbo_customer_id")},
             "TxnDate": payment_date,
             "DocNumber": sales_receipt_number,
-            "RefNumber": payment_ref,  # This is the reference number field
-            "PrivateNote": donation["payment_info"]["memo"],
+            "PrivateNote": private_note,
             "DepositToAccountRef": {"value": deposit_account_id},
         }
 
