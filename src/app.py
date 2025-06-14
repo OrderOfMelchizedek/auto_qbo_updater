@@ -1108,11 +1108,28 @@ def create_sales_receipt():
 
         qb_client = QuickBooksClient(session_id)
 
+        # Extract needed fields
+        payment_ref = donation["payment_info"]["payment_ref"]
+        payment_date = donation["payment_info"]["payment_date"]
+        amount = donation["payment_info"]["amount"]
+
+        # Get last name from customer_ref
+        last_name = donation["payer_info"]["customer_ref"].get("last_name", "")
+
+        # Format the sales receipt number as {DATE}_{Payment Ref}
+        # Convert date from YYYY-MM-DD to YYYYMMDD format
+        date_formatted = payment_date.replace("-", "")
+        sales_receipt_number = f"{date_formatted}_{payment_ref}"
+
+        # Format description as Payment_REf_LastName_Date_Amount
+        description = f"{payment_ref}_{last_name}_{payment_date}_{amount}"
+
         # Build sales receipt data
         sales_receipt_data = {
             "CustomerRef": {"value": donation["status"].get("qbo_customer_id")},
-            "TxnDate": donation["payment_info"]["payment_date"],
-            "DocNumber": donation["payment_info"]["payment_ref"],
+            "TxnDate": payment_date,
+            "DocNumber": sales_receipt_number,
+            "RefNumber": payment_ref,  # This is the reference number field
             "PrivateNote": donation["payment_info"]["memo"],
             "DepositToAccountRef": {"value": deposit_account_id},
         }
@@ -1121,9 +1138,13 @@ def create_sales_receipt():
         if item_id:
             # Using item/product
             line_item = {
-                "Amount": float(donation["payment_info"]["amount"]),
+                "Amount": float(amount),
                 "DetailType": "SalesItemLineDetail",
-                "SalesItemLineDetail": {"ItemRef": {"value": item_id}},
+                "SalesItemLineDetail": {
+                    "ItemRef": {"value": item_id},
+                    "Qty": 1,  # Set quantity to 1
+                },
+                "Description": description,  # Add the formatted description
             }
         else:
             # QuickBooks sales receipts require an item, not just an income account
