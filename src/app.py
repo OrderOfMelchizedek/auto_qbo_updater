@@ -1122,7 +1122,10 @@ def create_sales_receipt():
         sales_receipt_number = f"{date_formatted}_{payment_ref}"
 
         # Format description as Payment_REf_LastName_Date_Amount
-        description = f"{payment_ref}_{last_name}_{payment_date}_{amount}"
+        # Ensure amount is formatted with 2 decimal places
+        amount_float = float(amount)
+        amount_formatted = f"{amount_float:.2f}"
+        description = f"{payment_ref}_{last_name}_{payment_date}_{amount_formatted}"
 
         # Build sales receipt data
         sales_receipt_data = {
@@ -1136,8 +1139,30 @@ def create_sales_receipt():
         # Set payment method based on deposit method
         deposit_method = donation["payment_info"].get("deposit_method", "").lower()
         if "check" in deposit_method:
-            # For QuickBooks, we use PaymentMethodRef with name
-            sales_receipt_data["PaymentMethodRef"] = {"name": "Check"}
+            # Query available payment methods to find "Check"
+            try:
+                payment_methods = qb_client.list_payment_methods()
+                check_method = None
+
+                # Look for payment method named "Check" (case-insensitive)
+                for pm in payment_methods:
+                    if pm.get("Name", "").lower() == "check":
+                        check_method = pm
+                        break
+
+                if check_method:
+                    # Use the ID from QuickBooks
+                    sales_receipt_data["PaymentMethodRef"] = {
+                        "value": check_method["Id"]
+                    }
+                    logger.info(
+                        f"Found Check payment method with ID: {check_method['Id']}"
+                    )
+                else:
+                    logger.warning("Check payment method not found in QuickBooks")
+            except Exception as e:
+                logger.error(f"Error fetching payment methods: {e}")
+                # Continue without setting payment method
 
         # For sales receipts, the reference number goes in PaymentRefNum field
         sales_receipt_data["PaymentRefNum"] = payment_ref
