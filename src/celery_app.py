@@ -105,9 +105,9 @@ if redis_url.startswith("rediss://"):
         else:
             redis_url += "?ssl_cert_reqs=CERT_NONE"
 
-        # Update the URLs in config
+        # Update the broker URL in config (result_backend stays disabled)
         config["broker_url"] = redis_url
-        config["result_backend"] = redis_url
+        # NOTE: result_backend stays None - permanently disabled
 
     # Option 2: Also set SSL configuration (as backup)
     # Note: For redis broker, SSL keys must be prefixed with 'ssl_'
