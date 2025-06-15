@@ -223,6 +223,7 @@ def health_check():
         "storage": type(storage_backend).__name__,
         "session": type(session_backend).__name__,
         "local_dev_mode": os.getenv("LOCAL_DEV_MODE") == "true",
+        "qbo_environment": Config.QBO_ENVIRONMENT,
     }
 
     # Test CSV loading in local dev mode
