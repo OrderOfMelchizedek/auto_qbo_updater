@@ -4,7 +4,8 @@ import { sessionService } from './sessionService';
 
 // In development, use relative URLs to leverage the proxy
 // In production, use the environment variable or default to empty string (same origin)
-const API_BASE_URL = process.env.REACT_APP_API_URL || '';
+// If running with React proxy, we should NOT use the full URL
+const API_BASE_URL = process.env.NODE_ENV === 'development' ? '' : (process.env.REACT_APP_API_URL || '');
 
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -16,9 +17,13 @@ const api: AxiosInstance = axios.create({
 
 // Add request interceptor to include session ID
 api.interceptors.request.use(async (config) => {
+  console.log('Axios interceptor - request to:', config.url);
+
   try {
     // Get session ID from secure session service
     const headers = await sessionService.getHeaders();
+    console.log('Session headers retrieved:', headers);
+
     // Properly merge headers
     Object.entries(headers).forEach(([key, value]) => {
       config.headers.set(key, value);
@@ -26,22 +31,49 @@ api.interceptors.request.use(async (config) => {
   } catch (error) {
     console.error('Failed to get session headers:', error);
   }
+
+  console.log('Axios interceptor - config ready');
   return config;
+}, (error) => {
+  console.error('Request interceptor error:', error);
+  return Promise.reject(error);
 });
 
+// Add response interceptor for debugging
+api.interceptors.response.use(
+  (response) => {
+    console.log('Response received for:', response.config.url, response);
+    return response;
+  },
+  (error) => {
+    console.error('Response error for:', error.config?.url, error);
+    return Promise.reject(error);
+  }
+);
+
 export const uploadFiles = async (files: File[]): Promise<UploadResponse> => {
+  console.log('uploadFiles called with', files.length, 'files');
+
   const formData = new FormData();
   files.forEach(file => {
     formData.append('files', file);
   });
 
-  const response = await api.post<UploadResponse>('/api/upload', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+  console.log('Making upload request to /api/upload');
 
-  return response.data;
+  try {
+    const response = await api.post<UploadResponse>('/api/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    console.log('Upload response received:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Upload request failed:', error);
+    throw error;
+  }
 };
 
 export const processDonations = async (uploadId: string): Promise<{ success: boolean; data: { job_id: string; status: string; message: string } }> => {
@@ -71,7 +103,12 @@ export const getJobStatus = async (jobId: string): Promise<{
 };
 
 export const streamJobEvents = (jobId: string, onMessage: (event: any) => void, onError?: (error: any) => void): EventSource => {
-  const eventSource = new EventSource(`${API_BASE_URL}/api/jobs/${jobId}/stream`);
+  // For EventSource, we need the full URL in development when using proxy
+  const baseUrl = process.env.NODE_ENV === 'development' && !API_BASE_URL
+    ? `${window.location.protocol}//${window.location.hostname}:${window.location.port}`
+    : API_BASE_URL;
+
+  const eventSource = new EventSource(`${baseUrl}/api/jobs/${jobId}/stream`);
 
   eventSource.onmessage = (event) => {
     try {

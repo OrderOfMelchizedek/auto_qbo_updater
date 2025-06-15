@@ -41,16 +41,22 @@ class AuthService {
    * Start OAuth2 authorization flow
    */
   async startAuthorization(): Promise<void> {
+    console.log('Starting QuickBooks authorization...');
     try {
       // Get authorization URL
       const headers = await sessionService.getHeaders();
+      console.log('Got headers for auth request:', headers);
+
       const response = await apiService.get('/api/auth/qbo/authorize', {
         headers,
         withCredentials: true
       });
+      console.log('Auth response:', response);
 
       const responseData = response.data?.data || response.data;
       const { auth_url, state, session_id } = responseData;
+      console.log('Auth URL:', auth_url);
+      console.log('State:', state);
 
       // Session is now managed by the server via cookies
       // No need to store in localStorage

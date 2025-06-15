@@ -3,7 +3,18 @@
  * Uses httpOnly cookies for session management instead of localStorage
  */
 
-import { apiService } from './api';
+import axios from 'axios';
+
+// Create a separate axios instance to avoid circular dependency
+const API_BASE_URL = process.env.NODE_ENV === 'development' ? '' : (process.env.REACT_APP_API_URL || '');
+
+const sessionApi = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true,
+});
 
 class SessionService {
   private sessionId: string | null = null;
@@ -40,7 +51,7 @@ class SessionService {
    */
   private async fetchSession(): Promise<string> {
     try {
-      const response = await apiService.get('/api/session', {
+      const response = await sessionApi.get('/api/session', {
         withCredentials: true // Important: include cookies
       });
 
@@ -69,7 +80,9 @@ class SessionService {
    * Get headers with session ID for API requests
    */
   async getHeaders(): Promise<Record<string, string>> {
+    console.log('SessionService.getHeaders called');
     const sessionId = await this.getSessionId();
+    console.log('SessionService got session ID:', sessionId);
     return {
       'X-Session-ID': sessionId
     };
