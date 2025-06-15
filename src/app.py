@@ -65,11 +65,24 @@ init_celery(app)
 job_tracker = JobTracker(os.getenv("REDIS_URL"))
 
 # Initialize rate limiter
+# For Heroku Redis, we need to handle SSL properly
+redis_url = os.getenv("REDIS_URL")
+if redis_url and redis_url.startswith("rediss://"):
+    # Heroku Redis uses self-signed certificates
+    # Flask-Limiter expects redis:// not rediss://
+    # Use redis:// with SSL parameters
+    redis_url = redis_url.replace("rediss://", "redis://", 1)
+    # Add SSL parameters to disable certificate verification
+    if "?" in redis_url:
+        redis_url += "&ssl_cert_reqs=none"
+    else:
+        redis_url += "?ssl_cert_reqs=none"
+
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"],
-    storage_uri=os.getenv("REDIS_URL") if os.getenv("REDIS_URL") else "memory://",
+    storage_uri=redis_url if redis_url else "memory://",
 )
 
 
