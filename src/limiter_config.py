@@ -5,8 +5,6 @@ from flask import Flask
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-from .redis_limiter_storage import get_limiter_storage
-
 
 def configure_limiter(app: Flask) -> Limiter:
     """
@@ -21,15 +19,26 @@ def configure_limiter(app: Flask) -> Limiter:
     # Get Redis URL from environment
     redis_url = os.getenv("REDIS_URL")
 
-    # Get appropriate storage (Redis with SSL support or memory fallback)
-    storage = get_limiter_storage(redis_url)
+    if redis_url:
+        # Handle SSL for Heroku Redis (same approach as Celery)
+        if redis_url.startswith("rediss://") and "ssl_cert_reqs" not in redis_url:
+            # Parse URL to add parameters properly
+            if "?" in redis_url:
+                redis_url += "&ssl_cert_reqs=CERT_NONE"
+            else:
+                redis_url += "?ssl_cert_reqs=CERT_NONE"
 
-    # Create limiter
+        storage_uri = redis_url
+    else:
+        # Fall back to memory storage if no Redis URL
+        storage_uri = "memory://"
+
+    # Create limiter with native Redis support
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
         default_limits=["200 per day", "50 per hour"],
-        storage_uri=storage,
+        storage_uri=storage_uri,
     )
 
     return limiter
