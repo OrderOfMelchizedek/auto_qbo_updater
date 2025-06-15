@@ -26,7 +26,7 @@ from .celery_app import init_celery
 from .config import Config, session_backend, storage_backend
 from .customer_matcher import CustomerMatcher
 from .job_tracker import JobTracker
-from .limiter_config import configure_limiter
+from .limiter_config import configure_limiter, configure_limiter_emergency_disable
 from .quickbooks_auth import qbo_auth
 from .quickbooks_utils import QuickBooksError
 from .secure_logging import audit_logger, setup_secure_logging
@@ -64,7 +64,13 @@ init_celery(app)
 job_tracker = JobTracker(os.getenv("REDIS_URL"))
 
 # Initialize rate limiter with proper Redis SSL support
-limiter = configure_limiter(app)
+try:
+    limiter = configure_limiter(app)
+    logger.info("✓ Flask-Limiter initialized successfully")
+except Exception as e:
+    logger.error(f"✗ Flask-Limiter initialization failed: {e}")
+    logger.warning("Using emergency limiter configuration (rate limiting disabled)")
+    limiter = configure_limiter_emergency_disable(app)
 
 
 app.config["MAX_CONTENT_LENGTH"] = (
