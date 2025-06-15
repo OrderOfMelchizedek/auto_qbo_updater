@@ -8,7 +8,15 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, make_response, request, stream_with_context
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    make_response,
+    redirect,
+    request,
+    stream_with_context,
+)
 from flask_cors import CORS
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
@@ -97,6 +105,53 @@ CORS(
         }
     },
 )
+
+
+# HTTPS redirect and security headers for production
+if os.environ.get("DYNO"):
+
+    @app.before_request
+    def force_https():
+        """Redirect HTTP to HTTPS in production."""
+        # Skip if already HTTPS or if it's a health check
+        if request.path == "/api/health":
+            return None
+
+        # Heroku passes the original protocol via X-Forwarded-Proto header
+        if request.headers.get("X-Forwarded-Proto") == "http":
+            # Build the HTTPS URL
+            url = request.url.replace("http://", "https://", 1)
+            return redirect(url, code=301)
+
+    @app.after_request
+    def set_security_headers(response):
+        """Add security headers to all responses in production."""
+        # Strict Transport Security - enforce HTTPS for 1 year
+        response.headers[
+            "Strict-Transport-Security"
+        ] = "max-age=31536000; includeSubDomains"
+
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+
+        # XSS Protection (for older browsers)
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+
+        # Prevent MIME type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+
+        # Referrer Policy
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+        # Basic Content Security Policy
+        csp = (
+            "default-src 'self' https:; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline';"
+        )
+        response.headers["Content-Security-Policy"] = csp
+
+        return response
 
 
 @app.route("/api/")
