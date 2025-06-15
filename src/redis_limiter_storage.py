@@ -1,7 +1,10 @@
 """Custom Redis storage for Flask-Limiter that handles Heroku Redis SSL."""
+import logging
 from typing import Optional, Union
 
 from limits.storage.redis import RedisStorage
+
+logger = logging.getLogger(__name__)
 
 
 class HerokuRedisStorage(RedisStorage):
@@ -43,11 +46,19 @@ def get_limiter_storage(redis_url: Optional[str]) -> Union[str, HerokuRedisStora
         Storage URI or instance for Flask-Limiter
     """
     if not redis_url:
+        logger.info("No REDIS_URL found, using memory storage for rate limiting")
         return "memory://"
 
-    # For Heroku Redis (rediss://), use our custom storage
-    if redis_url.startswith("rediss://"):
-        return HerokuRedisStorage(redis_url)
+    try:
+        # For Heroku Redis (rediss://), use our custom storage
+        if redis_url.startswith("rediss://"):
+            logger.info("Configuring Flask-Limiter with SSL Redis storage")
+            return HerokuRedisStorage(redis_url)
 
-    # For regular Redis, use the URL directly
-    return redis_url
+        # For regular Redis, use the URL directly
+        logger.info("Configuring Flask-Limiter with standard Redis storage")
+        return redis_url
+    except Exception as e:
+        logger.error(f"Failed to configure Redis storage for rate limiter: {e}")
+        logger.warning("Falling back to memory storage for rate limiting")
+        return "memory://"

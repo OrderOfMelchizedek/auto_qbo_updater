@@ -4,19 +4,29 @@ import ssl
 
 from celery import Celery
 
-# Get Redis URL
+# Get Redis URL and clean it up
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+# Remove trailing slashes from Redis URL (common issue with Heroku Redis URLs)
+if redis_url.endswith("//"):
+    redis_url = redis_url[:-2]
+elif redis_url.endswith("/"):
+    redis_url = redis_url[:-1]
+
+# Add database number if not present (Celery expects /0 at the end)
+if not redis_url.split("://")[1].count("/"):
+    redis_url += "/0"
 
 # Create Celery instance
 celery_app = Celery(
     "donation_processor",
-    broker=redis_url,
-    backend=redis_url,
     include=["src.tasks"],
 )
 
 # Configure Celery
 config = {
+    "broker_url": redis_url,
+    "result_backend": redis_url,
     "task_serializer": "json",
     "accept_content": ["json"],
     "result_serializer": "json",
@@ -44,18 +54,35 @@ config = {
 
 # Handle SSL for Heroku Redis
 if redis_url.startswith("rediss://"):
-    # Heroku Redis uses self-signed certificates
+    # For Celery 5.x with Heroku Redis, we have two options:
+    # Option 1: Use URL parameters (most reliable)
+    # Option 2: Use broker_use_ssl configuration
+
+    # Try Option 1 first: Add SSL parameters to URL if not already present
+    if "ssl_cert_reqs" not in redis_url:
+        # Parse URL to add parameters properly
+        if "?" in redis_url:
+            redis_url += "&ssl_cert_reqs=CERT_NONE"
+        else:
+            redis_url += "?ssl_cert_reqs=CERT_NONE"
+
+        # Update the URLs in config
+        config["broker_url"] = redis_url
+        config["result_backend"] = redis_url
+
+    # Option 2: Also set SSL configuration (as backup)
+    # Note: For redis broker, SSL keys must be prefixed with 'ssl_'
     config.update(
         {
             "broker_use_ssl": {
-                "ssl_cert_reqs": ssl.CERT_NONE,  # Use SSL constant
+                "ssl_cert_reqs": ssl.CERT_NONE,  # Must use SSL constant
                 "ssl_ca_certs": None,
                 "ssl_certfile": None,
                 "ssl_keyfile": None,
                 "ssl_check_hostname": False,
             },
             "redis_backend_use_ssl": {
-                "ssl_cert_reqs": ssl.CERT_NONE,  # Use SSL constant
+                "ssl_cert_reqs": ssl.CERT_NONE,  # Must use SSL constant
                 "ssl_ca_certs": None,
                 "ssl_certfile": None,
                 "ssl_keyfile": None,
@@ -73,9 +100,19 @@ if redis_url.startswith("rediss://"):
                     2: 2,  # TCP_KEEPINTVL
                     3: 2,  # TCP_KEEPCNT
                 },
+                # Additional SSL transport options
+                "connection_class": "redis.SSLConnection",
+                "connection_kwargs": {
+                    "ssl_cert_reqs": "none",
+                    "ssl_check_hostname": False,
+                },
             },
         }
     )
+
+# Log the final configuration for debugging
+print(f"[Celery] Broker URL: {config.get('broker_url', 'not set')}")
+print(f"[Celery] SSL enabled: {redis_url.startswith('rediss://')}")
 
 celery_app.conf.update(config)
 
