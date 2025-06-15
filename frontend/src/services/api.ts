@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { UploadResponse, ProcessResponse } from '../types';
+import { sessionService } from './sessionService';
 
 // In development, use relative URLs to leverage the proxy
 // In production, use the environment variable or default to empty string (same origin)
@@ -10,14 +11,20 @@ const api: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Always send cookies
 });
 
 // Add request interceptor to include session ID
-api.interceptors.request.use((config) => {
-  // Get session ID from authService
-  const sessionId = localStorage.getItem('qbo_session_id');
-  if (sessionId) {
-    config.headers['X-Session-ID'] = sessionId;
+api.interceptors.request.use(async (config) => {
+  try {
+    // Get session ID from secure session service
+    const headers = await sessionService.getHeaders();
+    // Properly merge headers
+    Object.entries(headers).forEach(([key, value]) => {
+      config.headers.set(key, value);
+    });
+  } catch (error) {
+    console.error('Failed to get session headers:', error);
   }
   return config;
 });
