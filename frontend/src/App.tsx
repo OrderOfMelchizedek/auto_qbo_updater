@@ -82,21 +82,37 @@ function App() {
     setIsProcessing(true);
     setJobId(null);
 
+    // Check if QuickBooks is connected before uploading
+    if (!isLocalDevMode && !isConnectedToQB) {
+      // Trigger QuickBooks authentication
+      setTriggerAuth(true);
+      setIsProcessing(false);
+      setError('Please connect to QuickBooks to upload files');
+      return;
+    }
+
     try {
+      console.log('Starting file upload with files:', files.map(f => f.name));
+
       // Upload files
       const uploadResponse = await uploadFiles(files);
+      console.log('Upload response:', uploadResponse);
+
       const newUploadId = uploadResponse.data.upload_id;
       setUploadId(newUploadId);
 
       // Start processing (returns job ID)
       const processResponse = await processDonations(newUploadId);
+      console.log('Process response:', processResponse);
+
       if (processResponse.success && processResponse.data.job_id) {
         setJobId(processResponse.data.job_id);
       } else {
         throw new Error('Failed to start processing');
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'An error occurred during processing');
+      console.error('Upload/processing error:', err);
+      setError(err.response?.data?.error || err.message || 'An error occurred during processing');
       setIsProcessing(false);
     }
   };
