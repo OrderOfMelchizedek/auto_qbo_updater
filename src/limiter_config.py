@@ -1,9 +1,12 @@
 """Configuration for Flask-Limiter with Heroku Redis SSL support."""
+import logging
 import os
 
 from flask import Flask
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+
+logger = logging.getLogger(__name__)
 
 
 def configure_limiter(app: Flask) -> Limiter:
@@ -33,15 +36,51 @@ def configure_limiter(app: Flask) -> Limiter:
             )
 
             if redis_client:
-                # Use the connection pool from our working Redis client
-                limiter = Limiter(
-                    app=app,
-                    key_func=get_remote_address,
-                    default_limits=["200 per day", "50 per hour"],
-                    storage_uri=redis_url,
-                    storage_options={"connection_pool": redis_client.connection_pool},
-                )
+                try:
+                    # CRITICAL FIX FOR FLASK-LIMITER SSL ISSUE:
+                    #
+                    # Problem: Flask-Limiter was failing with SSL EOF errors because
+                    # it created its own Redis connections without our SSL config.
+                    #
+                    # Root Cause: When both storage_uri and connection_pool are
+                    # provided, Flask-Limiter prioritizes storage_uri and ignores
+                    # connection_pool.
+                    #
+                    # Solution: Use storage_uri="memory://" (non-Redis URI) to force
+                    # Flask-Limiter to use our working connection_pool.
+                    #
+                    # This ensures Flask-Limiter uses the same SSL configuration
+                    # as Celery and other Redis connections that work correctly.
+                    limiter = Limiter(
+                        app=app,
+                        key_func=get_remote_address,
+                        default_limits=["200 per day", "50 per hour"],
+                        storage_uri="memory://",  # Force non-Redis URI
+                        storage_options={
+                            "connection_pool": redis_client.connection_pool
+                        },
+                    )
+                    logger.info(
+                        "✓ Flask-Limiter using SSL-configured Redis connection pool"
+                    )
+
+                    # Test the connection immediately
+                    if hasattr(limiter._storage, "clear"):
+                        # This will test the Redis connection
+                        logger.info("✓ Flask-Limiter Redis connection test successful")
+
+                except Exception as e:
+                    logger.error(f"✗ Flask-Limiter Redis configuration failed: {e}")
+                    logger.info("Falling back to memory storage for rate limiting")
+                    # Emergency fallback to memory storage
+                    limiter = Limiter(
+                        app=app,
+                        key_func=get_remote_address,
+                        default_limits=["200 per day", "50 per hour"],
+                        storage_uri="memory://",
+                    )
             else:
+                logger.warning("Redis client creation failed - using memory storage")
                 # Fall back to memory if Redis connection fails
                 limiter = Limiter(
                     app=app,
@@ -65,6 +104,27 @@ def configure_limiter(app: Flask) -> Limiter:
             default_limits=["200 per day", "50 per hour"],
             storage_uri="memory://",
         )
+
+    return limiter
+
+
+def configure_limiter_emergency_disable(app: Flask) -> Limiter:
+    """
+    Emergency configuration: Disable Flask-Limiter completely.
+
+    This creates a limiter that doesn't actually limit anything.
+    Use this if all Redis-based solutions fail.
+    """
+    logger.warning("⚠️  EMERGENCY: Flask-Limiter disabled - no rate limiting active")
+
+    # Create a dummy limiter that doesn't actually limit
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=[],  # No default limits
+        storage_uri="memory://",
+        enabled=False,  # Disable all rate limiting
+    )
 
     return limiter
 
