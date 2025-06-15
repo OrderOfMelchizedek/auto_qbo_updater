@@ -56,17 +56,16 @@ celery_app = Celery(
 # DISABLE_RESULT_BACKEND = True
 
 # Configure Celery
-# Check if result backend should be disabled
-DISABLE_RESULT_BACKEND = (
-    os.getenv("DISABLE_CELERY_RESULT_BACKEND", "false").lower() == "true"
-)
-
-if DISABLE_RESULT_BACKEND:
-    print("[Celery] Result backend disabled - tasks will not store results")
+# NUCLEAR FIX: Always disable result backend due to persistent SSL issues
+# The result backend consistently fails with SSL EOF errors on Heroku Redis
+# Tasks will run successfully without result storage
+DISABLE_RESULT_BACKEND = True
+print("[Celery] 🚨 NUCLEAR FIX: Result backend permanently disabled due to SSL issues")
+print("[Celery] Tasks will run fire-and-forget without result storage")
 
 config = {  # type: ignore[var-annotated]
     "broker_url": redis_url,
-    "result_backend": None if DISABLE_RESULT_BACKEND else redis_url,
+    "result_backend": None,  # Permanently disabled
     "task_serializer": "json",
     "accept_content": ["json"],
     "result_serializer": "json",
@@ -127,16 +126,8 @@ if redis_url.startswith("rediss://"):
             "ssl_keyfile": None,
             "ssl_check_hostname": False,
         },
-        # Result backend transport options (same as broker)
-        "result_backend_transport_options": {
-            "master_name": None,
-            "socket_keepalive": True,
-            "connection_class": "redis.SSLConnection",
-            "connection_kwargs": {
-                "ssl_cert_reqs": "none",
-                "ssl_check_hostname": False,
-            },
-        },
+        # NOTE: result_backend_transport_options was removed - invalid setting
+        # Result backend SSL issues resolved by disabling result storage
         # Additional connection settings
         "broker_connection_timeout": 30,
         "broker_connection_retry_delay": 0.5,
@@ -167,10 +158,9 @@ if redis_url.startswith("rediss://"):
 
 # Log the final configuration for debugging
 print(f"[Celery] Broker URL: {config.get('broker_url', 'not set')}")
-print(f"[Celery] Result Backend: {config.get('result_backend', 'not set')}")
+print("[Celery] Result Backend: DISABLED (SSL issues)")
 print(f"[Celery] SSL enabled: {redis_url.startswith('rediss://')}")
-if DISABLE_RESULT_BACKEND:
-    print("[Celery] ⚠️  Result backend disabled - no task result storage")
+print("[Celery] ✅ Tasks will execute successfully without result storage")
 
 celery_app.conf.update(config)
 

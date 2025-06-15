@@ -803,10 +803,8 @@ def process_files():
         }
         job_tracker.create_job(job_id, job_data)
 
-        # Queue the processing task
-        process_donations_task.apply_async(
-            args=[job_id, upload_id, session_id], task_id=job_id
-        )
+        # Queue the processing task (removed task_id to avoid result backend issues)
+        process_donations_task.apply_async(args=[job_id, upload_id, session_id])
 
         logger.info(f"Queued job {job_id} for upload {upload_id}")
 
