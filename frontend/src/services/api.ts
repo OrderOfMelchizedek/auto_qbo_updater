@@ -127,8 +127,8 @@ export const streamJobEvents = (jobId: string, onMessage: (event: any) => void, 
   return eventSource;
 };
 
-export const checkHealth = async (): Promise<{ status: string; local_dev_mode: boolean }> => {
-  const response = await api.get<{ status: string; local_dev_mode: boolean }>('/api/health');
+export const checkHealth = async (): Promise<{ status: string; local_dev_mode: boolean; qbo_environment?: string }> => {
+  const response = await api.get<{ status: string; local_dev_mode: boolean; qbo_environment?: string }>('/api/health');
   return response.data;
 };
 

@@ -26,6 +26,7 @@ function App() {
   const [authCheckComplete, setAuthCheckComplete] = useState(false);
   const [triggerAuth, setTriggerAuth] = useState(false);
   const [isLocalDevMode, setIsLocalDevMode] = useState(false);
+  const [qboEnvironment, setQboEnvironment] = useState<string | undefined>();
   const [sendToQBModal, setSendToQBModal] = useState<{ isOpen: boolean; donation: FinalDisplayDonation | null; index: number }>({
     isOpen: false,
     donation: null,
@@ -49,6 +50,7 @@ function App() {
       try {
         const health = await checkHealth();
         setIsLocalDevMode(health.local_dev_mode);
+        setQboEnvironment(health.qbo_environment);
 
         // If in local dev mode, automatically mark as "connected"
         if (health.local_dev_mode) {
@@ -387,14 +389,28 @@ function App() {
     <div className="App">
       <header className="App-header">
         <h1>QuickBooks Donation Manager</h1>
-        <QuickBooksConnection
-          isConnected={isConnectedToQB}
-          onConnect={() => setIsConnectedToQB(true)}
-          onDisconnect={() => setIsConnectedToQB(false)}
-          triggerAuth={triggerAuth}
-          onAuthTriggered={() => setTriggerAuth(false)}
-          isLocalDevMode={isLocalDevMode}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <QuickBooksConnection
+            isConnected={isConnectedToQB}
+            onConnect={() => setIsConnectedToQB(true)}
+            onDisconnect={() => setIsConnectedToQB(false)}
+            triggerAuth={triggerAuth}
+            onAuthTriggered={() => setTriggerAuth(false)}
+            isLocalDevMode={isLocalDevMode}
+          />
+          {qboEnvironment && !isLocalDevMode && (
+            <div style={{
+              padding: '4px 12px',
+              borderRadius: '4px',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              backgroundColor: qboEnvironment === 'production' ? '#dc3545' : '#ffc107',
+              color: qboEnvironment === 'production' ? 'white' : '#212529'
+            }}>
+              {qboEnvironment.toUpperCase()}
+            </div>
+          )}
+        </div>
       </header>
 
       <main className="App-main">

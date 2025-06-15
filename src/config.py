@@ -84,10 +84,22 @@ class Config:
     UPLOAD_ID_PREFIX = "batch"
 
     # QuickBooks OAuth2 settings
-    QBO_CLIENT_ID = os.getenv("QBO_CLIENT_ID", "")
-    QBO_CLIENT_SECRET = os.getenv("QBO_CLIENT_SECRET", "")
-    QBO_REDIRECT_URI = os.getenv("QBO_REDIRECT_URI", "")
     QBO_ENVIRONMENT = os.getenv("QBO_ENVIRONMENT", "sandbox")  # sandbox or production
+
+    # Select credentials based on environment
+    if QBO_ENVIRONMENT == "production":
+        QBO_CLIENT_ID = os.getenv("QBO_PRODUCTION_CLIENT_ID", "")
+        QBO_CLIENT_SECRET = os.getenv("QBO_PRODUCTION_CLIENT_SECRET", "")
+    else:
+        # Default to sandbox credentials
+        QBO_CLIENT_ID = os.getenv(
+            "QBO_SANDBOX_CLIENT_ID", os.getenv("QBO_CLIENT_ID", "")
+        )
+        QBO_CLIENT_SECRET = os.getenv(
+            "QBO_SANDBOX_CLIENT_SECRET", os.getenv("QBO_CLIENT_SECRET", "")
+        )
+
+    QBO_REDIRECT_URI = os.getenv("QBO_REDIRECT_URI", "")
 
     # Encryption key for token storage
     ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "")
