@@ -1121,6 +1121,20 @@ def create_sales_receipt():
         date_formatted = payment_date.replace("-", "")
         sales_receipt_number = f"{date_formatted}_{payment_ref}"
 
+        # Check if customer ID exists (required for sales receipts)
+        customer_id = donation["status"].get("qbo_customer_id")
+        if not customer_id:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Customer must be created in QuickBooks before "
+                        "creating sales receipt",
+                    }
+                ),
+                400,
+            )
+
         # Format description as Payment_REf_LastName_Date_Amount
         # Ensure amount is formatted with 2 decimal places
         amount_float = float(amount)
@@ -1129,7 +1143,7 @@ def create_sales_receipt():
 
         # Build sales receipt data
         sales_receipt_data = {
-            "CustomerRef": {"value": donation["status"].get("qbo_customer_id")},
+            "CustomerRef": {"value": customer_id},  # Use the validated customer ID
             "TxnDate": payment_date,
             "DocNumber": sales_receipt_number,
             "PrivateNote": donation["payment_info"]["memo"],
@@ -1152,12 +1166,18 @@ def create_sales_receipt():
         # Log for debugging
         logger.info(
             f"Payment method detection - deposit_method: {deposit_method}, "
-            f"raw_payment_method: {raw_payment_method}"
+            f"raw_payment_method: {raw_payment_method}, "
+            f"payment_ref: {payment_ref}"
         )
 
         # Check both deposit_method and payment_method fields
-        is_check = (deposit_method and "check" in deposit_method.lower()) or (
-            raw_payment_method and "check" in raw_payment_method.lower()
+        # Also assume numeric payment refs are likely checks
+        is_check = (
+            (deposit_method and "check" in deposit_method.lower())
+            or (raw_payment_method and "check" in raw_payment_method.lower())
+            or (
+                payment_ref and payment_ref.isdigit() and len(payment_ref) <= 6
+            )  # Check number pattern
         )
 
         if is_check:
