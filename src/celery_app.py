@@ -4,6 +4,34 @@ import ssl
 
 from celery import Celery
 
+# Commenting out unused function for now
+# def get_celery_socket_keepalive_options():
+#     """Get platform-specific socket keepalive options for Celery.
+#
+#     Returns:
+#         dict: Socket keepalive options for Celery broker transport options
+#     """
+#     keepalive_options = {}
+#
+#     # Platform-specific handling
+#     if sys.platform == "darwin":
+#         # macOS/Darwin specific - only use available constants
+#         if hasattr(socket, "TCP_KEEPINTVL"):
+#             keepalive_options[socket.TCP_KEEPINTVL] = 60  # Interval between probes
+#         if hasattr(socket, "TCP_KEEPCNT"):
+#             keepalive_options[socket.TCP_KEEPCNT] = 3  # Number of probes
+#     else:
+#         # Linux and other platforms
+#         if hasattr(socket, "TCP_KEEPIDLE"):
+#             keepalive_options[socket.TCP_KEEPIDLE] = 60  # Seconds before sending probes  # noqa: E501
+#         if hasattr(socket, "TCP_KEEPINTVL"):
+#             keepalive_options[socket.TCP_KEEPINTVL] = 60  # Interval between probes
+#         if hasattr(socket, "TCP_KEEPCNT"):
+#             keepalive_options[socket.TCP_KEEPCNT] = 3  # Number of probes
+#
+#     return keepalive_options
+
+
 # Get Redis URL and clean it up
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -91,24 +119,30 @@ if redis_url.startswith("rediss://"):
             # Additional connection settings
             "broker_connection_timeout": 30,
             "broker_connection_retry_delay": 0.5,
-            "broker_transport_options": {
-                "master_name": None,
-                "visibility_timeout": 3600,
-                "socket_keepalive": True,
-                "socket_keepalive_options": {
-                    1: 1,  # TCP_KEEPIDLE
-                    2: 2,  # TCP_KEEPINTVL
-                    3: 2,  # TCP_KEEPCNT
-                },
-                # Additional SSL transport options
-                "connection_class": "redis.SSLConnection",
-                "connection_kwargs": {
-                    "ssl_cert_reqs": "none",
-                    "ssl_check_hostname": False,
-                },
-            },
         }
     )
+
+    # Socket keepalive options disabled for now - causing issues on Heroku
+    # keepalive_opts = get_celery_socket_keepalive_options()
+
+    # Configure broker transport options
+    transport_options = {
+        "master_name": None,
+        "visibility_timeout": 3600,
+        "socket_keepalive": True,
+        # Additional SSL transport options
+        "connection_class": "redis.SSLConnection",
+        "connection_kwargs": {
+            "ssl_cert_reqs": "none",
+            "ssl_check_hostname": False,
+        },
+    }
+
+    # Skip keepalive options for now - they're causing issues on Heroku
+    # if keepalive_opts:
+    #     transport_options["socket_keepalive_options"] = keepalive_opts
+
+    config["broker_transport_options"] = transport_options
 
 # Log the final configuration for debugging
 print(f"[Celery] Broker URL: {config.get('broker_url', 'not set')}")
