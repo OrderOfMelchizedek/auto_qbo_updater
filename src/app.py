@@ -1357,6 +1357,37 @@ def auth_callback():
         return jsonify({"error": "React app not found"}), 404
 
 
+# Route to serve markdown files (EULA and Privacy Policy)
+@app.route("/EULA.md")
+def serve_eula():
+    """Serve the EULA markdown file."""
+    try:
+        eula_path = os.path.join(os.path.dirname(__file__), "..", "EULA.md")
+        with open(eula_path, "r") as f:
+            content = f.read()
+        response = make_response(content)
+        response.headers["Content-Type"] = "text/markdown; charset=utf-8"
+        return response
+    except FileNotFoundError:
+        return jsonify({"error": "EULA not found"}), 404
+
+
+@app.route("/PRIVACY_POLICY.md")
+def serve_privacy_policy():
+    """Serve the Privacy Policy markdown file."""
+    try:
+        privacy_path = os.path.join(
+            os.path.dirname(__file__), "..", "PRIVACY_POLICY.md"
+        )
+        with open(privacy_path, "r") as f:
+            content = f.read()
+        response = make_response(content)
+        response.headers["Content-Type"] = "text/markdown; charset=utf-8"
+        return response
+    except FileNotFoundError:
+        return jsonify({"error": "Privacy Policy not found"}), 404
+
+
 # Catch-all route for React client-side routing
 # This must be at the end to avoid catching API routes
 @app.route("/", defaults={"path": ""})

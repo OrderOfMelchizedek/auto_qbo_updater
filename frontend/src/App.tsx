@@ -510,6 +510,28 @@ function App() {
           zip: addCustomerModal.donation.payer_info.qb_address.zip || ''
         } : undefined}
       />
+
+      {/* Footer with legal links */}
+      <footer style={{
+        marginTop: '40px',
+        padding: '20px',
+        borderTop: '1px solid #e0e0e0',
+        textAlign: 'center',
+        color: '#666',
+        fontSize: '14px'
+      }}>
+        <div>
+          <a href="/EULA.md" target="_blank" style={{ color: '#0066cc', textDecoration: 'none', marginRight: '20px' }}>
+            End User License Agreement
+          </a>
+          <a href="/PRIVACY_POLICY.md" target="_blank" style={{ color: '#0066cc', textDecoration: 'none' }}>
+            Privacy Policy
+          </a>
+        </div>
+        <div style={{ marginTop: '10px', fontSize: '12px' }}>
+          © 2025 Friends of Mwangaza. All rights reserved.
+        </div>
+      </footer>
     </div>
   );
 }
