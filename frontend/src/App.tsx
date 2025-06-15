@@ -540,8 +540,11 @@ function App() {
           <a href="/EULA.md" target="_blank" style={{ color: '#0066cc', textDecoration: 'none', marginRight: '20px' }}>
             End User License Agreement
           </a>
-          <a href="/PRIVACY_POLICY.md" target="_blank" style={{ color: '#0066cc', textDecoration: 'none' }}>
+          <a href="/PRIVACY_POLICY.md" target="_blank" style={{ color: '#0066cc', textDecoration: 'none', marginRight: '20px' }}>
             Privacy Policy
+          </a>
+          <a href="mailto:treasurer@mwangazapartnership.org" style={{ color: '#0066cc', textDecoration: 'none' }}>
+            Contact Us
           </a>
         </div>
         <div style={{ marginTop: '10px', fontSize: '12px' }}>
