@@ -1,5 +1,6 @@
 """Celery configuration for background task processing."""
 import os
+import ssl
 
 from celery import Celery
 
@@ -47,14 +48,14 @@ if redis_url.startswith("rediss://"):
     config.update(
         {
             "broker_use_ssl": {
-                "ssl_cert_reqs": "none",  # Use string format
+                "ssl_cert_reqs": ssl.CERT_NONE,  # Use SSL constant
                 "ssl_ca_certs": None,
                 "ssl_certfile": None,
                 "ssl_keyfile": None,
                 "ssl_check_hostname": False,
             },
             "redis_backend_use_ssl": {
-                "ssl_cert_reqs": "none",  # Use string format
+                "ssl_cert_reqs": ssl.CERT_NONE,  # Use SSL constant
                 "ssl_ca_certs": None,
                 "ssl_certfile": None,
                 "ssl_keyfile": None,
