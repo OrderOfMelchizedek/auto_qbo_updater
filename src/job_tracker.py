@@ -27,13 +27,27 @@ class JobStage(Enum):
 class JobTracker:
     """Track background job status and progress in Redis."""
 
-    def __init__(self, redis_url: Optional[str] = None):
+    def __init__(self, redis_url: Optional[str] = None, redis_client=None):
         """Initialize job tracker with Redis connection."""
-        from .redis_connection import create_redis_client
+        if redis_client:
+            # Use provided Redis client (reuse existing connection pool)
+            # Need to ensure decode_responses=True for JSON operations
+            if hasattr(redis_client, "connection_pool"):
+                # Create new client with same pool but decode_responses=True
+                import redis
 
-        self.redis_client = create_redis_client(
-            decode_responses=True, max_connections=3
-        )
+                self.redis_client = redis.Redis(
+                    connection_pool=redis_client.connection_pool, decode_responses=True
+                )
+            else:
+                self.redis_client = redis_client
+        else:
+            # Fallback: create new client (old behavior)
+            from .redis_connection import create_redis_client
+
+            self.redis_client = create_redis_client(
+                decode_responses=True, max_connections=3
+            )
         self.ttl = 3600  # Job data expires after 1 hour
         self.enabled = self.redis_client is not None
 
