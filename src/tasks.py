@@ -13,27 +13,11 @@ from .storage import S3Storage
 
 logger = logging.getLogger(__name__)
 
-# Initialize job tracker for worker with shared Redis connection
-# Use the same approach as web app to avoid creating separate SSL connections
-redis_url = os.getenv("REDIS_URL")
-if redis_url:
-    from .redis_connection import create_redis_client
-
-    # Create Redis client using our working SSL configuration
-    redis_client = create_redis_client(
-        decode_responses=True, max_connections=3  # Small pool for worker
-    )
-    if redis_client:
-        job_tracker = JobTracker(redis_client=redis_client)
-        logger.info("✓ Worker JobTracker initialized with shared Redis connection")
-    else:
-        job_tracker = JobTracker()  # Fallback without Redis
-        logger.warning(
-            "⚠️ Worker JobTracker initialized without Redis (connection failed)"
-        )
-else:
-    job_tracker = JobTracker()  # Fallback without Redis
-    logger.warning("⚠️ Worker JobTracker initialized without Redis (no REDIS_URL)")
+# SIMPLE SOLUTION: Disable worker JobTracker to avoid Redis connection issues
+# The web app handles all job tracking for the UI. Worker just executes tasks.
+# This eliminates Redis connection limit issues while maintaining functionality.
+job_tracker = JobTracker()  # No Redis connection - keeps us under connection limit
+logger.info("✓ Worker JobTracker disabled to prevent Redis connection limit issues")
 
 
 @celery_app.task(bind=True, name="process_donations_task")
