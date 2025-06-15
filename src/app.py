@@ -25,7 +25,6 @@ from werkzeug.utils import secure_filename
 from .celery_app import init_celery
 from .config import Config, session_backend, storage_backend
 from .customer_matcher import CustomerMatcher
-from .job_tracker import JobTracker
 from .limiter_config import configure_limiter, configure_limiter_emergency_disable
 from .quickbooks_auth import qbo_auth
 from .quickbooks_utils import QuickBooksError
@@ -60,9 +59,6 @@ else:
 # Initialize Celery with Flask app context
 init_celery(app)
 
-# Initialize job tracker
-job_tracker = JobTracker(os.getenv("REDIS_URL"))
-
 # Initialize rate limiter with proper Redis SSL support
 try:
     limiter = configure_limiter(app)
@@ -87,6 +83,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 # Use Redis for sessions in production, filesystem for local dev
 redis_url = os.environ.get("REDIS_URL")
 if redis_url:
+    from .job_tracker import JobTracker
     from .redis_connection import create_redis_client
 
     redis_client = create_redis_client(
@@ -95,10 +92,21 @@ if redis_url:
     if redis_client:
         app.config["SESSION_REDIS"] = redis_client
         app.config["SESSION_TYPE"] = "redis"
+        # Initialize job tracker with shared Redis connection
+        job_tracker = JobTracker(redis_client=redis_client)
+        logger.info("✓ JobTracker initialized with shared Redis connection")
     else:
         app.config["SESSION_TYPE"] = "filesystem"
+        # Initialize job tracker without Redis
+        job_tracker = JobTracker()
+        logger.info("⚠️ JobTracker initialized without Redis (filesystem fallback)")
 else:
+    from .job_tracker import JobTracker
+
     app.config["SESSION_TYPE"] = "filesystem"
+    # Initialize job tracker without Redis
+    job_tracker = JobTracker()
+    logger.info("⚠️ JobTracker initialized without Redis (no REDIS_URL)")
 
 # Initialize Flask-Session
 Session(app)
