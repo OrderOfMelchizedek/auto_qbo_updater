@@ -13,8 +13,9 @@ from .storage import S3Storage
 
 logger = logging.getLogger(__name__)
 
-# Initialize job tracker
-job_tracker = JobTracker(os.getenv("REDIS_URL"))
+# Initialize job tracker for worker (disabled to prevent SSL connection issues)
+# The web app handles job tracking for UI updates; worker runs without Redis tracking
+job_tracker = JobTracker()  # No Redis connection - prevents SSL errors
 
 
 @celery_app.task(bind=True, name="process_donations_task")
