@@ -76,8 +76,23 @@ app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
 # Configure Flask sessions
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(32).hex())
-app.config["SESSION_TYPE"] = "filesystem"  # Can be changed to 'redis' in production
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+
+# Use Redis for sessions in production, filesystem for local dev
+redis_url = os.environ.get("REDIS_URL")
+if redis_url:
+    from .redis_connection import create_redis_client
+
+    redis_client = create_redis_client(
+        decode_responses=False, max_connections=5  # Flask-Session needs bytes
+    )
+    if redis_client:
+        app.config["SESSION_REDIS"] = redis_client
+        app.config["SESSION_TYPE"] = "redis"
+    else:
+        app.config["SESSION_TYPE"] = "filesystem"
+else:
+    app.config["SESSION_TYPE"] = "filesystem"
 
 # Initialize Flask-Session
 Session(app)

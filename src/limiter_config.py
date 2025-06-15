@@ -1,5 +1,6 @@
 """Configuration for Flask-Limiter with Heroku Redis SSL support."""
 import os
+from typing import Union
 
 from flask import Flask
 from flask_limiter import Limiter
@@ -18,14 +19,15 @@ def configure_limiter(app: Flask) -> Limiter:
     """
     redis_url = os.getenv("REDIS_URL")
 
-    # For production with Heroku Redis, use memory storage
-    # Flask-Limiter has issues with Heroku Redis SSL certificates
-    # Memory storage still provides rate limiting, just resets on dyno restart
-    if os.getenv("DYNO") and redis_url and redis_url.startswith("rediss://"):
-        storage_uri = "memory://"
+    # Use our custom Redis storage that handles SSL properly
+    storage_uri: Union[str, object]
+    if redis_url:
+        from .redis_limiter_storage import HerokuRedisStorage
+
+        storage_uri = HerokuRedisStorage(redis_url)
     else:
-        # For development or non-SSL Redis
-        storage_uri = redis_url if redis_url else "memory://"
+        # For development without Redis
+        storage_uri = "memory://"
 
     # Create limiter
     limiter = Limiter(
