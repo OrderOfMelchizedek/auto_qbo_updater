@@ -18,8 +18,6 @@ from flask import (
     stream_with_context,
 )
 from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from flask_session import Session
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
@@ -28,6 +26,7 @@ from .celery_app import init_celery
 from .config import Config, session_backend, storage_backend
 from .customer_matcher import CustomerMatcher
 from .job_tracker import JobTracker
+from .limiter_config import configure_limiter
 from .quickbooks_auth import qbo_auth
 from .quickbooks_utils import QuickBooksError
 from .secure_logging import audit_logger, setup_secure_logging
@@ -64,15 +63,8 @@ init_celery(app)
 # Initialize job tracker
 job_tracker = JobTracker(os.getenv("REDIS_URL"))
 
-# Initialize rate limiter
-# For now, use memory storage to avoid Redis SSL issues
-# This still provides rate limiting, but limits reset on dyno restart
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://",
-)
+# Initialize rate limiter with proper Redis SSL support
+limiter = configure_limiter(app)
 
 
 app.config["MAX_CONTENT_LENGTH"] = (
