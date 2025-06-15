@@ -51,10 +51,22 @@ celery_app = Celery(
     include=["src.tasks"],
 )
 
+# Alternative: Disable result backend if SSL issues persist
+# Uncomment the next line if result backend SSL problems continue
+# DISABLE_RESULT_BACKEND = True
+
 # Configure Celery
-config = {
+# Check if result backend should be disabled
+DISABLE_RESULT_BACKEND = (
+    os.getenv("DISABLE_CELERY_RESULT_BACKEND", "false").lower() == "true"
+)
+
+if DISABLE_RESULT_BACKEND:
+    print("[Celery] Result backend disabled - tasks will not store results")
+
+config = {  # type: ignore[var-annotated]
     "broker_url": redis_url,
-    "result_backend": redis_url,
+    "result_backend": None if DISABLE_RESULT_BACKEND else redis_url,
     "task_serializer": "json",
     "accept_content": ["json"],
     "result_serializer": "json",
@@ -100,27 +112,36 @@ if redis_url.startswith("rediss://"):
 
     # Option 2: Also set SSL configuration (as backup)
     # Note: For redis broker, SSL keys must be prefixed with 'ssl_'
-    config.update(
-        {
-            "broker_use_ssl": {
-                "ssl_cert_reqs": ssl.CERT_NONE,  # Must use SSL constant
-                "ssl_ca_certs": None,
-                "ssl_certfile": None,
-                "ssl_keyfile": None,
+    ssl_config = {  # type: ignore[var-annotated]
+        "broker_use_ssl": {
+            "ssl_cert_reqs": ssl.CERT_NONE,  # Must use SSL constant
+            "ssl_ca_certs": None,
+            "ssl_certfile": None,
+            "ssl_keyfile": None,
+            "ssl_check_hostname": False,
+        },
+        "redis_backend_use_ssl": {
+            "ssl_cert_reqs": ssl.CERT_NONE,  # Must use SSL constant
+            "ssl_ca_certs": None,
+            "ssl_certfile": None,
+            "ssl_keyfile": None,
+            "ssl_check_hostname": False,
+        },
+        # Result backend transport options (same as broker)
+        "result_backend_transport_options": {
+            "master_name": None,
+            "socket_keepalive": True,
+            "connection_class": "redis.SSLConnection",
+            "connection_kwargs": {
+                "ssl_cert_reqs": "none",
                 "ssl_check_hostname": False,
             },
-            "redis_backend_use_ssl": {
-                "ssl_cert_reqs": ssl.CERT_NONE,  # Must use SSL constant
-                "ssl_ca_certs": None,
-                "ssl_certfile": None,
-                "ssl_keyfile": None,
-                "ssl_check_hostname": False,
-            },
-            # Additional connection settings
-            "broker_connection_timeout": 30,
-            "broker_connection_retry_delay": 0.5,
-        }
-    )
+        },
+        # Additional connection settings
+        "broker_connection_timeout": 30,
+        "broker_connection_retry_delay": 0.5,
+    }
+    config.update(ssl_config)  # type: ignore[arg-type]
 
     # Socket keepalive options disabled for now - causing issues on Heroku
     # keepalive_opts = get_celery_socket_keepalive_options()
@@ -142,11 +163,14 @@ if redis_url.startswith("rediss://"):
     # if keepalive_opts:
     #     transport_options["socket_keepalive_options"] = keepalive_opts
 
-    config["broker_transport_options"] = transport_options
+    config["broker_transport_options"] = transport_options  # type: ignore[assignment]
 
 # Log the final configuration for debugging
 print(f"[Celery] Broker URL: {config.get('broker_url', 'not set')}")
+print(f"[Celery] Result Backend: {config.get('result_backend', 'not set')}")
 print(f"[Celery] SSL enabled: {redis_url.startswith('rediss://')}")
+if DISABLE_RESULT_BACKEND:
+    print("[Celery] ⚠️  Result backend disabled - no task result storage")
 
 celery_app.conf.update(config)
 
