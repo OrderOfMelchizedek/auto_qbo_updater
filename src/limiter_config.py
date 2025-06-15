@@ -20,25 +20,34 @@ def configure_limiter(app: Flask) -> Limiter:
     redis_url = os.getenv("REDIS_URL")
 
     if redis_url:
-        # Handle SSL for Heroku Redis (same approach as Celery)
-        if redis_url.startswith("rediss://") and "ssl_cert_reqs" not in redis_url:
-            # Parse URL to add parameters properly
-            if "?" in redis_url:
-                redis_url += "&ssl_cert_reqs=CERT_NONE"
-            else:
-                redis_url += "?ssl_cert_reqs=CERT_NONE"
-
-        storage_uri = redis_url
+        if redis_url.startswith("rediss://"):
+            # SSL Redis - use storage_options for SSL configuration
+            limiter = Limiter(
+                app=app,
+                key_func=get_remote_address,
+                default_limits=["200 per day", "50 per hour"],
+                storage_uri=redis_url,
+                storage_options={
+                    "ssl_cert_reqs": None,  # Python None, not string "CERT_NONE"
+                    "ssl_check_hostname": False,
+                    "ssl_ca_certs": None,
+                },
+            )
+        else:
+            # Non-SSL Redis
+            limiter = Limiter(
+                app=app,
+                key_func=get_remote_address,
+                default_limits=["200 per day", "50 per hour"],
+                storage_uri=redis_url,
+            )
     else:
         # Fall back to memory storage if no Redis URL
-        storage_uri = "memory://"
-
-    # Create limiter with native Redis support
-    limiter = Limiter(
-        app=app,
-        key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
-        storage_uri=storage_uri,
-    )
+        limiter = Limiter(
+            app=app,
+            key_func=get_remote_address,
+            default_limits=["200 per day", "50 per hour"],
+            storage_uri="memory://",
+        )
 
     return limiter
