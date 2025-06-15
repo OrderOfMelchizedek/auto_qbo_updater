@@ -1,9 +1,6 @@
 """Custom Redis storage for Flask-Limiter that handles Heroku Redis SSL."""
-import ssl
 from typing import Optional, Union
-from urllib.parse import urlparse
 
-import redis
 from limits.storage.redis import RedisStorage
 
 
@@ -12,32 +9,20 @@ class HerokuRedisStorage(RedisStorage):
 
     def __init__(self, uri: str, **options):
         """Initialize Redis storage with proper SSL handling for Heroku."""
-        # Parse the Redis URL
-        parsed = urlparse(uri)
+        # Use our centralized Redis connection
+        from .redis_connection import create_redis_client
 
-        # Check if it's a secure Redis URL
-        if parsed.scheme == "rediss":
-            # Create SSL context that doesn't verify certificates
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
+        # Create Redis client with proper SSL configuration
+        self._client = create_redis_client(
+            decode_responses=False,  # Flask-Limiter needs bytes
+            max_connections=3,  # Keep connection pool small for rate limiter
+        )
 
-            # Create Redis client directly with explicit parameters
-            self._client = redis.Redis(
-                host=parsed.hostname or "localhost",
-                port=parsed.port or 6379,
-                password=parsed.password,
-                ssl=True,
-                ssl_cert_reqs=None,
-                ssl_ca_certs=None,
-                ssl_check_hostname=False,
-            )
+        if self._client is None:
+            raise ValueError("Redis client could not be created - REDIS_URL not set")
 
-            # Initialize parent without URI (we're handling connection ourselves)
-            super(RedisStorage, self).__init__(**options)
-        else:
-            # For non-SSL Redis, use normal initialization
-            super().__init__(uri=uri, **options)
+        # Initialize parent without URI (we're handling connection ourselves)
+        super(RedisStorage, self).__init__(**options)
 
     @property
     def storage(self):

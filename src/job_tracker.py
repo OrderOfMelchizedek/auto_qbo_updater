@@ -4,8 +4,6 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
-import redis
-
 
 class JobStatus(Enum):
     """Job status enumeration."""
@@ -31,31 +29,13 @@ class JobTracker:
 
     def __init__(self, redis_url: Optional[str] = None):
         """Initialize job tracker with Redis connection."""
-        self.redis_url = redis_url or "redis://localhost:6379/0"
+        from .redis_connection import create_redis_client
 
-        # Handle SSL for Heroku Redis
-        if self.redis_url.startswith("rediss://"):
-            # Use SSL but disable cert verification for Heroku
-            self.redis_client = redis.from_url(
-                self.redis_url,
-                decode_responses=True,
-                max_connections=3,
-                socket_keepalive=True,
-                ssl_cert_reqs=None,
-                ssl_ca_certs=None,
-                ssl_certfile=None,
-                ssl_keyfile=None,
-                ssl_check_hostname=False,
-            )
-        else:
-            self.redis_client = redis.from_url(
-                self.redis_url,
-                decode_responses=True,
-                max_connections=3,
-                socket_keepalive=True,
-            )
-
+        self.redis_client = create_redis_client(
+            decode_responses=True, max_connections=3
+        )
         self.ttl = 3600  # Job data expires after 1 hour
+        self.enabled = self.redis_client is not None
 
     def create_job(self, job_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new job entry."""
@@ -72,8 +52,9 @@ class JobTracker:
             "events": [],
         }
 
-        # Store in Redis with expiration
-        self.redis_client.setex(f"job:{job_id}", self.ttl, json.dumps(job_data))
+        # Store in Redis with expiration if enabled
+        if self.enabled:
+            self.redis_client.setex(f"job:{job_id}", self.ttl, json.dumps(job_data))
 
         return job_data
 
@@ -81,6 +62,9 @@ class JobTracker:
         self, job_id: str, updates: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
         """Update job status and data."""
+        if not self.enabled:
+            return None
+
         job_key = f"job:{job_id}"
         job_data = self.get_job(job_id)
 
@@ -144,6 +128,8 @@ class JobTracker:
 
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Get job data by ID."""
+        if not self.enabled:
+            return None
         job_data = self.redis_client.get(f"job:{job_id}")
         if job_data:
             return json.loads(job_data)
@@ -158,11 +144,15 @@ class JobTracker:
 
     def publish_event(self, job_id: str, event_data: Dict[str, Any]):
         """Publish event for SSE subscribers."""
+        if not self.enabled:
+            return
         channel = f"job_events:{job_id}"
         self.redis_client.publish(channel, json.dumps(event_data))
 
     def subscribe_to_job(self, job_id: str):
         """Subscribe to job events for SSE."""
+        if not self.enabled:
+            return None
         pubsub = self.redis_client.pubsub()
         channel = f"job_events:{job_id}"
         pubsub.subscribe(channel)

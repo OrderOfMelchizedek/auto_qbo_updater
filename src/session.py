@@ -5,7 +5,6 @@ Supports local JSON files (development) and Redis (production).
 """
 import json
 import logging
-import os
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -286,36 +285,14 @@ class RedisSession(SessionBackend):
 
     def __init__(self):
         """Initialize Redis session storage."""
-        import redis
+        from .redis_connection import create_redis_client
 
-        redis_url = os.getenv("REDIS_URL")
-        if not redis_url:
-            raise ValueError("REDIS_URL environment variable not set")
-
-        # Handle SSL for Heroku Redis
-        if redis_url.startswith("rediss://"):
-            # Use SSL but disable cert verification for Heroku
-            self.redis_client = redis.from_url(
-                redis_url,
-                decode_responses=True,
-                max_connections=5,
-                socket_keepalive=True,
-                ssl_cert_reqs=None,
-                ssl_ca_certs=None,
-                ssl_certfile=None,
-                ssl_keyfile=None,
-                ssl_check_hostname=False,
-            )
-        else:
-            self.redis_client = redis.from_url(
-                redis_url,
-                decode_responses=True,
-                max_connections=5,
-                socket_keepalive=True,
-            )
-
+        self.redis_client = create_redis_client(
+            decode_responses=True, max_connections=5
+        )
         self.key_prefix = "donation_upload:"
         self.ttl_seconds = 86400 * 7  # 7 days
+        self.enabled = self.redis_client is not None
 
     def _get_redis_key(self, upload_id: str) -> str:
         """Generate Redis key for upload."""
@@ -323,6 +300,9 @@ class RedisSession(SessionBackend):
 
     def store_upload_metadata(self, upload_id: str, metadata: Dict[str, Any]) -> bool:
         """Store metadata in Redis with TTL."""
+        if not self.enabled:
+            return False
+
         try:
             # Add timestamp if not present
             if "created_at" not in metadata:
@@ -349,6 +329,9 @@ class RedisSession(SessionBackend):
 
     def get_upload_metadata(self, upload_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve metadata from Redis."""
+        if not self.enabled:
+            return None
+
         try:
             key = self._get_redis_key(upload_id)
             data = self.redis_client.get(key)
@@ -377,6 +360,9 @@ class RedisSession(SessionBackend):
 
     def delete_upload_metadata(self, upload_id: str) -> bool:
         """Delete metadata from Redis."""
+        if not self.enabled:
+            return False
+
         try:
             key = self._get_redis_key(upload_id)
 
@@ -395,6 +381,9 @@ class RedisSession(SessionBackend):
 
     def list_uploads(self, limit: int = 100) -> List[Dict[str, Any]]:
         """List recent uploads from Redis sorted set."""
+        if not self.enabled:
+            return []
+
         try:
             # Get recent upload IDs from sorted set
             upload_ids = self.redis_client.zrevrange(
@@ -423,6 +412,9 @@ class RedisSession(SessionBackend):
         Returns:
             int: Number of uploads cleaned up
         """
+        if not self.enabled:
+            return 0
+
         try:
             cutoff_timestamp = (datetime.utcnow() - timedelta(days=days)).timestamp()
 
@@ -445,6 +437,9 @@ class RedisSession(SessionBackend):
     # OAuth2 token storage implementation
     def store_auth_state(self, session_id: str, state_data: Dict[str, Any]) -> bool:
         """Store OAuth2 state for CSRF protection."""
+        if not self.enabled:
+            return False
+
         try:
             key = f"auth_state:{session_id}"
             # Short TTL for auth state (10 minutes)
@@ -456,6 +451,9 @@ class RedisSession(SessionBackend):
 
     def get_auth_state(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve OAuth2 state."""
+        if not self.enabled:
+            return None
+
         try:
             key = f"auth_state:{session_id}"
             data = self.redis_client.get(key)
@@ -468,6 +466,9 @@ class RedisSession(SessionBackend):
 
     def delete_auth_state(self, session_id: str) -> bool:
         """Delete OAuth2 state."""
+        if not self.enabled:
+            return False
+
         try:
             key = f"auth_state:{session_id}"
             self.redis_client.delete(key)
@@ -477,6 +478,9 @@ class RedisSession(SessionBackend):
 
     def store_tokens(self, session_id: str, encrypted_tokens: bytes) -> bool:
         """Store encrypted OAuth2 tokens."""
+        if not self.enabled:
+            return False
+
         try:
             key = f"oauth_tokens:{session_id}"
             # Store with 100 day TTL (matching refresh token expiry)
@@ -488,6 +492,9 @@ class RedisSession(SessionBackend):
 
     def get_tokens(self, session_id: str) -> Optional[bytes]:
         """Retrieve encrypted OAuth2 tokens."""
+        if not self.enabled:
+            return None
+
         try:
             key = f"oauth_tokens:{session_id}"
             data = self.redis_client.get(key)
@@ -500,6 +507,9 @@ class RedisSession(SessionBackend):
 
     def delete_tokens(self, session_id: str) -> bool:
         """Delete OAuth2 tokens."""
+        if not self.enabled:
+            return False
+
         try:
             key = f"oauth_tokens:{session_id}"
             self.redis_client.delete(key)
