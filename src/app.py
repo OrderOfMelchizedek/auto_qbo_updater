@@ -30,7 +30,6 @@ from .customer_matcher import CustomerMatcher
 from .job_tracker import JobTracker
 from .quickbooks_auth import qbo_auth
 from .quickbooks_utils import QuickBooksError
-from .redis_limiter_storage import get_limiter_storage
 from .secure_logging import audit_logger, setup_secure_logging
 from .tasks import process_donations_task
 
@@ -65,26 +64,15 @@ init_celery(app)
 # Initialize job tracker
 job_tracker = JobTracker(os.getenv("REDIS_URL"))
 
-# Initialize rate limiter with proper Redis SSL handling
-redis_url = os.getenv("REDIS_URL")
-storage = get_limiter_storage(redis_url)
-
-# Flask-Limiter accepts either a URI string or a storage instance
-if isinstance(storage, str):
-    limiter = Limiter(
-        app=app,
-        key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
-        storage_uri=storage,
-    )
-else:
-    # For custom storage instances, pass directly
-    limiter = Limiter(
-        app=app,
-        key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
-        storage_backend=storage,
-    )
+# Initialize rate limiter
+# For now, use memory storage to avoid Redis SSL issues
+# This still provides rate limiting, but limits reset on dyno restart
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
 
 
 app.config["MAX_CONTENT_LENGTH"] = (
