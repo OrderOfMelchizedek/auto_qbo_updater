@@ -11,8 +11,10 @@ from intuitlib.enums import Scopes
 from intuitlib.exceptions import AuthClientError
 
 from .config import Config, session_backend
+from .secure_logging import setup_secure_logging
 
 logger = logging.getLogger(__name__)
+setup_secure_logging(logger)
 
 
 class QuickBooksAuth:
@@ -84,7 +86,7 @@ class QuickBooksAuth:
 
             auth_url = re.sub(r"state=[^&]*", f"state={state}", auth_url)
 
-        logger.info(f"Generated authorization URL for session {session_id}")
+        logger.info("Generated authorization URL")
         return auth_url, state
 
     def exchange_authorization_code(
@@ -213,14 +215,14 @@ class QuickBooksAuth:
             # Store updated tokens
             self._store_tokens(session_id, token_data)
 
-            logger.info(f"Successfully refreshed access token (session: {session_id})")
+            logger.info("Successfully refreshed access token")
             return {
                 "success": True,
                 "expires_at": token_data["expires_at"].isoformat(),
             }
 
-        except AuthClientError as e:
-            logger.error(f"Failed to refresh token: {e}")
+        except AuthClientError:
+            logger.error("Failed to refresh token")
             raise
 
     def revoke_tokens(self, session_id: str) -> bool:
@@ -245,11 +247,11 @@ class QuickBooksAuth:
             # Delete stored tokens
             session_backend.delete_tokens(session_id)
 
-            logger.info(f"Successfully revoked tokens (session: {session_id})")
+            logger.info("Successfully revoked tokens")
             return True
 
-        except AuthClientError as e:
-            logger.error(f"Failed to revoke tokens: {e}")
+        except AuthClientError:
+            logger.error("Failed to revoke tokens")
             # Delete tokens locally even if revocation failed
             session_backend.delete_tokens(session_id)
             return False
@@ -340,8 +342,8 @@ class QuickBooksAuth:
             # Decrypt data
             decrypted_data = self.cipher_suite.decrypt(encrypted_data)
             return json.loads(decrypted_data.decode())
-        except Exception as e:
-            logger.error(f"Failed to decrypt token data: {e}")
+        except Exception:
+            logger.error("Failed to decrypt token data")
             return None
 
 

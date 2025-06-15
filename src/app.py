@@ -5,7 +5,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import (
@@ -18,6 +18,9 @@ from flask import (
     stream_with_context,
 )
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_session import Session
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
@@ -27,6 +30,7 @@ from .customer_matcher import CustomerMatcher
 from .job_tracker import JobTracker
 from .quickbooks_auth import qbo_auth
 from .quickbooks_utils import QuickBooksError
+from .secure_logging import audit_logger, setup_secure_logging
 from .tasks import process_donations_task
 
 # Configure logging
@@ -34,6 +38,9 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# Set up secure logging
+setup_secure_logging(logger)
 
 # Initialize Flask app
 # Check if we're on Heroku (production) or local development
@@ -57,6 +64,14 @@ init_celery(app)
 # Initialize job tracker
 job_tracker = JobTracker(os.getenv("REDIS_URL"))
 
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri=os.getenv("REDIS_URL") if os.getenv("REDIS_URL") else "memory://",
+)
+
 
 app.config["MAX_CONTENT_LENGTH"] = (
     Config.MAX_FILE_SIZE_BYTES * Config.MAX_FILES_PER_UPLOAD
@@ -65,12 +80,21 @@ app.config["MAX_CONTENT_LENGTH"] = (
 # Disable caching for development
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
+# Configure Flask sessions
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(32).hex())
+app.config["SESSION_TYPE"] = "filesystem"  # Can be changed to 'redis' in production
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+
+# Initialize Flask-Session
+Session(app)
+
 # Configure secure cookies for production
 if os.environ.get("DYNO"):
     # In production on Heroku
     app.config["SESSION_COOKIE_SECURE"] = True
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_NAME"] = "qbo_session"
 
 # Enable CORS for all routes with specific configuration
 # In production, add the Heroku domain to allowed origins
@@ -177,6 +201,26 @@ def hello():
     )
 
 
+@app.route("/api/session", methods=["GET"])
+def get_session():
+    """Get or create a secure session."""
+    from flask import session
+
+    # Get existing session ID or create new one
+    if "session_id" not in session:
+        session["session_id"] = Config.generate_upload_id()
+        session.permanent = True
+
+        # Audit log new session
+        audit_logger.log_security_event(
+            "session_created",
+            session_id=session["session_id"],
+            details={"ip": request.remote_addr},
+        )
+
+    return jsonify({"success": True, "session_id": session["session_id"]})
+
+
 @app.route("/api/health", methods=["GET"])
 def health_check():
     """Health check endpoint."""
@@ -210,6 +254,7 @@ def health_check():
 
 # QuickBooks OAuth2 endpoints
 @app.route("/api/auth/qbo/authorize", methods=["GET"])
+@limiter.limit("5 per minute")
 def qbo_authorize():
     """
     Generate QuickBooks OAuth2 authorization URL.
@@ -227,9 +272,12 @@ def qbo_authorize():
         # Generate authorization URL
         auth_url, state = qbo_auth.get_authorization_url(session_id)
 
-        logger.info(f"Generated auth URL: {auth_url}")
-        logger.info(f"Session ID: {session_id}")
-        logger.info(f"State: {state}")
+        logger.info("Generated QuickBooks auth URL")
+
+        # Audit log
+        audit_logger.log_security_event(
+            "oauth_init", session_id=session_id, details={"ip": request.remote_addr}
+        )
 
         return jsonify(
             {
@@ -248,6 +296,7 @@ def qbo_authorize():
 
 
 @app.route("/api/auth/qbo/callback", methods=["GET"])
+@limiter.limit("10 per minute")
 def qbo_callback():
     """
     Handle OAuth2 callback from QuickBooks.
@@ -266,14 +315,18 @@ def qbo_callback():
         error_description = request.args.get("error_description")
 
         # Log the callback for debugging
-        logger.info(
-            f"OAuth2 callback received - code: {code[:10] if code else 'None'}..., "
-            f"state: {state}, realmId: {realm_id}, error: {error}"
-        )
+        logger.info("OAuth2 callback received")
 
         # Handle OAuth errors from QuickBooks
         if error:
             logger.error(f"OAuth2 error: {error} - {error_description}")
+            # Audit log auth failure
+            audit_logger.log_auth_attempt(
+                session_id=request.headers.get("X-Session-ID", "unknown"),
+                ip_address=request.remote_addr,
+                success=False,
+                reason=f"OAuth error: {error}",
+            )
             # Redirect to React app with error
             from flask import redirect
 
@@ -291,11 +344,19 @@ def qbo_callback():
 
         # Get session ID from header (optional now)
         session_id = request.headers.get("X-Session-ID")
-        logger.info(f"Session ID from header: {session_id}")
+        logger.info("Processing OAuth callback")
 
         # Exchange code for tokens (session_id can be extracted from state)
         result = qbo_auth.exchange_authorization_code(
             code=code, realm_id=realm_id, state=state, session_id=session_id
+        )
+
+        # Audit log successful auth
+        audit_logger.log_auth_attempt(
+            session_id=result.get("session_id", session_id or "unknown"),
+            ip_address=request.remote_addr,
+            success=True,
+            reason="OAuth callback successful",
         )
 
         # In production, redirect to React callback page instead of returning JSON
@@ -321,6 +382,7 @@ def qbo_callback():
 
 
 @app.route("/api/auth/qbo/refresh", methods=["POST"])
+@limiter.limit("20 per hour")
 def qbo_refresh():
     """
     Refresh expired access token.
@@ -337,10 +399,19 @@ def qbo_refresh():
         # Refresh token
         result = qbo_auth.refresh_access_token(session_id)
 
+        # Audit log
+        audit_logger.log_token_refresh(session_id=session_id, success=True)
+
         return jsonify({"success": True, "data": result})
 
     except ValueError as e:
-        logger.error(f"Token refresh error: {e}")
+        logger.error("Token refresh error")
+        # Audit log failure
+        audit_logger.log_token_refresh(
+            session_id=session_id if "session_id" in locals() else "unknown",
+            success=False,
+            error=str(e),
+        )
         return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         logger.error(f"Token refresh error: {e}")
@@ -348,6 +419,7 @@ def qbo_refresh():
 
 
 @app.route("/api/auth/qbo/revoke", methods=["POST"])
+@limiter.limit("5 per hour")
 def qbo_revoke():
     """
     Revoke QuickBooks access tokens.
@@ -363,6 +435,12 @@ def qbo_revoke():
 
         # Revoke tokens
         success = qbo_auth.revoke_tokens(session_id)
+
+        # Audit log
+        if success:
+            audit_logger.log_token_revoke(
+                session_id=session_id, ip_address=request.remote_addr
+            )
 
         return jsonify(
             {
@@ -525,6 +603,7 @@ def debug_build():
 
 
 @app.route("/api/upload", methods=["POST"])
+@limiter.limit("30 per hour")
 def upload_files():
     """
     Upload donation documents.
@@ -1087,6 +1166,7 @@ def get_items():
 
 
 @app.route("/api/sales_receipts", methods=["POST"])
+@limiter.limit("100 per hour")
 def create_sales_receipt():
     """
     Create a sales receipt in QuickBooks.

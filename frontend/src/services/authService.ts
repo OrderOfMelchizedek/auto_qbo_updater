@@ -3,6 +3,7 @@
  */
 
 import { apiService } from './api';
+import { sessionService } from './sessionService';
 
 interface AuthorizationResponse {
   auth_url: string;
@@ -20,29 +21,20 @@ interface AuthStatus {
 }
 
 class AuthService {
-  private sessionId: string | null = null;
   private authWindow: Window | null = null;
   private authCheckInterval: number | null = null;
   private authCallbacks: ((status: AuthStatus) => void)[] = [];
 
   constructor() {
-    // Initialize session ID from localStorage
-    this.sessionId = localStorage.getItem('qbo_session_id');
-
     // Listen for messages from popup window
     window.addEventListener('message', this.handleAuthMessage.bind(this));
   }
 
   /**
-   * Get or create session ID
+   * Get session ID from secure session service
    */
-  private getSessionId(): string {
-    if (!this.sessionId) {
-      // Generate a new session ID
-      this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem('qbo_session_id', this.sessionId);
-    }
-    return this.sessionId;
+  private async getSessionId(): Promise<string> {
+    return await sessionService.getSessionId();
   }
 
   /**
@@ -51,25 +43,21 @@ class AuthService {
   async startAuthorization(): Promise<void> {
     try {
       // Get authorization URL
+      const headers = await sessionService.getHeaders();
       const response = await apiService.get('/api/auth/qbo/authorize', {
-        headers: {
-          'X-Session-ID': this.getSessionId()
-        }
+        headers,
+        withCredentials: true
       });
 
       const responseData = response.data?.data || response.data;
       const { auth_url, state, session_id } = responseData;
 
-      // Update session ID if server provided one
-      if (session_id && session_id !== this.sessionId) {
-        this.sessionId = session_id;
-        localStorage.setItem('qbo_session_id', session_id);
-      }
+      // Session is now managed by the server via cookies
+      // No need to store in localStorage
 
-      // Store session ID with state for callback reference
+      // Store state for callback reference
       if (state) {
         sessionStorage.setItem(`oauth_state_${state}`, JSON.stringify({
-          sessionId: this.getSessionId(),
           timestamp: Date.now()
         }));
       }
@@ -166,10 +154,10 @@ class AuthService {
    */
   async checkAuthStatus(): Promise<AuthStatus> {
     try {
+      const headers = await sessionService.getHeaders();
       const response = await apiService.get('/api/auth/qbo/status', {
-        headers: {
-          'X-Session-ID': this.getSessionId()
-        }
+        headers,
+        withCredentials: true
       });
 
       // Check if response has the expected structure
@@ -195,10 +183,10 @@ class AuthService {
    */
   async refreshToken(): Promise<boolean> {
     try {
+      const headers = await sessionService.getHeaders();
       await apiService.post('/api/auth/qbo/refresh', {}, {
-        headers: {
-          'X-Session-ID': this.getSessionId()
-        }
+        headers,
+        withCredentials: true
       });
 
       // Check updated status
@@ -215,15 +203,14 @@ class AuthService {
    */
   async revokeAuth(): Promise<void> {
     try {
+      const headers = await sessionService.getHeaders();
       await apiService.post('/api/auth/qbo/revoke', {}, {
-        headers: {
-          'X-Session-ID': this.getSessionId()
-        }
+        headers,
+        withCredentials: true
       });
 
-      // Clear session
-      this.sessionId = null;
-      localStorage.removeItem('qbo_session_id');
+      // Clear cached session
+      sessionService.clearCache();
 
       // Notify status change
       this.notifyAuthStatusChange({ authenticated: false });
@@ -264,16 +251,15 @@ class AuthService {
   /**
    * Get current session ID
    */
-  getSessionIdForRequests(): string {
-    return this.getSessionId();
+  async getSessionIdForRequests(): Promise<string> {
+    return await this.getSessionId();
   }
 
   /**
    * Clear session (for logout or reset)
    */
   clearSession(): void {
-    this.sessionId = null;
-    localStorage.removeItem('qbo_session_id');
+    sessionService.clearCache();
     this.notifyAuthStatusChange({ authenticated: false });
   }
 }
