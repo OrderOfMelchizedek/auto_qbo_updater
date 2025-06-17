@@ -66,16 +66,30 @@ const BulkSendToQBModal: React.FC<BulkSendToQBModalProps> = ({
         const depositAccts = accounts.filter(
           acc => acc.AccountType === 'Bank' || acc.AccountType === 'Other Current Asset'
         );
-        setDepositAccounts(depositAccts);
+
+        // Sort accounts to put Undeposited Funds first
+        const sortedDepositAccts = depositAccts.sort((a, b) => {
+          const aIsUndeposited = a.Name.toLowerCase().includes('undeposited funds') ||
+                                 a.AccountSubType === 'UndepositedFunds';
+          const bIsUndeposited = b.Name.toLowerCase().includes('undeposited funds') ||
+                                 b.AccountSubType === 'UndepositedFunds';
+
+          if (aIsUndeposited && !bIsUndeposited) return -1;
+          if (!aIsUndeposited && bIsUndeposited) return 1;
+          return a.Name.localeCompare(b.Name);
+        });
+
+        setDepositAccounts(sortedDepositAccts);
 
         // Find and set Undeposited Funds as default
-        const undepositedFunds = depositAccts.find(
-          acc => acc.Name.toLowerCase().includes('undeposited funds')
+        const undepositedFunds = sortedDepositAccts.find(
+          acc => acc.Name.toLowerCase().includes('undeposited funds') ||
+                 acc.AccountSubType === 'UndepositedFunds'
         );
         if (undepositedFunds) {
           setSelectedDepositAccount(undepositedFunds.Id);
-        } else if (depositAccts.length > 0) {
-          setSelectedDepositAccount(depositAccts[0].Id);
+        } else if (sortedDepositAccts.length > 0) {
+          setSelectedDepositAccount(sortedDepositAccts[0].Id);
         }
 
       }
