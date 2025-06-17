@@ -56,33 +56,13 @@ const AuthCallback: React.FC = () => {
       }
 
       try {
-        // Get session ID from localStorage (set by parent window)
-        let sessionId = localStorage.getItem('qbo_session_id');
-
-        // In production, if no session ID in localStorage, try to get from state
-        // The state parameter might contain both CSRF token and session ID
-        if (!sessionId && state) {
-          // Try to extract session ID from the state if it's encoded there
-          const stateData = sessionStorage.getItem(`oauth_state_${state}`);
-          if (stateData) {
-            const parsed = JSON.parse(stateData);
-            sessionId = parsed.sessionId;
-          }
-        }
-
-        if (!sessionId) {
-          throw new Error('Session ID not found. Please try again.');
-        }
-
         // Exchange authorization code for tokens
+        // The apiService interceptor will handle adding the X-Session-ID header
         const response = await apiService.get('/api/auth/qbo/callback', {
           params: {
             code,
             state,
             realmId
-          },
-          headers: {
-            'X-Session-ID': sessionId
           }
         });
 

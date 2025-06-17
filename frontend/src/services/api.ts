@@ -163,3 +163,18 @@ export const addCustomer = async (customerData: NewCustomerPayload): Promise<any
     throw error.response?.data || new Error(error.message || 'Failed to add customer due to an unknown error');
   }
 };
+
+// Function to manually match a donation to a QuickBooks customer
+export const manualMatchDonation = async (donation: any, qbCustomerId: string): Promise<any> => {
+  try {
+    // The axios interceptor handles adding the X-Session-ID header
+    const response = await api.post<any>('/api/manual_match', {
+      donation: donation,
+      qb_customer_id: qbCustomerId,
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('Error matching donation:', error.response || error.message || error);
+    throw error.response?.data || new Error(error.message || 'Failed to match donation');
+  }
+};

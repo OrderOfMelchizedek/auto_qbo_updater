@@ -247,19 +247,20 @@ def get_session():
     """Get or create a secure session."""
     from flask import session
 
-    # Get existing session ID or create new one
-    if "session_id" not in session:
-        session["session_id"] = Config.generate_upload_id()
+    # Use a consistent session ID stored in Flask session
+    # This ID is used for QuickBooks token storage
+    if "app_session_id" not in session:
+        session["app_session_id"] = Config.generate_upload_id()
         session.permanent = True
 
         # Audit log new session
         audit_logger.log_security_event(
             "session_created",
-            session_id=session["session_id"],
+            session_id=session["app_session_id"],
             details={"ip": request.remote_addr},
         )
 
-    return jsonify({"success": True, "session_id": session["session_id"]})
+    return jsonify({"success": True, "session_id": session["app_session_id"]})
 
 
 @app.route("/api/health", methods=["GET"])
@@ -321,8 +322,14 @@ def qbo_authorize():
         if qbo_auth is None:
             return jsonify({"success": False, "error": "OAuth2 not configured"}), 500
 
-        # Get session ID from request or generate new one
-        session_id = request.headers.get("X-Session-ID", Config.generate_upload_id())
+        # Get session ID from Flask session to ensure consistency
+        from flask import session
+
+        if "app_session_id" not in session:
+            session["app_session_id"] = Config.generate_upload_id()
+            session.permanent = True
+
+        session_id = session["app_session_id"]
 
         # Generate authorization URL
         auth_url, state = qbo_auth.get_authorization_url(session_id)
@@ -514,12 +521,13 @@ def qbo_status():
     """
     Check QuickBooks authentication status.
 
-    Requires:
-        X-Session-ID header
+    Uses Flask session for consistent session management.
     """
     try:
-        # Get session ID from header
-        session_id = request.headers.get("X-Session-ID")
+        from flask import session
+
+        # Get session ID from Flask session
+        session_id = session.get("app_session_id")
         if not session_id:
             return jsonify({"success": True, "data": {"authenticated": False}})
 
@@ -864,8 +872,10 @@ def process_files():
                 }
             )
 
-        # Get session ID for QuickBooks matching
-        session_id = request.headers.get("X-Session-ID")
+        # Get session ID for QuickBooks matching from Flask session
+        from flask import session as flask_session
+
+        session_id = flask_session.get("app_session_id")
 
         # Generate job ID
         job_id = str(uuid.uuid4())
@@ -995,10 +1005,12 @@ def search_customers():
                     500,
                 )
         else:
-            session_id = request.headers.get("X-Session-ID")
+            from flask import session as flask_session
+
+            session_id = flask_session.get("app_session_id")
             if not session_id:
                 return (
-                    jsonify({"success": False, "error": "Missing X-Session-ID header"}),
+                    jsonify({"success": False, "error": "No active session found"}),
                     400,
                 )
             customer_matcher = CustomerMatcher(session_id=session_id)
@@ -1220,11 +1232,13 @@ def get_accounts():
             ]
             return jsonify({"success": True, "data": {"accounts": mock_accounts}})
 
-        # Production mode - require session ID
-        session_id = request.headers.get("X-Session-ID")
+        # Production mode - use Flask session
+        from flask import session as flask_session
+
+        session_id = flask_session.get("app_session_id")
         if not session_id:
             return (
-                jsonify({"success": False, "error": "Missing X-Session-ID header"}),
+                jsonify({"success": False, "error": "No active session found"}),
                 400,
             )
 

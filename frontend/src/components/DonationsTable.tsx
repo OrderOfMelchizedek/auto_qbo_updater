@@ -6,7 +6,7 @@ import ReportModal from './ReportModal'; // Import ReportModal
 import './DonationsTable.css';
 import AddCustomerModal from './AddCustomerModal'; // Import the modal
 import { CustomerFormData } from './AddCustomerModal'; // Import the form data type
-import { addCustomer, NewCustomerPayload } from '../services/api'; // Import API service and type
+import { addCustomer, NewCustomerPayload, manualMatchDonation } from '../services/api'; // Import API service and type
 
 interface DonationsTableProps {
   donations: FinalDisplayDonation[];
@@ -65,15 +65,6 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
 
     const { donation: currentDonation, index: donationIndex } = selectedDonationForMatch;
 
-    // Build headers - only add session ID if it exists (for production)
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-    const sessionId = localStorage.getItem('qbo_session_id');
-    if (sessionId) {
-      headers['X-Session-ID'] = sessionId;
-    }
-
     // Store original data before API call
     const originalPayerInfo = currentDonation.payer_info;
     const originalStatusInfo = currentDonation.status;
@@ -97,21 +88,9 @@ const DonationsTable: React.FC<DonationsTableProps> = ({
     };
 
     try {
-      const response = await fetch('/api/manual_match', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          donation: currentDonation, // Send current donation state
-          qb_customer_id: selectedCustomer.Id,
-        }),
-      });
+      // Use the API service which handles session ID automatically
+      const result = await manualMatchDonation(currentDonation, selectedCustomer.Id);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `API Error: ${response.status}`);
-      }
-
-      const result = await response.json();
       if (result.success && result.data) {
         const updatedDonationFromApi: FinalDisplayDonation = result.data;
 
