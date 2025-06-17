@@ -439,6 +439,7 @@ class RedisSession(SessionBackend):
             return 0
 
     # OAuth2 token storage implementation
+    @redis_retry(exceptions=(Exception,))
     def store_auth_state(self, session_id: str, state_data: Dict[str, Any]) -> bool:
         """Store OAuth2 state for CSRF protection."""
         if not self.enabled:
@@ -453,6 +454,7 @@ class RedisSession(SessionBackend):
             logger.error(f"Failed to store auth state in Redis: {e}")
             return False
 
+    @redis_retry(exceptions=(Exception,))
     def get_auth_state(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve OAuth2 state."""
         if not self.enabled:
@@ -480,6 +482,7 @@ class RedisSession(SessionBackend):
         except Exception:
             return False
 
+    @redis_retry(exceptions=(Exception,))
     def store_tokens(self, session_id: str, encrypted_tokens: bytes) -> bool:
         """Store encrypted OAuth2 tokens."""
         if not self.enabled:
@@ -494,6 +497,7 @@ class RedisSession(SessionBackend):
             logger.error(f"Failed to store tokens in Redis: {e}")
             return False
 
+    @redis_retry(exceptions=(Exception,))
     def get_tokens(self, session_id: str) -> Optional[bytes]:
         """Retrieve encrypted OAuth2 tokens."""
         if not self.enabled:
