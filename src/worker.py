@@ -134,10 +134,11 @@ class Worker:
             session_backend.update_upload_metadata(
                 upload_id,
                 {
-                    "status": "processed",
+                    "status": "completed",
                     "donations": display_donations,
                     "raw_donations": processed_donations,
                     "processing_metadata": processing_metadata,
+                    "summary": processing_metadata,  # Add summary for frontend
                 },
             )
 
