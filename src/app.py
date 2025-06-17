@@ -1205,7 +1205,7 @@ def get_accounts():
                     "Id": "1",
                     "Name": "Undeposited Funds",
                     "FullyQualifiedName": "Undeposited Funds",
-                    "AccountType": "Other Current Asset",
+                    "AccountType": "Other Current Assets",
                     "AccountSubType": "UndepositedFunds",
                 },
                 {

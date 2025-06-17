@@ -64,16 +64,35 @@ const SendToQBModal: React.FC<SendToQBModalProps> = ({
       if (accountsResponse.data.success && accountsResponse.data.data) {
         const accounts = accountsResponse.data.data.accounts;
 
-        // Filter deposit accounts (Bank and Other Current Asset types)
+        // Debug log to see all accounts
+        console.log('All accounts from API:', accounts);
+
+        // Log any Undeposited Funds accounts
+        accounts.forEach(acc => {
+          if (acc.Name?.toLowerCase().includes('undeposited') || acc.AccountSubType === 'UndepositedFunds') {
+            console.log('Found Undeposited Funds account:', {
+              Name: acc.Name,
+              AccountType: acc.AccountType,
+              AccountSubType: acc.AccountSubType,
+              Id: acc.Id
+            });
+          }
+        });
+
+        // Filter deposit accounts (Bank and Other Current Assets types)
+        // Also handle variations in account type naming from QuickBooks API
         const depositAccts = accounts.filter(
-          acc => acc.AccountType === 'Bank' || acc.AccountType === 'Other Current Asset'
+          acc => acc.AccountType === 'Bank' ||
+                 acc.AccountType === 'Other Current Assets' ||
+                 acc.AccountType === 'Other Current Asset' || // Handle singular form
+                 acc.AccountSubType === 'UndepositedFunds' // Explicitly include Undeposited Funds by subtype
         );
 
         // Sort accounts to put Undeposited Funds first
         const sortedDepositAccts = depositAccts.sort((a, b) => {
-          const aIsUndeposited = a.Name.toLowerCase().includes('undeposited funds') ||
+          const aIsUndeposited = a.Name.toLowerCase().includes('undeposited') ||
                                  a.AccountSubType === 'UndepositedFunds';
-          const bIsUndeposited = b.Name.toLowerCase().includes('undeposited funds') ||
+          const bIsUndeposited = b.Name.toLowerCase().includes('undeposited') ||
                                  b.AccountSubType === 'UndepositedFunds';
 
           if (aIsUndeposited && !bIsUndeposited) return -1;
@@ -85,7 +104,7 @@ const SendToQBModal: React.FC<SendToQBModalProps> = ({
 
         // Find and set Undeposited Funds as default
         const undepositedFunds = sortedDepositAccts.find(
-          acc => acc.Name.toLowerCase().includes('undeposited funds') ||
+          acc => acc.Name.toLowerCase().includes('undeposited') ||
                  acc.AccountSubType === 'UndepositedFunds'
         );
         if (undepositedFunds) {

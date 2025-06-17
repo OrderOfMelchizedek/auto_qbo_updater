@@ -389,14 +389,76 @@ class QuickBooksClient:
             QuickBooksError: If API request fails
         """
         try:
-            # Query all active accounts
-            query = "SELECT * FROM Account WHERE Active = true"
+            # Query all accounts including system accounts
+            # Undeposited Funds is a system account that might need special handling
+            query = "SELECT * FROM Account ORDER BY Name"
             response = self._make_request("GET", "/query", params={"query": query})
             data = response.json()
 
             # Extract accounts from QueryResponse
             accounts = data.get("QueryResponse", {}).get("Account", [])
-            return accounts
+
+            # Log account types to debug Undeposited Funds issue
+            logger.info(f"Found {len(accounts)} accounts from QuickBooks")
+
+            # Log all Other Current Assets accounts and potential Undeposited Funds
+            for account in accounts:
+                account_type = account.get("AccountType", "")
+                account_subtype = account.get("AccountSubType", "")
+                account_name = account.get("Name", "")
+
+                # Log Other Current Assets accounts
+                if "other current" in account_type.lower():
+                    logger.info(
+                        f"Other Current Asset account: Name={account_name}, "
+                        f"AccountType={account_type}, "
+                        f"AccountSubType={account_subtype}, "
+                        f"Id={account.get('Id')}"
+                    )
+
+                # Specifically look for Undeposited Funds
+                if (
+                    "undeposited" in account_name.lower()
+                    or account_subtype == "UndepositedFunds"
+                    or account.get("FullyQualifiedName", "").lower()
+                    == "undeposited funds"
+                ):
+                    logger.info(
+                        f"*** UNDEPOSITED FUNDS FOUND: Name={account_name}, "
+                        f"AccountType={account_type}, "
+                        f"AccountSubType={account_subtype}, "
+                        f"FullyQualifiedName={account.get('FullyQualifiedName')}, "
+                        f"Id={account.get('Id')}"
+                    )
+
+            # Also log a summary of account types
+            account_types: Dict[str, int] = {}
+            for account in accounts:
+                acc_type = account.get("AccountType", "Unknown")
+                account_types[acc_type] = account_types.get(acc_type, 0) + 1
+            logger.info(f"Account type summary: {account_types}")
+
+            # Filter to only return active accounts OR the Undeposited Funds account
+            # (Undeposited Funds might be inactive but we still need it)
+            filtered_accounts = []
+            for account in accounts:
+                is_active = account.get("Active", True)
+                is_undeposited = (
+                    "undeposited" in account.get("Name", "").lower()
+                    or account.get("AccountSubType") == "UndepositedFunds"
+                    or account.get("FullyQualifiedName", "").lower()
+                    == "undeposited funds"
+                )
+
+                if is_active or is_undeposited:
+                    filtered_accounts.append(account)
+                    if is_undeposited and not is_active:
+                        logger.warning(
+                            "Undeposited Funds account is inactive: "
+                            f"{account.get('Name')}"
+                        )
+
+            return filtered_accounts
 
         except QuickBooksError:
             raise
