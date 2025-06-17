@@ -547,6 +547,29 @@ def get_job_status(job_id):
         job_data = job_queue.get_job_data(job_id)
         upload_id = job_data.get("upload_id") if job_data else None
 
+        # If we have the upload_id, fetch the actual results
+        if upload_id:
+            metadata = session_backend.get_upload_metadata(upload_id)
+            if metadata and metadata.get("status") == "completed":
+                return jsonify(
+                    {
+                        "success": True,
+                        "data": {
+                            "id": job_id,
+                            "status": "completed",
+                            "stage": "complete",
+                            "progress": 100,
+                            "message": "Processing complete!",
+                            "upload_id": upload_id,
+                            "result": {
+                                "donations": metadata.get("donations", []),
+                                "metadata": metadata.get("summary", {}),
+                            },
+                        },
+                    }
+                )
+
+        # Fallback if we can't get results
         return jsonify(
             {
                 "success": True,
@@ -556,7 +579,7 @@ def get_job_status(job_id):
                     "stage": "complete",
                     "progress": 100,
                     "message": "Processing complete!",
-                    "upload_id": upload_id,  # Include this for fetching results
+                    "upload_id": upload_id,
                 },
             }
         )
