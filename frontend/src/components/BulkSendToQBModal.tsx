@@ -7,7 +7,7 @@ import { apiService } from '../services/api';
 interface Account {
   Id: string;
   Name: string;
-  FullyQualifiedName: string;
+  FullyQualifiedName?: string;
   AccountType: string;
   AccountSubType?: string;
 }
@@ -72,10 +72,11 @@ const BulkSendToQBModal: React.FC<BulkSendToQBModalProps> = ({
         );
 
         // Sort accounts to put Undeposited Funds first
+        const undepositedRegex = /\d*\s*undeposited/i;
         const sortedDepositAccts = depositAccts.sort((a, b) => {
-          const aIsUndeposited = a.Name.toLowerCase().includes('undeposited') ||
+          const aIsUndeposited = undepositedRegex.test(a.Name || '') ||
                                  a.AccountSubType === 'UndepositedFunds';
-          const bIsUndeposited = b.Name.toLowerCase().includes('undeposited') ||
+          const bIsUndeposited = undepositedRegex.test(b.Name || '') ||
                                  b.AccountSubType === 'UndepositedFunds';
 
           if (aIsUndeposited && !bIsUndeposited) return -1;
@@ -87,7 +88,7 @@ const BulkSendToQBModal: React.FC<BulkSendToQBModalProps> = ({
 
         // Find and set Undeposited Funds as default
         const undepositedFunds = sortedDepositAccts.find(
-          acc => acc.Name.toLowerCase().includes('undeposited') ||
+          acc => undepositedRegex.test(acc.Name || '') ||
                  acc.AccountSubType === 'UndepositedFunds'
         );
         if (undepositedFunds) {

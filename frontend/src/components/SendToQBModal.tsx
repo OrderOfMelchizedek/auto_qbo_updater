@@ -7,7 +7,7 @@ import { apiService } from '../services/api';
 interface Account {
   Id: string;
   Name: string;
-  FullyQualifiedName: string;
+  FullyQualifiedName?: string;
   AccountType: string;
   AccountSubType?: string;
 }
@@ -67,13 +67,15 @@ const SendToQBModal: React.FC<SendToQBModalProps> = ({
         // Debug log to see all accounts
         console.log('All accounts from API:', accounts);
 
-        // Log any Undeposited Funds accounts
+        // Log any Undeposited Funds accounts (including those with account numbers)
+        const undepositedRegex = /\d*\s*undeposited/i;
         accounts.forEach(acc => {
-          if (acc.Name?.toLowerCase().includes('undeposited') || acc.AccountSubType === 'UndepositedFunds') {
+          if (undepositedRegex.test(acc.Name || '') || acc.AccountSubType === 'UndepositedFunds') {
             console.log('Found Undeposited Funds account:', {
               Name: acc.Name,
               AccountType: acc.AccountType,
               AccountSubType: acc.AccountSubType,
+              FullyQualifiedName: acc.FullyQualifiedName,
               Id: acc.Id
             });
           }
@@ -90,9 +92,10 @@ const SendToQBModal: React.FC<SendToQBModalProps> = ({
 
         // Sort accounts to put Undeposited Funds first
         const sortedDepositAccts = depositAccts.sort((a, b) => {
-          const aIsUndeposited = a.Name.toLowerCase().includes('undeposited') ||
+          const undepositedRegex = /\d*\s*undeposited/i;
+          const aIsUndeposited = undepositedRegex.test(a.Name || '') ||
                                  a.AccountSubType === 'UndepositedFunds';
-          const bIsUndeposited = b.Name.toLowerCase().includes('undeposited') ||
+          const bIsUndeposited = undepositedRegex.test(b.Name || '') ||
                                  b.AccountSubType === 'UndepositedFunds';
 
           if (aIsUndeposited && !bIsUndeposited) return -1;
@@ -104,7 +107,7 @@ const SendToQBModal: React.FC<SendToQBModalProps> = ({
 
         // Find and set Undeposited Funds as default
         const undepositedFunds = sortedDepositAccts.find(
-          acc => acc.Name.toLowerCase().includes('undeposited') ||
+          acc => undepositedRegex.test(acc.Name || '') ||
                  acc.AccountSubType === 'UndepositedFunds'
         );
         if (undepositedFunds) {

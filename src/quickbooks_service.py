@@ -1,6 +1,7 @@
 """QuickBooks API service for customer operations."""
 import json
 import logging
+import re
 from typing import Any, Dict, List
 
 import requests
@@ -416,12 +417,15 @@ class QuickBooksClient:
                         f"Id={account.get('Id')}"
                     )
 
-                # Specifically look for Undeposited Funds
+                # Look for Undeposited Funds (with or without account numbers)
+                # Matches: "12000 Undeposited Funds", "Undeposited Funds", etc.
+                undeposited_pattern = re.compile(
+                    r"\d*\s*undeposited\s*funds", re.IGNORECASE
+                )
                 if (
-                    "undeposited" in account_name.lower()
+                    undeposited_pattern.search(account_name)
                     or account_subtype == "UndepositedFunds"
-                    or account.get("FullyQualifiedName", "").lower()
-                    == "undeposited funds"
+                    or undeposited_pattern.search(account.get("FullyQualifiedName", ""))
                 ):
                     logger.info(
                         f"*** UNDEPOSITED FUNDS FOUND: Name={account_name}, "
@@ -441,13 +445,19 @@ class QuickBooksClient:
             # Filter to only return active accounts OR the Undeposited Funds account
             # (Undeposited Funds might be inactive but we still need it)
             filtered_accounts = []
+            undeposited_pattern = re.compile(
+                r"\d*\s*undeposited\s*funds", re.IGNORECASE
+            )
+
             for account in accounts:
                 is_active = account.get("Active", True)
+                account_name = account.get("Name", "")
+                fully_qualified_name = account.get("FullyQualifiedName", "")
+
                 is_undeposited = (
-                    "undeposited" in account.get("Name", "").lower()
+                    undeposited_pattern.search(account_name)
                     or account.get("AccountSubType") == "UndepositedFunds"
-                    or account.get("FullyQualifiedName", "").lower()
-                    == "undeposited funds"
+                    or undeposited_pattern.search(fully_qualified_name)
                 )
 
                 if is_active or is_undeposited:
