@@ -396,7 +396,8 @@ class QuickBooksClient:
             # Query all accounts including system accounts with increased limit
             # Undeposited Funds is a system account that might need special handling
             # MAXRESULTS 1000 ensures we get more accounts than the default 100
-            query = "SELECT * FROM Account MAXRESULTS 1000 ORDER BY Name"
+            # ORDER BY must come before STARTPOSITION and MAXRESULTS in QuickBooks API
+            query = "SELECT * FROM Account ORDER BY Name MAXRESULTS 1000"
             response = self._make_request("GET", "/query", params={"query": query})
             data = response.json()
 
