@@ -2,7 +2,7 @@
 import json
 import logging
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -379,9 +379,12 @@ class QuickBooksClient:
             logger.error(f"Error decoding JSON response from customer creation: {e}")
             raise QuickBooksError(f"JSON decode error: {e}")
 
-    def list_accounts(self) -> List[Dict[str, Any]]:
+    def list_accounts(self, search_term: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         List all accounts from QuickBooks.
+
+        Args:
+            search_term: Optional search term to filter accounts by name
 
         Returns:
             List of account dictionaries
@@ -390,9 +393,10 @@ class QuickBooksClient:
             QuickBooksError: If API request fails
         """
         try:
-            # Query all accounts including system accounts
+            # Query all accounts including system accounts with increased limit
             # Undeposited Funds is a system account that might need special handling
-            query = "SELECT * FROM Account ORDER BY Name"
+            # MAXRESULTS 1000 ensures we get more accounts than the default 100
+            query = "SELECT * FROM Account MAXRESULTS 1000 ORDER BY Name"
             response = self._make_request("GET", "/query", params={"query": query})
             data = response.json()
 
@@ -467,6 +471,20 @@ class QuickBooksClient:
                             "Undeposited Funds account is inactive: "
                             f"{account.get('Name')}"
                         )
+
+            # Apply search filtering if search_term is provided
+            if search_term:
+                search_lower = search_term.lower()
+                filtered_accounts = [
+                    acc
+                    for acc in filtered_accounts
+                    if search_lower in (acc.get("Name", "") or "").lower()
+                    or search_lower in (acc.get("FullyQualifiedName", "") or "").lower()
+                ]
+                logger.info(
+                    f"Filtered to {len(filtered_accounts)} accounts "
+                    f"matching '{search_term}'"
+                )
 
             return filtered_accounts
 

@@ -1197,6 +1197,8 @@ def get_accounts():
     Returns list of accounts with their types and names.
     """
     try:
+        search_term = request.args.get("search_term")
+
         # Check if we're in local dev mode
         if os.getenv("LOCAL_DEV_MODE") == "true":
             # In local dev mode, return mock accounts
@@ -1230,6 +1232,17 @@ def get_accounts():
                     "AccountSubType": "SalesOfProductIncome",
                 },
             ]
+
+            # Filter mock accounts by search term if provided
+            if search_term:
+                search_lower = search_term.lower()
+                mock_accounts = [
+                    acc
+                    for acc in mock_accounts
+                    if search_lower in acc["Name"].lower()
+                    or search_lower in acc["FullyQualifiedName"].lower()
+                ]
+
             return jsonify({"success": True, "data": {"accounts": mock_accounts}})
 
         # Production mode - use Flask session
@@ -1246,7 +1259,7 @@ def get_accounts():
         from .quickbooks_service import QuickBooksClient
 
         qb_client = QuickBooksClient(session_id)
-        accounts = qb_client.list_accounts()
+        accounts = qb_client.list_accounts(search_term=search_term)
 
         return jsonify({"success": True, "data": {"accounts": accounts}})
 
@@ -1259,6 +1272,22 @@ def get_accounts():
     except Exception as e:
         logger.error(f"Error fetching accounts: {e}")
         return jsonify({"success": False, "error": "Failed to fetch accounts"}), 500
+
+
+@app.route("/api/search_accounts", methods=["GET"])
+def search_accounts():
+    """Search for accounts in QuickBooks."""
+    try:
+        search_term = request.args.get("search_term")
+        if not search_term:
+            return jsonify({"success": False, "error": "Missing search_term"}), 400
+
+        # Use the same logic as get_accounts but with search term
+        return get_accounts()
+
+    except Exception as e:
+        logger.error(f"Error searching accounts: {e}")
+        return jsonify({"success": False, "error": "Failed to search accounts"}), 500
 
 
 @app.route("/api/items", methods=["GET"])

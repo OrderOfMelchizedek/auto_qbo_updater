@@ -3,6 +3,7 @@ import { X, Loader, AlertCircle } from 'lucide-react';
 import './SendToQBModal.css';
 import { FinalDisplayDonation } from '../types';
 import { apiService } from '../services/api';
+import SearchableDropdown from './SearchableDropdown';
 
 interface Account {
   Id: string;
@@ -41,82 +42,26 @@ const SendToQBModal: React.FC<SendToQBModalProps> = ({
   const [editedDonation, setEditedDonation] = useState<FinalDisplayDonation | null>(null);
 
   // Account and item states
-  const [depositAccounts, setDepositAccounts] = useState<Account[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
   const [selectedDepositAccount, setSelectedDepositAccount] = useState<string>('');
   const [selectedItem, setSelectedItem] = useState<string>('');
-  const [accountsLoading, setAccountsLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen && donation) {
       setEditedDonation(JSON.parse(JSON.stringify(donation)));
-      fetchAccountsAndItems();
+      // Look for Undeposited Funds account and set as default
+      findAndSetUndepositedFundsDefault();
     }
   }, [isOpen, donation]);
 
-  const fetchAccountsAndItems = async () => {
-    setAccountsLoading(true);
-    setError(null);
-
+  const findAndSetUndepositedFundsDefault = async () => {
     try {
-      // Fetch accounts
-      const accountsResponse = await apiService.get<{ success: boolean; data: { accounts: Account[] } }>('/api/accounts');
-      if (accountsResponse.data.success && accountsResponse.data.data) {
-        const accounts = accountsResponse.data.data.accounts;
-
-        // Debug log to see all accounts
-        console.log('All accounts from API:', accounts);
-
-        // Log account types summary
-        const accountTypeSummary: Record<string, number> = {};
-        accounts.forEach(acc => {
-          const type = acc.AccountType || 'Unknown';
-          accountTypeSummary[type] = (accountTypeSummary[type] || 0) + 1;
-        });
-        console.log('Account types summary:', accountTypeSummary);
-
-        // Log any Undeposited Funds accounts (including those with account numbers)
-        const undepositedRegex = /\d*\s*undeposited/i;
-        accounts.forEach(acc => {
-          if (undepositedRegex.test(acc.Name || '') || acc.AccountSubType === 'UndepositedFunds') {
-            console.log('Found Undeposited Funds account:', {
-              Name: acc.Name,
-              AccountType: acc.AccountType,
-              AccountSubType: acc.AccountSubType,
-              FullyQualifiedName: acc.FullyQualifiedName,
-              Id: acc.Id
-            });
-          }
-        });
-
-        // Log all asset-type accounts for debugging
-        console.log('All asset-related accounts:', accounts.filter(acc =>
-          acc.AccountType?.toLowerCase().includes('asset') ||
-          acc.AccountType?.toLowerCase().includes('bank')
-        ));
-
-        // TEMPORARY DEBUG: Show accounts that are being filtered out
-        const filteredOutAccounts = accounts.filter(acc => {
-          const accountType = acc.AccountType || '';
-          const willBeIncluded =
-            accountType === 'Bank' ||
-            accountType === 'Other Current Assets' ||
-            accountType === 'Other Current Asset' ||
-            accountType === 'Current Assets' ||
-            accountType === 'Current Asset' ||
-            accountType === 'Assets' ||
-            accountType === 'Asset' ||
-            accountType === 'Other Assets' ||
-            accountType === 'Other Asset' ||
-            accountType === 'Fixed Asset' ||
-            acc.AccountSubType === 'UndepositedFunds' ||
-            /\d*\s*undeposited/i.test(acc.Name || '');
-          return !willBeIncluded;
-        });
-        console.log('Accounts being filtered OUT:', filteredOutAccounts);
+      // Fetch all accounts to find Undeposited Funds
+      const response = await apiService.get<{ success: boolean; data: { accounts: Account[] } }>('/api/accounts');
+      if (response.data.success && response.data.data) {
+        const accounts = response.data.data.accounts;
 
         // Filter deposit accounts - expanded to include more asset types
-        // QuickBooks uses various account types for deposit accounts
+        const undepositedRegex = /\d*\s*undeposited/i;
         const depositAccts = accounts.filter(acc => {
           const accountType = acc.AccountType || '';
           const accountSubType = acc.AccountSubType || '';
@@ -142,44 +87,18 @@ const SendToQBModal: React.FC<SendToQBModalProps> = ({
           );
         });
 
-        // Sort accounts to put Undeposited Funds first
-        const sortedDepositAccts = depositAccts.sort((a, b) => {
-          const undepositedRegex = /\d*\s*undeposited/i;
-          const aIsUndeposited = undepositedRegex.test(a.Name || '') ||
-                                 a.AccountSubType === 'UndepositedFunds';
-          const bIsUndeposited = undepositedRegex.test(b.Name || '') ||
-                                 b.AccountSubType === 'UndepositedFunds';
-
-          if (aIsUndeposited && !bIsUndeposited) return -1;
-          if (!aIsUndeposited && bIsUndeposited) return 1;
-          return a.Name.localeCompare(b.Name);
-        });
-
-        setDepositAccounts(sortedDepositAccts);
-
-        // Find and set Undeposited Funds as default
-        const undepositedFunds = sortedDepositAccts.find(
+        // Find Undeposited Funds account
+        const undepositedFunds = depositAccts.find(
           acc => undepositedRegex.test(acc.Name || '') ||
                  acc.AccountSubType === 'UndepositedFunds'
         );
+
         if (undepositedFunds) {
           setSelectedDepositAccount(undepositedFunds.Id);
-        } else if (sortedDepositAccts.length > 0) {
-          setSelectedDepositAccount(sortedDepositAccts[0].Id);
         }
-
-      }
-
-      // Fetch items/products
-      const itemsResponse = await apiService.get<{ success: boolean; data: { items: Item[] } }>('/api/items');
-      if (itemsResponse.data.success && itemsResponse.data.data) {
-        setItems(itemsResponse.data.data.items);
       }
     } catch (err) {
-      console.error('Error fetching accounts and items:', err);
-      setError('Failed to load QuickBooks accounts and items');
-    } finally {
-      setAccountsLoading(false);
+      console.error('Error finding Undeposited Funds account:', err);
     }
   };
 
@@ -347,43 +266,72 @@ const SendToQBModal: React.FC<SendToQBModalProps> = ({
 
               <div className="section">
                 <h3>QuickBooks Accounts</h3>
-                {accountsLoading ? (
-                  <div className="loading-accounts">
-                    <Loader className="spinner" size={20} />
-                    <span>Loading accounts...</span>
-                  </div>
-                ) : (
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label>Deposit To Account</label>
-                      <select
-                        value={selectedDepositAccount}
-                        onChange={(e) => setSelectedDepositAccount(e.target.value)}
-                      >
-                        {depositAccounts.map((account) => (
-                          <option key={account.Id} value={account.Id}>
-                            {account.FullyQualifiedName}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Deposit To Account</label>
+                    <SearchableDropdown
+                      placeholder="Search for deposit account..."
+                      value={selectedDepositAccount}
+                      onChange={setSelectedDepositAccount}
+                      searchEndpoint="/api/accounts"
+                      displayField="FullyQualifiedName"
+                      required={true}
+                      emptyMessage="No deposit accounts found"
+                      getItemsFromResponse={(data) => {
+                        // Filter deposit accounts
+                        const accounts = data.accounts || [];
+                        const undepositedRegex = /\d*\s*undeposited/i;
+                        return accounts.filter((acc: Account) => {
+                          const accountType = acc.AccountType || '';
+                          const accountSubType = acc.AccountSubType || '';
 
-                    <div className="form-group">
-                      <label>Product/Service (Required)</label>
-                      <select
-                        value={selectedItem}
-                        onChange={(e) => setSelectedItem(e.target.value)}
-                      >
-                        <option value="">-- Select a Product/Service --</option>
-                        {items.map((item) => (
-                          <option key={item.Id} value={item.Id}>
-                            {item.FullyQualifiedName}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                          return (
+                            // Bank accounts
+                            accountType === 'Bank' ||
+                            // Asset accounts (various forms)
+                            accountType === 'Other Current Assets' ||
+                            accountType === 'Other Current Asset' ||
+                            accountType === 'Current Assets' ||
+                            accountType === 'Current Asset' ||
+                            accountType === 'Assets' ||
+                            accountType === 'Asset' ||
+                            accountType === 'Other Assets' ||
+                            accountType === 'Other Asset' ||
+                            // Fixed Asset might also be used
+                            accountType === 'Fixed Asset' ||
+                            // Explicitly include Undeposited Funds by subtype
+                            accountSubType === 'UndepositedFunds' ||
+                            // Include if name contains undeposited
+                            undepositedRegex.test(acc.Name || '')
+                          );
+                        }).sort((a: Account, b: Account) => {
+                          // Sort to put Undeposited Funds first
+                          const aIsUndeposited = undepositedRegex.test(a.Name || '') ||
+                                                 a.AccountSubType === 'UndepositedFunds';
+                          const bIsUndeposited = undepositedRegex.test(b.Name || '') ||
+                                                 b.AccountSubType === 'UndepositedFunds';
+
+                          if (aIsUndeposited && !bIsUndeposited) return -1;
+                          if (!aIsUndeposited && bIsUndeposited) return 1;
+                          return (a.Name || '').localeCompare(b.Name || '');
+                        });
+                      }}
+                    />
                   </div>
-                )}
+
+                  <div className="form-group">
+                    <label>Product/Service (Required)</label>
+                    <SearchableDropdown
+                      placeholder="Search for product/service..."
+                      value={selectedItem}
+                      onChange={setSelectedItem}
+                      searchEndpoint="/api/items"
+                      displayField="FullyQualifiedName"
+                      required={true}
+                      emptyMessage="No products/services found"
+                    />
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -400,7 +348,7 @@ const SendToQBModal: React.FC<SendToQBModalProps> = ({
           <button
             className="button button-primary"
             onClick={handleSend}
-            disabled={isLoading || accountsLoading || !editedDonation}
+            disabled={isLoading || !editedDonation}
           >
             {isLoading ? (
               <>
