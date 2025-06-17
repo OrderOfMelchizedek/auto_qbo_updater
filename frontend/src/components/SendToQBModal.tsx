@@ -67,6 +67,14 @@ const SendToQBModal: React.FC<SendToQBModalProps> = ({
         // Debug log to see all accounts
         console.log('All accounts from API:', accounts);
 
+        // Log account types summary
+        const accountTypeSummary: Record<string, number> = {};
+        accounts.forEach(acc => {
+          const type = acc.AccountType || 'Unknown';
+          accountTypeSummary[type] = (accountTypeSummary[type] || 0) + 1;
+        });
+        console.log('Account types summary:', accountTypeSummary);
+
         // Log any Undeposited Funds accounts (including those with account numbers)
         const undepositedRegex = /\d*\s*undeposited/i;
         accounts.forEach(acc => {
@@ -81,14 +89,58 @@ const SendToQBModal: React.FC<SendToQBModalProps> = ({
           }
         });
 
-        // Filter deposit accounts (Bank and Other Current Assets types)
-        // Also handle variations in account type naming from QuickBooks API
-        const depositAccts = accounts.filter(
-          acc => acc.AccountType === 'Bank' ||
-                 acc.AccountType === 'Other Current Assets' ||
-                 acc.AccountType === 'Other Current Asset' || // Handle singular form
-                 acc.AccountSubType === 'UndepositedFunds' // Explicitly include Undeposited Funds by subtype
-        );
+        // Log all asset-type accounts for debugging
+        console.log('All asset-related accounts:', accounts.filter(acc =>
+          acc.AccountType?.toLowerCase().includes('asset') ||
+          acc.AccountType?.toLowerCase().includes('bank')
+        ));
+
+        // TEMPORARY DEBUG: Show accounts that are being filtered out
+        const filteredOutAccounts = accounts.filter(acc => {
+          const accountType = acc.AccountType || '';
+          const willBeIncluded =
+            accountType === 'Bank' ||
+            accountType === 'Other Current Assets' ||
+            accountType === 'Other Current Asset' ||
+            accountType === 'Current Assets' ||
+            accountType === 'Current Asset' ||
+            accountType === 'Assets' ||
+            accountType === 'Asset' ||
+            accountType === 'Other Assets' ||
+            accountType === 'Other Asset' ||
+            accountType === 'Fixed Asset' ||
+            acc.AccountSubType === 'UndepositedFunds' ||
+            /\d*\s*undeposited/i.test(acc.Name || '');
+          return !willBeIncluded;
+        });
+        console.log('Accounts being filtered OUT:', filteredOutAccounts);
+
+        // Filter deposit accounts - expanded to include more asset types
+        // QuickBooks uses various account types for deposit accounts
+        const depositAccts = accounts.filter(acc => {
+          const accountType = acc.AccountType || '';
+          const accountSubType = acc.AccountSubType || '';
+
+          return (
+            // Bank accounts
+            accountType === 'Bank' ||
+            // Asset accounts (various forms)
+            accountType === 'Other Current Assets' ||
+            accountType === 'Other Current Asset' ||
+            accountType === 'Current Assets' ||
+            accountType === 'Current Asset' ||
+            accountType === 'Assets' ||
+            accountType === 'Asset' ||
+            accountType === 'Other Assets' ||
+            accountType === 'Other Asset' ||
+            // Fixed Asset might also be used
+            accountType === 'Fixed Asset' ||
+            // Explicitly include Undeposited Funds by subtype
+            accountSubType === 'UndepositedFunds' ||
+            // Include if name contains undeposited
+            undepositedRegex.test(acc.Name || '')
+          );
+        });
 
         // Sort accounts to put Undeposited Funds first
         const sortedDepositAccts = depositAccts.sort((a, b) => {

@@ -62,17 +62,35 @@ const BulkSendToQBModal: React.FC<BulkSendToQBModalProps> = ({
       if (accountsResponse.data.success && accountsResponse.data.data) {
         const accounts = accountsResponse.data.data.accounts;
 
-        // Filter deposit accounts (Bank and Other Current Assets types)
-        // Also handle variations in account type naming from QuickBooks API
-        const depositAccts = accounts.filter(
-          acc => acc.AccountType === 'Bank' ||
-                 acc.AccountType === 'Other Current Assets' ||
-                 acc.AccountType === 'Other Current Asset' || // Handle singular form
-                 acc.AccountSubType === 'UndepositedFunds' // Explicitly include Undeposited Funds by subtype
-        );
+        // Filter deposit accounts - expanded to include more asset types
+        // QuickBooks uses various account types for deposit accounts
+        const undepositedRegex = /\d*\s*undeposited/i;
+        const depositAccts = accounts.filter(acc => {
+          const accountType = acc.AccountType || '';
+          const accountSubType = acc.AccountSubType || '';
+
+          return (
+            // Bank accounts
+            accountType === 'Bank' ||
+            // Asset accounts (various forms)
+            accountType === 'Other Current Assets' ||
+            accountType === 'Other Current Asset' ||
+            accountType === 'Current Assets' ||
+            accountType === 'Current Asset' ||
+            accountType === 'Assets' ||
+            accountType === 'Asset' ||
+            accountType === 'Other Assets' ||
+            accountType === 'Other Asset' ||
+            // Fixed Asset might also be used
+            accountType === 'Fixed Asset' ||
+            // Explicitly include Undeposited Funds by subtype
+            accountSubType === 'UndepositedFunds' ||
+            // Include if name contains undeposited
+            undepositedRegex.test(acc.Name || '')
+          );
+        });
 
         // Sort accounts to put Undeposited Funds first
-        const undepositedRegex = /\d*\s*undeposited/i;
         const sortedDepositAccts = depositAccts.sort((a, b) => {
           const aIsUndeposited = undepositedRegex.test(a.Name || '') ||
                                  a.AccountSubType === 'UndepositedFunds';
