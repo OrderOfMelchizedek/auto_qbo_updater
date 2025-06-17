@@ -266,3 +266,84 @@ class JobQueue:
         except Exception as e:
             logger.error(f"Failed to get queue stats: {e}")
             return {"error": str(e)}
+
+    def is_job_completed(self, job_id: str) -> bool:
+        """Check if a job is in the completed queue.
+
+        Args:
+            job_id: The job ID to check
+
+        Returns:
+            True if job is in completed queue, False otherwise
+        """
+        if not self.enabled:
+            return False
+
+        try:
+            # Get all jobs in completed queue
+            completed_jobs = self.redis.lrange(COMPLETED_QUEUE, 0, -1)
+            for job_data in completed_jobs:
+                job = json.loads(job_data)
+                if job.get("job_id") == job_id:
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to check completed status for job {job_id}: {e}")
+            return False
+
+    def is_job_failed(self, job_id: str) -> bool:
+        """Check if a job is in the failed queue.
+
+        Args:
+            job_id: The job ID to check
+
+        Returns:
+            True if job is in failed queue, False otherwise
+        """
+        if not self.enabled:
+            return False
+
+        try:
+            # Get all jobs in failed queue
+            failed_jobs = self.redis.lrange(DEAD_LETTER_QUEUE, 0, -1)
+            for job_data in failed_jobs:
+                job = json.loads(job_data)
+                if job.get("job_id") == job_id:
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to check failed status for job {job_id}: {e}")
+            return False
+
+    def get_job_data(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """Get job data from any queue.
+
+        Args:
+            job_id: The job ID to find
+
+        Returns:
+            Job data dict if found, None otherwise
+        """
+        if not self.enabled:
+            return None
+
+        try:
+            # Check all queues
+            all_queues = [
+                JOB_QUEUE,
+                PROCESSING_QUEUE,
+                COMPLETED_QUEUE,
+                DEAD_LETTER_QUEUE,
+            ]
+
+            for queue in all_queues:
+                jobs = self.redis.lrange(queue, 0, -1)
+                for job_data in jobs:
+                    job = json.loads(job_data)
+                    if job.get("job_id") == job_id:
+                        return job
+
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get job data for {job_id}: {e}")
+            return None

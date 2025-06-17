@@ -541,9 +541,42 @@ def get_job_status(job_id):
     Returns:
         JSON with job status, progress, and results if completed
     """
-    # SIMPLE SOLUTION: Without JobTracker, we can't track individual job progress
-    # Return a generic "processing" status - the UI will need to poll for results
-    # via the upload_id instead
+    # Check if job is in completed queue
+    if job_queue and job_queue.is_job_completed(job_id):
+        # Get the job data to find upload_id
+        job_data = job_queue.get_job_data(job_id)
+        upload_id = job_data.get("upload_id") if job_data else None
+
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "id": job_id,
+                    "status": "completed",
+                    "stage": "complete",
+                    "progress": 100,
+                    "message": "Processing complete!",
+                    "upload_id": upload_id,  # Include this for fetching results
+                },
+            }
+        )
+
+    # Check if job is in failed queue
+    if job_queue and job_queue.is_job_failed(job_id):
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "id": job_id,
+                    "status": "failed",
+                    "stage": "error",
+                    "progress": 0,
+                    "message": "Processing failed. Please try again.",
+                },
+            }
+        )
+
+    # Otherwise, assume it's still processing
     return jsonify(
         {
             "success": True,
@@ -845,6 +878,52 @@ def process_files():
 
     except Exception as e:
         logger.error(f"Error processing files: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/uploads/<upload_id>/results", methods=["GET"])
+def get_upload_results(upload_id):
+    """
+    Get processing results for an upload.
+
+    Returns:
+        JSON with processed donation data
+    """
+    try:
+        # Get upload metadata which contains the results
+        metadata = session_backend.get_upload_metadata(upload_id)
+
+        if not metadata:
+            return jsonify({"success": False, "error": "Results not found"}), 404
+
+        # Check if processing is complete
+        if metadata.get("status") != "completed":
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": (
+                            f"Processing status: {metadata.get('status', 'unknown')}"
+                        ),
+                    }
+                ),
+                400,
+            )
+
+        # Return the results
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "donations": metadata.get("donations", []),
+                    "summary": metadata.get("summary", {}),
+                    "processed_at": metadata.get("processed_at"),
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting results for upload {upload_id}: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
