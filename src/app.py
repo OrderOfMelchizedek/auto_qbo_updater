@@ -1550,7 +1550,7 @@ def create_sales_receipt():
                     "Qty": 1,  # Set quantity to 1
                 },
                 "Description": description,  # Add the formatted description
-                "ServiceDate": payment_date,  # Add service date (check date)
+                # Note: ServiceDate is not supported on sales receipts, only on invoices
             }
         else:
             # QuickBooks sales receipts require an item, not just an income account
