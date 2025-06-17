@@ -121,3 +121,9 @@ session_data/tokens/
 
 # Large frontend files (can be regenerated)
 frontend/package-lock.json
+
+# Test files
+test_job_queue.py
+
+# Flask session files
+flask_session/

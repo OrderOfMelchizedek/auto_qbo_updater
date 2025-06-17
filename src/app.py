@@ -7,7 +7,6 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import redis
 from flask import (
     Flask,
     Response,
@@ -18,20 +17,20 @@ from flask import (
     stream_with_context,
 )
 from flask_cors import CORS
-from flask_session import Session
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
-from .celery_app import init_celery
+from flask_session import Session  # type: ignore
+
 from .config import Config, session_backend, storage_backend
 from .customer_matcher import CustomerMatcher
+from .job_queue import JobQueue
 from .job_tracker import JobTracker
 from .limiter_config import configure_limiter, configure_limiter_emergency_disable
 from .quickbooks_auth import qbo_auth
 from .quickbooks_utils import QuickBooksError
-from .redis_retry import redis_retry, warm_connection_pool, warm_session_backend
+from .redis_retry import warm_connection_pool, warm_session_backend
 from .secure_logging import audit_logger, setup_secure_logging
-from .tasks import process_donations_task
 
 # Configure logging
 logging.basicConfig(
@@ -58,8 +57,7 @@ else:
     app = Flask(__name__)
     logger.info("Flask initialized for development mode")
 
-# Initialize Celery with Flask app context
-init_celery(app)
+# Job queue will be initialized after Redis client is created
 
 # Initialize rate limiter with proper Redis SSL support
 try:
@@ -112,6 +110,15 @@ else:
 # This keeps us well under the Redis connection limit
 job_tracker = JobTracker()  # Initialize without Redis connection
 logger.info("✓ JobTracker disabled in web app to prevent Redis connection issues")
+
+# Initialize job queue for replacing Celery
+job_queue = None  # type: ignore
+if redis_url:
+    job_queue = JobQueue(redis_client)
+    logger.info("✓ Job queue initialized with Redis connection")
+else:
+    # Fallback for local development without Redis
+    logger.warning("⚠️ Job queue disabled - no Redis connection")
 
 # Initialize Flask-Session
 Session(app)
@@ -285,6 +292,19 @@ def health_check():
             health_info["csv_error"] = str(e)
 
     return jsonify(health_info)
+
+
+@app.route("/api/queue/stats", methods=["GET"])
+def queue_stats():
+    """Get job queue statistics."""
+    try:
+        stats = (
+            job_queue.get_queue_stats() if job_queue else {"error": "Queue disabled"}
+        )
+        return jsonify({"success": True, "data": stats})
+    except Exception as e:
+        logger.error(f"Error getting queue stats: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # QuickBooks OAuth2 endpoints
@@ -798,17 +818,18 @@ def process_files():
         # The worker will process files without progress tracking
         # This keeps us under the Redis connection limit
 
-        # Queue the processing task with retry logic for SSL errors
-        @redis_retry(
-            max_retries=3,
-            exceptions=(redis.ConnectionError, redis.TimeoutError, Exception),
-        )
-        def queue_task():
-            # Queue the processing task (removed task_id to avoid result backend issues)
-            process_donations_task.apply_async(args=[job_id, upload_id, session_id])
-            logger.info(f"Queued job {job_id} for upload {upload_id}")
+        # Queue the job using our simple Redis queue (no more Celery SSL issues!)
+        job_data = {
+            "job_id": job_id,
+            "upload_id": upload_id,
+            "session_id": session_id,
+        }
 
-        queue_task()
+        if job_queue and job_queue.push_job(job_data):
+            logger.info(f"Queued job {job_id} for upload {upload_id}")
+        else:
+            logger.error(f"Failed to queue job {job_id}")
+            return jsonify({"success": False, "error": "Failed to queue job"}), 500
 
         # Return job ID for tracking
         return jsonify(

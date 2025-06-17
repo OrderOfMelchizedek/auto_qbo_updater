@@ -1,2 +1,2 @@
 web: gunicorn src.app:app --timeout 120
-worker: celery -A src.celery_app worker --loglevel=info --concurrency=2
+worker: python -m src.worker
