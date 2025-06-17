@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .redis_retry import redis_retry
+
 logger = logging.getLogger(__name__)
 
 
@@ -298,6 +300,7 @@ class RedisSession(SessionBackend):
         """Generate Redis key for upload."""
         return f"{self.key_prefix}{upload_id}"
 
+    @redis_retry()
     def store_upload_metadata(self, upload_id: str, metadata: Dict[str, Any]) -> bool:
         """Store metadata in Redis with TTL."""
         if not self.enabled:
@@ -327,6 +330,7 @@ class RedisSession(SessionBackend):
             logger.error(f"Failed to store metadata in Redis: {e}")
             return False
 
+    @redis_retry()
     def get_upload_metadata(self, upload_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve metadata from Redis."""
         if not self.enabled:

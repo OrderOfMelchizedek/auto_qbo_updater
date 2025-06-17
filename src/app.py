@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import redis
 from flask import (
     Flask,
     Response,
@@ -28,6 +29,7 @@ from .job_tracker import JobTracker
 from .limiter_config import configure_limiter, configure_limiter_emergency_disable
 from .quickbooks_auth import qbo_auth
 from .quickbooks_utils import QuickBooksError
+from .redis_retry import redis_retry, warm_connection_pool, warm_session_backend
 from .secure_logging import audit_logger, setup_secure_logging
 from .tasks import process_donations_task
 
@@ -92,6 +94,12 @@ if redis_url:
         app.config["SESSION_REDIS"] = redis_client
         app.config["SESSION_TYPE"] = "redis"
         logger.info("✓ Redis initialized for Flask-Session")
+
+        # Pre-warm Redis connections to avoid SSL errors during requests
+        if warm_connection_pool(redis_client, pool_size=3):
+            logger.info("✓ Redis connection pool pre-warmed successfully")
+        else:
+            logger.warning("⚠️ Failed to pre-warm all Redis connections")
     else:
         app.config["SESSION_TYPE"] = "filesystem"
         logger.info("⚠️ Flask-Session using filesystem (Redis connection failed)")
@@ -107,6 +115,12 @@ logger.info("✓ JobTracker disabled in web app to prevent Redis connection issu
 
 # Initialize Flask-Session
 Session(app)
+
+# Pre-warm session backend Redis connection
+if warm_session_backend():
+    logger.info("✓ Session backend Redis connection pre-warmed")
+else:
+    logger.warning("⚠️ Failed to pre-warm session backend connection")
 
 # Configure secure cookies for production
 if os.environ.get("DYNO"):
@@ -784,10 +798,17 @@ def process_files():
         # The worker will process files without progress tracking
         # This keeps us under the Redis connection limit
 
-        # Queue the processing task (removed task_id to avoid result backend issues)
-        process_donations_task.apply_async(args=[job_id, upload_id, session_id])
+        # Queue the processing task with retry logic for SSL errors
+        @redis_retry(
+            max_retries=3,
+            exceptions=(redis.ConnectionError, redis.TimeoutError, Exception),
+        )
+        def queue_task():
+            # Queue the processing task (removed task_id to avoid result backend issues)
+            process_donations_task.apply_async(args=[job_id, upload_id, session_id])
+            logger.info(f"Queued job {job_id} for upload {upload_id}")
 
-        logger.info(f"Queued job {job_id} for upload {upload_id}")
+        queue_task()
 
         # Return job ID for tracking
         return jsonify(
