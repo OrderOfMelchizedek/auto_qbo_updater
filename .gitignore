@@ -127,3 +127,6 @@ test_job_queue.py
 
 # Flask session files
 flask_session/
+
+# Sensitive data files
+docs/fom_deposit_report_2025-05-26.txt
