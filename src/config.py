@@ -73,7 +73,7 @@ class Config:
     """Application configuration settings."""
 
     # File upload settings
-    MAX_FILES_PER_UPLOAD = 20
+    MAX_FILES_PER_UPLOAD = 30
     MAX_FILE_SIZE_MB = 20
     MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
