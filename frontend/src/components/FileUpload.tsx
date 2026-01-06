@@ -11,7 +11,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesUpload }) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    setSelectedFiles(prev => [...prev, ...acceptedFiles].slice(0, 20)); // Max 20 files
+    setSelectedFiles(prev => [...prev, ...acceptedFiles].slice(0, 30)); // Max 30 files
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -23,7 +23,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesUpload }) => {
       'text/csv': ['.csv']
     },
     maxSize: 20 * 1024 * 1024, // 20MB
-    maxFiles: 20
+    maxFiles: 30
   });
 
   const removeFile = (index: number) => {
@@ -58,13 +58,13 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesUpload }) => {
             : 'Drag & drop files here, or click to select files'}
         </p>
         <p className="dropzone-hint">
-          Supported: JPEG, PNG, PDF, CSV (max 20MB per file, up to 20 files)
+          Supported: JPEG, PNG, PDF, CSV (max 20MB per file, up to 30 files)
         </p>
       </div>
 
       {selectedFiles.length > 0 && (
         <div className="selected-files">
-          <h3>Selected Files ({selectedFiles.length}/20)</h3>
+          <h3>Selected Files ({selectedFiles.length}/30)</h3>
           <ul className="file-list">
             {selectedFiles.map((file, index) => (
               <li key={index} className="file-item">
