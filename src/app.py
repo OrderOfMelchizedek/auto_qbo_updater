@@ -149,7 +149,7 @@ if production_domain:
 
 # Add custom subdomain
 allowed_origins.append("https://auto-qbo-updater.mwangazapartnership.org")
-allowed_origins.append("http://auto-qbo-updater.mwangazapartnership.org")
+allowed_origins.append("https://auto-qbo-updater.mwangazapartnership.org")
 
 # If on Heroku, also add the Heroku app domain
 if os.environ.get("DYNO"):
